@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useRef } from "react";
 
 type Mode = "execution" | "strategy" | "decision";
 type Context = "operator" | "general" | "student";
@@ -119,6 +119,8 @@ export default function Home() {
   const [synthesizing, setSynthesizing] = useState(false);
   const [copied, setCopied] = useState(false);
 
+  const synthesisRef = useRef<HTMLDivElement>(null);
+
   const canRun = useMemo(() => input.trim().length > 0 && !busy, [input, busy]);
   const canAnalyse = useMemo(() => !!intent && !running, [intent, running]);
   const canSynthesize = useMemo(() => !!answers && !synthesizing, [answers, synthesizing]);
@@ -192,6 +194,9 @@ export default function Home() {
       const json = await res.json().catch(() => null);
       if (!json?.ok) { setError(json?.error ?? "unknown_error"); return; }
       setSynthesis(json.synthesis);
+      setTimeout(() => {
+        synthesisRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+      }, 100);
     } finally {
       setSynthesizing(false);
     }
@@ -214,6 +219,12 @@ export default function Home() {
   }
 
   const AI_BUTTONS = [{ name: "ChatGPT" }, { name: "Claude" }, { name: "Gemini" }, { name: "Perplexity" }];
+
+  const SynthesizeButton = () => (
+    <button onClick={onSynthesize} disabled={!canSynthesize} className={cx("w-full rounded-2xl px-4 py-3 text-sm font-medium", canSynthesize ? "bg-black text-white dark:bg-white dark:text-black" : "bg-black/20 text-black/50 dark:bg-white/20 dark:text-white/50")}>
+      {synthesizing ? <><Spinner />Combining insights…</> : "Combine Best Insights"}
+    </button>
+  );
 
   return (
     <main className="min-h-screen px-4 py-10">
@@ -353,6 +364,10 @@ export default function Home() {
         {answers && !running && (
           <section className="space-y-4">
             <div className="text-xs uppercase tracking-wide opacity-50 text-center">AI Comparison</div>
+            {/* Mobile only — button above results */}
+            <div className="md:hidden">
+              <SynthesizeButton />
+            </div>
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
               <div className="rounded-2xl border border-black/10 p-5 dark:border-white/10 space-y-2">
                 <div className="text-xs uppercase tracking-wide opacity-50">GPT-4o mini</div>
@@ -363,10 +378,10 @@ export default function Home() {
                 <div>{renderMarkdown(answers.anthropic)}</div>
               </div>
             </div>
-
-            <button onClick={onSynthesize} disabled={!canSynthesize} className={cx("w-full rounded-2xl px-4 py-3 text-sm font-medium", canSynthesize ? "bg-black text-white dark:bg-white dark:text-black" : "bg-black/20 text-black/50 dark:bg-white/20 dark:text-white/50")}>
-              {synthesizing ? <><Spinner />Combining insights…</> : "Combine Best Insights"}
-            </button>
+            {/* Desktop only — button below results */}
+            <div className="hidden md:block">
+              <SynthesizeButton />
+            </div>
           </section>
         )}
 
@@ -378,7 +393,7 @@ export default function Home() {
         )}
 
         {synthesis && !synthesizing && (
-          <section className="rounded-2xl border border-black/10 p-5 dark:border-white/10 space-y-3">
+          <section ref={synthesisRef} className="rounded-2xl border border-black/10 p-5 dark:border-white/10 space-y-3">
             <div className="text-xs uppercase tracking-wide opacity-50">Combined Insight</div>
             <div>{renderMarkdown(synthesis)}</div>
             <div className="flex flex-wrap items-center gap-2 pt-2">
