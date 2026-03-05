@@ -342,6 +342,9 @@ export default function Home() {
             <button onClick={onRunAnalysis} disabled={!canAnalyse} className={cx("w-full rounded-2xl px-4 py-3 text-sm font-medium", canAnalyse ? "bg-black text-white dark:bg-white dark:text-black" : "bg-black/20 text-black/50 dark:bg-white/20 dark:text-white/50")}>
               {running ? <><Spinner />Running analysis…</> : "Run Analysis"}
             </button>
+            {!running && !answers && (
+              <p className="text-xs text-center opacity-40">This usually takes 15–20 seconds</p>
+            )}
           </section>
         )}
 
@@ -364,7 +367,6 @@ export default function Home() {
         {answers && !running && (
           <section className="space-y-4">
             <div className="text-xs uppercase tracking-wide opacity-50 text-center">AI Comparison</div>
-            {/* Mobile only — button above results */}
             <div className="md:hidden">
               <SynthesizeButton />
             </div>
@@ -378,7 +380,6 @@ export default function Home() {
                 <div>{renderMarkdown(answers.anthropic)}</div>
               </div>
             </div>
-            {/* Desktop only — button below results */}
             <div className="hidden md:block">
               <SynthesizeButton />
             </div>
