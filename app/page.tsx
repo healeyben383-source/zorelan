@@ -41,15 +41,32 @@ function buildPolishedPrompt(intent: Intent): string {
 }
 
 function renderMarkdown(text: string) {
-  return text.split("\n").map((line, i) => {
-    if (line.startsWith("### ")) return <h3 key={i} className="font-semibold text-sm mt-3 mb-1">{line.slice(4)}</h3>;
-    if (line.startsWith("## ")) return <h2 key={i} className="font-semibold text-sm mt-3 mb-1">{line.slice(3)}</h2>;
-    if (line.startsWith("# ")) return <h2 key={i} className="font-semibold text-sm mt-3 mb-1">{line.slice(2)}</h2>;
-    if (line.startsWith("- ") || line.startsWith("* ")) return <li key={i} className="text-sm ml-3 list-disc">{renderInline(line.slice(2))}</li>;
-    if (line.trim() === "---") return <hr key={i} className="border-black/10 dark:border-white/10 my-2" />;
-    if (line.trim() === "") return <div key={i} className="h-2" />;
-    return <p key={i} className="text-sm leading-relaxed">{renderInline(line)}</p>;
-  });
+  const lines = text.split("\n");
+  const elements: React.ReactNode[] = [];
+  let i = 0;
+  while (i < lines.length) {
+    const line = lines[i];
+    if (line.startsWith("### ")) {
+      elements.push(<h3 key={i} className="font-semibold text-sm mt-3 mb-1">{renderInline(line.slice(4))}</h3>);
+    } else if (line.startsWith("## ")) {
+      elements.push(<h2 key={i} className="font-semibold text-sm mt-3 mb-1">{renderInline(line.slice(3))}</h2>);
+    } else if (line.startsWith("# ")) {
+      elements.push(<h2 key={i} className="font-semibold text-sm mt-3 mb-1">{renderInline(line.slice(2))}</h2>);
+    } else if (line.startsWith("- ") || line.startsWith("* ")) {
+      elements.push(<li key={i} className="text-sm ml-4 list-disc">{renderInline(line.slice(2))}</li>);
+    } else if (/^\d+\.\s/.test(line)) {
+      const content = line.replace(/^\d+\.\s/, "");
+      elements.push(<li key={i} className="text-sm ml-4 list-decimal">{renderInline(content)}</li>);
+    } else if (line.trim() === "---") {
+      elements.push(<hr key={i} className="border-black/10 dark:border-white/10 my-2" />);
+    } else if (line.trim() === "") {
+      elements.push(<div key={i} className="h-2" />);
+    } else {
+      elements.push(<p key={i} className="text-sm leading-relaxed">{renderInline(line)}</p>);
+    }
+    i++;
+  }
+  return elements;
 }
 
 function renderInline(text: string) {
@@ -58,6 +75,26 @@ function renderInline(text: string) {
     part.startsWith("**") && part.endsWith("**")
       ? <strong key={i}>{part.slice(2, -2)}</strong>
       : part
+  );
+}
+
+function Spinner() {
+  return (
+    <svg className="animate-spin h-4 w-4 inline-block mr-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
+    </svg>
+  );
+}
+
+function PulsePlaceholder() {
+  return (
+    <div className="space-y-3 animate-pulse">
+      <div className="h-3 bg-white/10 rounded w-3/4" />
+      <div className="h-3 bg-white/10 rounded w-full" />
+      <div className="h-3 bg-white/10 rounded w-5/6" />
+      <div className="h-3 bg-white/10 rounded w-2/3" />
+    </div>
   );
 }
 
@@ -81,6 +118,16 @@ export default function Home() {
   const canRun = useMemo(() => input.trim().length > 0 && !busy, [input, busy]);
   const canAnalyse = useMemo(() => !!intent && !running, [intent, running]);
   const canSynthesize = useMemo(() => !!answers && !synthesizing, [answers, synthesizing]);
+
+  function onInputChange(e: React.ChangeEvent<HTMLTextAreaElement>) {
+    setInput(e.target.value);
+    if (intent || answers || synthesis) {
+      setIntent(null);
+      setAnswers(null);
+      setSynthesis(null);
+      setError(null);
+    }
+  }
 
   async function onPreframe() {
     setCopied(false);
@@ -200,10 +247,10 @@ export default function Home() {
             </>
           )}
 
-          <textarea value={input} onChange={(e) => setInput(e.target.value)} placeholder="What are you trying to figure out?" className="h-40 w-full rounded-2xl border border-black/10 bg-transparent p-4 text-sm outline-none focus:border-black/30 dark:border-white/10 dark:focus:border-white/30" />
+          <textarea value={input} onChange={onInputChange} placeholder="What are you trying to figure out?" className="h-40 w-full rounded-2xl border border-black/10 bg-transparent p-4 text-sm outline-none focus:border-black/30 dark:border-white/10 dark:focus:border-white/30" />
 
           <button onClick={onPreframe} disabled={!canRun} className={cx("w-full rounded-2xl px-4 py-3 text-sm font-medium", canRun ? "bg-black text-white dark:bg-white dark:text-black" : "bg-black/20 text-black/50 dark:bg-white/20 dark:text-white/50")}>
-            {busy ? "Structuring…" : "Structure My Question"}
+            {busy ? <><Spinner />Structuring…</> : "Structure My Question"}
           </button>
         </section>
 
@@ -213,7 +260,14 @@ export default function Home() {
           </section>
         )}
 
-        {intent && (
+        {busy && (
+          <section className="rounded-2xl border border-white/10 p-5 space-y-4">
+            <div className="text-xs uppercase tracking-wide opacity-50">Structuring your question…</div>
+            <PulsePlaceholder />
+          </section>
+        )}
+
+        {intent && !busy && (
           <section className="space-y-4 rounded-2xl border border-black/10 p-5 dark:border-white/10">
             {appMode === "pro" && (
               <>
@@ -251,12 +305,28 @@ export default function Home() {
             </div>
 
             <button onClick={onRunAnalysis} disabled={!canAnalyse} className={cx("w-full rounded-2xl px-4 py-3 text-sm font-medium", canAnalyse ? "bg-black text-white dark:bg-white dark:text-black" : "bg-black/20 text-black/50 dark:bg-white/20 dark:text-white/50")}>
-              {running ? "Running analysis…" : "Run Analysis"}
+              {running ? <><Spinner />Running analysis…</> : "Run Analysis"}
             </button>
           </section>
         )}
 
-        {answers && (
+        {running && (
+          <section className="space-y-4">
+            <div className="text-xs uppercase tracking-wide opacity-50 text-center">Querying AI models…</div>
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+              <div className="rounded-2xl border border-white/10 p-5 space-y-3">
+                <div className="text-xs uppercase tracking-wide opacity-50">GPT-4o mini</div>
+                <PulsePlaceholder />
+              </div>
+              <div className="rounded-2xl border border-white/10 p-5 space-y-3">
+                <div className="text-xs uppercase tracking-wide opacity-50">Claude Haiku</div>
+                <PulsePlaceholder />
+              </div>
+            </div>
+          </section>
+        )}
+
+        {answers && !running && (
           <section className="space-y-4">
             <div className="text-xs uppercase tracking-wide opacity-50 text-center">AI Comparison</div>
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
@@ -271,12 +341,19 @@ export default function Home() {
             </div>
 
             <button onClick={onSynthesize} disabled={!canSynthesize} className={cx("w-full rounded-2xl px-4 py-3 text-sm font-medium", canSynthesize ? "bg-black text-white dark:bg-white dark:text-black" : "bg-black/20 text-black/50 dark:bg-white/20 dark:text-white/50")}>
-              {synthesizing ? "Combining insights…" : "Combine Best Insights"}
+              {synthesizing ? <><Spinner />Combining insights…</> : "Combine Best Insights"}
             </button>
           </section>
         )}
 
-        {synthesis && (
+        {synthesizing && (
+          <section className="rounded-2xl border border-white/10 p-5 space-y-3">
+            <div className="text-xs uppercase tracking-wide opacity-50">Combining insights…</div>
+            <PulsePlaceholder />
+          </section>
+        )}
+
+        {synthesis && !synthesizing && (
           <section className="rounded-2xl border border-black/10 p-5 dark:border-white/10 space-y-3">
             <div className="text-xs uppercase tracking-wide opacity-50">Combined Insight</div>
             <div>{renderMarkdown(synthesis)}</div>
