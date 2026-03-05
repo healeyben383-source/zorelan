@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useRef } from "react";
+import { useMemo, useState, useRef, useEffect } from "react";
 
 type Mode = "execution" | "strategy" | "decision";
 type Context = "operator" | "general" | "student";
@@ -118,8 +118,16 @@ export default function Home() {
   const [running, setRunning] = useState(false);
   const [synthesizing, setSynthesizing] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [highlighted, setHighlighted] = useState(false);
 
   const synthesisRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!intent) return;
+    setHighlighted(true);
+    const t = setTimeout(() => setHighlighted(false), 600);
+    return () => clearTimeout(t);
+  }, [userAnswers]);
 
   const canRun = useMemo(() => input.trim().length > 0 && !busy, [input, busy]);
   const canAnalyse = useMemo(() => !!intent && !running, [intent, running]);
@@ -325,7 +333,12 @@ export default function Home() {
               ))}
             </div>
 
-            <div className="rounded-xl border border-black/10 bg-black/[0.02] p-4 dark:border-white/10 dark:bg-white/[0.02]">
+            <div className={cx(
+              "rounded-xl border p-4 transition-all duration-500",
+              highlighted
+                ? "border-blue-400/60 bg-blue-500/10 dark:border-blue-400/40 dark:bg-blue-400/10"
+                : "border-black/10 bg-black/[0.02] dark:border-white/10 dark:bg-white/[0.02]"
+            )}>
               <div className="text-xs uppercase tracking-wide opacity-50 mb-2">Ready to use</div>
               <p className="text-sm leading-relaxed whitespace-pre-wrap">{buildPolishedPrompt(intent, userAnswers)}</p>
             </div>
