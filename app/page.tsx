@@ -356,7 +356,7 @@ export default function Home() {
               {running ? <><Spinner />Running analysis…</> : "Run Analysis"}
             </button>
             {!running && !answers && (
-              <p className="text-xs text-center opacity-40">This usually takes 15–20 seconds</p>
+              <p className="text-xs text-center opacity-60 mt-1">This usually takes 15–20 seconds</p>
             )}
           </section>
         )}
