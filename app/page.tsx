@@ -36,7 +36,7 @@ function cx(...classes: Array<string | false | undefined | null>) {
 
 function buildPolishedPrompt(intent: Intent): string {
   const constraints = intent.constraints.join(". ");
-  const inputs = intent.inputs_needed.map((q) => `- ${q}`).join("\n");
+  const inputs = intent.inputs_needed.map((q) => q).join("\n");
   return `${intent.goal}\n\nContext: ${intent.context}\n\nRequirements: ${constraints}.\n\nBefore you answer, I need you to address these questions:\n${inputs}`;
 }
 
