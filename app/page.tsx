@@ -18,6 +18,16 @@ interface Answers {
   anthropic: string;
 }
 
+interface HistoryEntry {
+  id: string;
+  timestamp: number;
+  input: string;
+  intent: Intent;
+  userAnswers: string[];
+  answers: Answers | null;
+  synthesis: string | null;
+}
+
 const MODE_LABEL: Record<Mode, string> = {
   execution: "Execution",
   strategy: "Strategy",
@@ -30,6 +40,9 @@ const CONTEXT_LABEL: Record<Context, string> = {
   student: "Student",
 };
 
+const HISTORY_KEY = "zorelan_history";
+const MAX_HISTORY = 50;
+
 function cx(...classes: Array<string | false | undefined | null>) {
   return classes.filter(Boolean).join(" ");
 }
@@ -41,6 +54,33 @@ function buildPolishedPrompt(intent: Intent, userAnswers: string[]): string {
     return answer ? `${q} ${answer}` : q;
   }).join("\n");
   return `${intent.goal}\n\nContext: ${intent.context}\n\nRequirements: ${constraints}.\n\nAdditional context:\n${inputs}`;
+}
+
+function loadHistory(): HistoryEntry[] {
+  try {
+    const raw = localStorage.getItem(HISTORY_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveHistory(entries: HistoryEntry[]) {
+  try {
+    localStorage.setItem(HISTORY_KEY, JSON.stringify(entries.slice(0, MAX_HISTORY)));
+  } catch {
+    // localStorage full or unavailable
+  }
+}
+
+function formatTime(ts: number): string {
+  const d = new Date(ts);
+  const now = new Date();
+  const isToday = d.toDateString() === now.toDateString();
+  if (isToday) {
+    return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  }
+  return d.toLocaleDateString([], { month: "short", day: "numeric" });
 }
 
 function renderMarkdown(text: string) {
@@ -119,8 +159,14 @@ export default function Home() {
   const [synthesizing, setSynthesizing] = useState(false);
   const [copied, setCopied] = useState(false);
   const [highlighted, setHighlighted] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [history, setHistory] = useState<HistoryEntry[]>([]);
 
   const synthesisRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    setHistory(loadHistory());
+  }, []);
 
   useEffect(() => {
     if (!intent) return;
@@ -128,6 +174,22 @@ export default function Home() {
     const t = setTimeout(() => setHighlighted(false), 600);
     return () => clearTimeout(t);
   }, [userAnswers]);
+
+  useEffect(() => {
+    if (!intent || !answers) return;
+    const entry: HistoryEntry = {
+      id: Date.now().toString(),
+      timestamp: Date.now(),
+      input,
+      intent,
+      userAnswers,
+      answers,
+      synthesis,
+    };
+    const updated = [entry, ...loadHistory().filter(h => h.input !== input)];
+    saveHistory(updated);
+    setHistory(updated);
+  }, [synthesis, answers]);
 
   const canRun = useMemo(() => input.trim().length > 0 && !busy, [input, busy]);
   const canAnalyse = useMemo(() => !!intent && !running, [intent, running]);
@@ -142,6 +204,28 @@ export default function Home() {
       setUserAnswers(["", "", ""]);
       setError(null);
     }
+  }
+
+  function loadEntry(entry: HistoryEntry) {
+    setInput(entry.input);
+    setIntent(entry.intent);
+    setUserAnswers(entry.userAnswers);
+    setAnswers(entry.answers);
+    setSynthesis(entry.synthesis);
+    setError(null);
+    setHistoryOpen(false);
+  }
+
+  function deleteEntry(id: string, e: React.MouseEvent) {
+    e.stopPropagation();
+    const updated = history.filter(h => h.id !== id);
+    saveHistory(updated);
+    setHistory(updated);
+  }
+
+  function clearHistory() {
+    saveHistory([]);
+    setHistory([]);
   }
 
   async function onPreframe() {
@@ -234,11 +318,108 @@ export default function Home() {
     </button>
   );
 
+  const HistoryList = () => (
+    history.length === 0 ? (
+      <div className="px-5 py-8 text-center text-xs opacity-40">No history yet. Run an analysis to save it here.</div>
+    ) : (
+      <>
+        {history.map((entry) => (
+          <div
+            key={entry.id}
+            onClick={() => loadEntry(entry)}
+            className="group flex items-start justify-between gap-2 px-5 py-3 hover:bg-black/5 dark:hover:bg-white/5 cursor-pointer"
+          >
+            <div className="flex-1 min-w-0">
+              <p className="text-sm truncate">{entry.input}</p>
+              <div className="flex items-center gap-2 mt-0.5">
+                <span className="text-xs opacity-40">{formatTime(entry.timestamp)}</span>
+                {entry.synthesis && <span className="text-xs opacity-40">· synthesized</span>}
+                {entry.answers && !entry.synthesis && <span className="text-xs opacity-40">· analysed</span>}
+              </div>
+            </div>
+            <button
+              onClick={(e) => deleteEntry(entry.id, e)}
+              className="opacity-0 group-hover:opacity-40 hover:!opacity-70 text-sm leading-none mt-0.5 flex-shrink-0"
+            >
+              ×
+            </button>
+          </div>
+        ))}
+      </>
+    )
+  );
+
   return (
     <main className="min-h-screen px-4 py-10">
+
+      {historyOpen && (
+        <div
+          className="fixed inset-0 z-40 bg-black/30 backdrop-blur-sm"
+          onClick={() => setHistoryOpen(false)}
+        />
+      )}
+
+      {/* Desktop sidebar */}
+      <div className={cx(
+        "fixed top-0 right-0 z-50 h-full w-80 bg-white dark:bg-black border-l border-black/10 dark:border-white/10 shadow-2xl transition-transform duration-300 hidden md:flex flex-col",
+        historyOpen ? "translate-x-0" : "translate-x-full"
+      )}>
+        <div className="flex items-center justify-between px-5 py-4 border-b border-black/10 dark:border-white/10">
+          <span className="text-sm font-medium">History</span>
+          <div className="flex items-center gap-3">
+            {history.length > 0 && (
+              <button onClick={clearHistory} className="text-xs opacity-40 hover:opacity-70">Clear all</button>
+            )}
+            <button onClick={() => setHistoryOpen(false)} className="opacity-40 hover:opacity-70 text-lg leading-none">×</button>
+          </div>
+        </div>
+        <div className="flex-1 overflow-y-auto py-2">
+          <HistoryList />
+        </div>
+      </div>
+
+      {/* Mobile drawer */}
+      <div
+        className={cx(
+          "fixed inset-x-0 bottom-0 z-50 bg-white dark:bg-black border-t border-black/10 dark:border-white/10 shadow-2xl transition-transform duration-300 md:hidden flex flex-col rounded-t-2xl",
+          historyOpen ? "translate-y-0" : "translate-y-full"
+        )}
+        style={{ maxHeight: "70vh" }}
+      >
+        <div className="flex justify-center pt-3 pb-1">
+          <div className="w-10 h-1 rounded-full bg-black/20 dark:bg-white/20" />
+        </div>
+        <div className="flex items-center justify-between px-5 py-3 border-b border-black/10 dark:border-white/10">
+          <span className="text-sm font-medium">History</span>
+          <div className="flex items-center gap-3">
+            {history.length > 0 && (
+              <button onClick={clearHistory} className="text-xs opacity-40 hover:opacity-70">Clear all</button>
+            )}
+            <button onClick={() => setHistoryOpen(false)} className="opacity-40 hover:opacity-70 text-lg leading-none">×</button>
+          </div>
+        </div>
+        <div className="flex-1 overflow-y-auto py-2">
+          <HistoryList />
+        </div>
+      </div>
+
       <div className="mx-auto w-full max-w-5xl space-y-6">
         <header className="space-y-3 text-center">
-          <h1 className="text-4xl font-semibold tracking-tight">Zorelan</h1>
+          <div className="flex items-center justify-between">
+            <div className="w-16" />
+            <h1 className="text-4xl font-semibold tracking-tight">Zorelan</h1>
+            <div className="w-16 flex justify-end">
+              <button
+                onClick={() => setHistoryOpen(true)}
+                className="flex items-center gap-1.5 rounded-xl border border-black/10 dark:border-white/10 px-3 py-1.5 text-xs opacity-60 hover:opacity-100 transition-opacity"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+                </svg>
+                <span>{history.length > 0 ? history.length : "History"}</span>
+              </button>
+            </div>
+          </div>
           <p className="text-sm opacity-70">Think once. Ask every AI.</p>
           <div className="inline-flex rounded-xl border border-black/10 p-1 dark:border-white/10">
             <button onClick={() => setAppMode("simple")} className={cx("rounded-lg px-4 py-1.5 text-sm font-medium transition-all", appMode === "simple" ? "bg-black text-white dark:bg-white dark:text-black" : "opacity-50 hover:opacity-80")}>Simple</button>
