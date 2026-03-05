@@ -268,32 +268,34 @@ export default function Home() {
         )}
 
         {intent && !busy && (
-          <section className="space-y-4 rounded-2xl border border-black/10 p-5 dark:border-white/10">
-            {appMode === "pro" && (
-              <>
-                <div className="space-y-1">
-                  <div className="text-xs uppercase tracking-wide opacity-50">Goal</div>
-                  <p className="text-sm leading-relaxed">{intent.goal}</p>
-                </div>
-                <div className="space-y-1">
-                  <div className="text-xs uppercase tracking-wide opacity-50">Context</div>
-                  <p className="text-sm leading-relaxed">{intent.context}</p>
-                </div>
-                <div className="space-y-1">
-                  <div className="text-xs uppercase tracking-wide opacity-50">Constraints</div>
-                  <ul className="space-y-1">{intent.constraints.map((c, i) => <li key={i} className="flex gap-2 text-sm"><span className="opacity-30">—</span><span>{c}</span></li>)}</ul>
-                </div>
-                <div className="space-y-1">
-                  <div className="text-xs uppercase tracking-wide opacity-50">Inputs Needed</div>
-                  <ul className="space-y-1">{intent.inputs_needed.map((q, i) => <li key={i} className="flex gap-2 text-sm"><span className="opacity-30">—</span><span>{q}</span></li>)}</ul>
-                </div>
-              </>
-            )}
+  <section className="space-y-4 rounded-2xl border border-black/10 p-5 dark:border-white/10">
+    {appMode === "pro" && (
+      <>
+        <div className="text-xs uppercase tracking-wide opacity-50">How we structured it</div>
+        <div className="space-y-1">
+          <div className="text-xs uppercase tracking-wide opacity-50">Goal</div>
+          <p className="text-sm leading-relaxed">{intent.goal}</p>
+        </div>
+        <div className="space-y-1">
+          <div className="text-xs uppercase tracking-wide opacity-50">Context</div>
+          <p className="text-sm leading-relaxed">{intent.context}</p>
+        </div>
+        <div className="space-y-1">
+          <div className="text-xs uppercase tracking-wide opacity-50">Constraints</div>
+          <ul className="space-y-1">{intent.constraints.map((c, i) => <li key={i} className="flex gap-2 text-sm"><span className="opacity-30">—</span><span>{c}</span></li>)}</ul>
+        </div>
+        <div className="space-y-1">
+          <div className="text-xs uppercase tracking-wide opacity-50">Inputs Needed</div>
+          <ul className="space-y-1">{intent.inputs_needed.map((q, i) => <li key={i} className="flex gap-2 text-sm"><span className="opacity-30">—</span><span>{q}</span></li>)}</ul>
+        </div>
+        <hr className="border-white/10" />
+      </>
+    )}
 
-            <div className="rounded-xl border border-black/10 bg-black/[0.02] p-4 dark:border-white/10 dark:bg-white/[0.02]">
-              <div className="text-xs uppercase tracking-wide opacity-50 mb-2">Optimized Prompt</div>
-              <p className="text-sm leading-relaxed whitespace-pre-wrap">{buildPolishedPrompt(intent)}</p>
-            </div>
+    <div className="rounded-xl border border-black/10 bg-black/[0.02] p-4 dark:border-white/10 dark:bg-white/[0.02]">
+      <div className="text-xs uppercase tracking-wide opacity-50 mb-2">Ready to use</div>
+      <p className="text-sm leading-relaxed whitespace-pre-wrap">{buildPolishedPrompt(intent)}</p>
+    </div>
 
             <div className="flex flex-wrap items-center gap-2">
               <button onClick={onCopy} className="rounded-xl border border-black/10 px-3 py-2 text-sm dark:border-white/10">{copied ? "Copied" : "Copy Prompt"}</button>
