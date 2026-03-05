@@ -603,6 +603,11 @@ export default function Home() {
             </div>
           </section>
         )}
+
+        <div className="text-center pt-6">
+          <a href="/privacy" className="text-xs opacity-30 hover:opacity-60 transition-opacity">Privacy Policy</a>
+        </div>
+
       </div>
     </main>
   );
