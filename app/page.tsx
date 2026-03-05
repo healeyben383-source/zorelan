@@ -26,7 +26,7 @@ const MODE_LABEL: Record<Mode, string> = {
 
 const CONTEXT_LABEL: Record<Context, string> = {
   operator: "Operator",
-  general: "General",
+  general: "Personal",
   student: "Student",
 };
 
@@ -103,7 +103,7 @@ const unselectedStyle = { border: "1px solid rgba(255,255,255,0.1)" };
 
 export default function Home() {
   const [appMode, setAppMode] = useState<AppMode>("simple");
-  const [mode, setMode] = useState<Mode>("execution");
+  const [mode, setMode] = useState<Mode>("decision");
   const [context, setContext] = useState<Context>("operator");
   const [input, setInput] = useState("");
   const [intent, setIntent] = useState<Intent | null>(null);
