@@ -453,7 +453,9 @@ export default function Home() {
             </>
           )}
 
-          <textarea value={input} onChange={onInputChange} placeholder="What are you trying to figure out?&#10;&#10;Type any question, decision, or problem. Zorelan will structure it and run it across multiple AI models for you." className="h-40 w-full rounded-2xl border border-black/10 bg-transparent p-4 text-sm outline-none focus:border-black/30 dark:border-white/10 dark:focus:border-white/30" />
+          <p className="text-xs opacity-40 leading-relaxed">Type any question, decision, or problem. Zorelan structures it and runs it across multiple AI models so you can compare and combine the best answers.</p>
+
+          <textarea value={input} onChange={onInputChange} placeholder="What are you trying to figure out?" className="h-40 w-full rounded-2xl border border-black/10 bg-transparent p-4 text-sm outline-none focus:border-black/30 dark:border-white/10 dark:focus:border-white/30" />
 
           <button onClick={onPreframe} disabled={!canRun} className={cx("w-full rounded-2xl px-4 py-3 text-sm font-medium", canRun ? "bg-black text-white dark:bg-white dark:text-black" : "bg-black/20 text-black/50 dark:bg-white/20 dark:text-white/50")}>
             {busy ? <><Spinner />Structuring…</> : "Structure My Question"}
