@@ -144,6 +144,12 @@ function PulsePlaceholder() {
 const selectedStyle = { border: "1px solid rgba(255,255,255,0.5)", background: "rgba(255,255,255,0.1)" };
 const unselectedStyle = { border: "1px solid rgba(255,255,255,0.1)" };
 
+const PLACEHOLDER = `What are you trying to figure out?
+
+Type any question, decision, or problem.
+Zorelan will structure it and run it across
+multiple AI models for you.`;
+
 export default function Home() {
   const [appMode, setAppMode] = useState<AppMode>("simple");
   const [mode, setMode] = useState<Mode>("decision");
@@ -161,8 +167,10 @@ export default function Home() {
   const [highlighted, setHighlighted] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [history, setHistory] = useState<HistoryEntry[]>([]);
+  const [focused, setFocused] = useState(false);
 
   const synthesisRef = useRef<HTMLDivElement>(null);
+  const editableRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     setHistory(loadHistory());
@@ -191,12 +199,22 @@ export default function Home() {
     setHistory(updated);
   }, [synthesis, answers]);
 
+  // Sync contentEditable back to input state when loading a history entry
+  useEffect(() => {
+    if (editableRef.current && editableRef.current.innerText !== input) {
+      editableRef.current.innerText = input;
+    }
+  }, [input]);
+
   const canRun = useMemo(() => input.trim().length > 0 && !busy, [input, busy]);
   const canAnalyse = useMemo(() => !!intent && !running, [intent, running]);
   const canSynthesize = useMemo(() => !!answers && !synthesizing, [answers, synthesizing]);
 
-  function onInputChange(e: React.ChangeEvent<HTMLTextAreaElement>) {
-    setInput(e.target.value);
+  const showPlaceholder = !focused && input.trim().length === 0;
+
+  function handleEditableInput() {
+    const text = editableRef.current?.innerText ?? "";
+    setInput(text);
     if (intent || answers || synthesis) {
       setIntent(null);
       setAnswers(null);
@@ -214,6 +232,9 @@ export default function Home() {
     setSynthesis(entry.synthesis);
     setError(null);
     setHistoryOpen(false);
+    if (editableRef.current) {
+      editableRef.current.innerText = entry.input;
+    }
   }
 
   function deleteEntry(id: string, e: React.MouseEvent) {
@@ -453,9 +474,27 @@ export default function Home() {
             </>
           )}
 
-          <p className="text-xs opacity-40 leading-relaxed">Type any question, decision, or problem. Zorelan structures it and runs it across multiple AI models so you can compare and combine the best answers.</p>
-
-          <textarea value={input} onChange={onInputChange} placeholder="What are you trying to figure out?" className="h-40 w-full rounded-2xl border border-black/10 bg-transparent p-4 text-sm outline-none focus:border-black/30 dark:border-white/10 dark:focus:border-white/30" />
+          {/* contentEditable input with multi-line placeholder */}
+          <div className="relative">
+            {showPlaceholder && (
+              <div
+                className="absolute top-0 left-0 w-full h-full p-4 text-sm pointer-events-none select-none opacity-30 whitespace-pre-line leading-relaxed"
+                aria-hidden="true"
+              >
+                {PLACEHOLDER}
+              </div>
+            )}
+            <div
+              ref={editableRef}
+              contentEditable
+              suppressContentEditableWarning
+              onInput={handleEditableInput}
+              onFocus={() => setFocused(true)}
+              onBlur={() => setFocused(false)}
+              className="min-h-40 w-full rounded-2xl border border-black/10 bg-transparent p-4 text-sm outline-none focus:border-black/30 dark:border-white/10 dark:focus:border-white/30 leading-relaxed"
+              style={{ whiteSpace: "pre-wrap", wordBreak: "break-word" }}
+            />
+          </div>
 
           <button onClick={onPreframe} disabled={!canRun} className={cx("w-full rounded-2xl px-4 py-3 text-sm font-medium", canRun ? "bg-black text-white dark:bg-white dark:text-black" : "bg-black/20 text-black/50 dark:bg-white/20 dark:text-white/50")}>
             {busy ? <><Spinner />Structuring…</> : "Structure My Question"}
