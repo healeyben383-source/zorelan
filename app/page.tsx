@@ -144,12 +144,6 @@ function PulsePlaceholder() {
 const selectedStyle = { border: "1px solid rgba(255,255,255,0.5)", background: "rgba(255,255,255,0.1)" };
 const unselectedStyle = { border: "1px solid rgba(255,255,255,0.1)" };
 
-const PLACEHOLDER = `What are you trying to figure out?
-
-Type any question, decision, or problem.
-Zorelan will structure it and run it across
-multiple AI models for you.`;
-
 export default function Home() {
   const [appMode, setAppMode] = useState<AppMode>("simple");
   const [mode, setMode] = useState<Mode>("decision");
@@ -167,7 +161,6 @@ export default function Home() {
   const [highlighted, setHighlighted] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [history, setHistory] = useState<HistoryEntry[]>([]);
-  const [focused, setFocused] = useState(false);
 
   const synthesisRef = useRef<HTMLDivElement>(null);
   const editableRef = useRef<HTMLDivElement>(null);
@@ -199,7 +192,6 @@ export default function Home() {
     setHistory(updated);
   }, [synthesis, answers]);
 
-  // Sync contentEditable back to input state when loading a history entry
   useEffect(() => {
     if (editableRef.current && editableRef.current.innerText !== input) {
       editableRef.current.innerText = input;
@@ -210,7 +202,8 @@ export default function Home() {
   const canAnalyse = useMemo(() => !!intent && !running, [intent, running]);
   const canSynthesize = useMemo(() => !!answers && !synthesizing, [answers, synthesizing]);
 
-  const showPlaceholder = !focused && input.trim().length === 0;
+  // Only hide placeholder when there is actual content
+  const showPlaceholder = input.trim().length === 0;
 
   function handleEditableInput() {
     const text = editableRef.current?.innerText ?? "";
@@ -474,14 +467,14 @@ export default function Home() {
             </>
           )}
 
-          {/* contentEditable input with multi-line placeholder */}
           <div className="relative">
             {showPlaceholder && (
               <div
-                className="absolute top-0 left-0 w-full h-full p-4 text-sm pointer-events-none select-none opacity-30 whitespace-pre-line leading-relaxed"
+                className="absolute top-0 left-0 w-full p-4 text-sm pointer-events-none select-none opacity-30 leading-relaxed"
                 aria-hidden="true"
               >
-                {PLACEHOLDER}
+                <div className="mb-3">What are you trying to figure out?</div>
+                <div>Type any question, decision, or problem and Zorelan will structure it and run it across multiple AI models for you.</div>
               </div>
             )}
             <div
@@ -489,8 +482,6 @@ export default function Home() {
               contentEditable
               suppressContentEditableWarning
               onInput={handleEditableInput}
-              onFocus={() => setFocused(true)}
-              onBlur={() => setFocused(false)}
               className="min-h-40 w-full rounded-2xl border border-black/10 bg-transparent p-4 text-sm outline-none focus:border-black/30 dark:border-white/10 dark:focus:border-white/30 leading-relaxed"
               style={{ whiteSpace: "pre-wrap", wordBreak: "break-word" }}
             />
