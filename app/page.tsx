@@ -34,10 +34,13 @@ function cx(...classes: Array<string | false | undefined | null>) {
   return classes.filter(Boolean).join(" ");
 }
 
-function buildPolishedPrompt(intent: Intent): string {
+function buildPolishedPrompt(intent: Intent, userAnswers: string[]): string {
   const constraints = intent.constraints.join(". ");
-  const inputs = intent.inputs_needed.map((q) => q).join("\n");
-  return `${intent.goal}\n\nContext: ${intent.context}\n\nRequirements: ${constraints}.\n\nBefore you answer, I need you to address these questions:\n${inputs}`;
+  const inputs = intent.inputs_needed.map((q, i) => {
+    const answer = userAnswers[i]?.trim();
+    return answer ? `${q} ${answer}` : q;
+  }).join("\n");
+  return `${intent.goal}\n\nContext: ${intent.context}\n\nRequirements: ${constraints}.\n\nAdditional context:\n${inputs}`;
 }
 
 function renderMarkdown(text: string) {
@@ -107,6 +110,7 @@ export default function Home() {
   const [context, setContext] = useState<Context>("operator");
   const [input, setInput] = useState("");
   const [intent, setIntent] = useState<Intent | null>(null);
+  const [userAnswers, setUserAnswers] = useState<string[]>(["", "", ""]);
   const [answers, setAnswers] = useState<Answers | null>(null);
   const [synthesis, setSynthesis] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -125,6 +129,7 @@ export default function Home() {
       setIntent(null);
       setAnswers(null);
       setSynthesis(null);
+      setUserAnswers(["", "", ""]);
       setError(null);
     }
   }
@@ -135,6 +140,7 @@ export default function Home() {
     setIntent(null);
     setAnswers(null);
     setSynthesis(null);
+    setUserAnswers(["", "", ""]);
     setError(null);
     try {
       const res = await fetch("/api/intent", {
@@ -157,7 +163,7 @@ export default function Home() {
     setSynthesis(null);
     setError(null);
     try {
-      const prompt = buildPolishedPrompt(intent);
+      const prompt = buildPolishedPrompt(intent, userAnswers);
       const res = await fetch("/api/run", {
         method: "POST",
         headers: { "content-type": "application/json" },
@@ -177,7 +183,7 @@ export default function Home() {
     setSynthesis(null);
     setError(null);
     try {
-      const prompt = buildPolishedPrompt(intent);
+      const prompt = buildPolishedPrompt(intent, userAnswers);
       const res = await fetch("/api/synthesize", {
         method: "POST",
         headers: { "content-type": "application/json" },
@@ -193,13 +199,13 @@ export default function Home() {
 
   async function onCopy() {
     if (!intent) return;
-    await navigator.clipboard.writeText(buildPolishedPrompt(intent));
+    await navigator.clipboard.writeText(buildPolishedPrompt(intent, userAnswers));
     setCopied(true);
     setTimeout(() => setCopied(false), 1200);
   }
 
   async function openAI(name: string, text?: string) {
-    const prompt = text ?? (intent ? buildPolishedPrompt(intent) : "");
+    const prompt = text ?? (intent ? buildPolishedPrompt(intent, userAnswers) : "");
     const encoded = encodeURIComponent(prompt);
     if (name === "ChatGPT") { await navigator.clipboard.writeText(prompt); window.open("https://chat.openai.com/", "_blank"); return; }
     if (name === "Claude") { window.open(`https://claude.ai/new?q=${encoded}`, "_blank"); return; }
@@ -268,34 +274,50 @@ export default function Home() {
         )}
 
         {intent && !busy && (
-  <section className="space-y-4 rounded-2xl border border-black/10 p-5 dark:border-white/10">
-    {appMode === "pro" && (
-      <>
-        <div className="text-xs uppercase tracking-wide opacity-50">How we structured it</div>
-        <div className="space-y-1">
-          <div className="text-xs uppercase tracking-wide opacity-50">Goal</div>
-          <p className="text-sm leading-relaxed">{intent.goal}</p>
-        </div>
-        <div className="space-y-1">
-          <div className="text-xs uppercase tracking-wide opacity-50">Context</div>
-          <p className="text-sm leading-relaxed">{intent.context}</p>
-        </div>
-        <div className="space-y-1">
-          <div className="text-xs uppercase tracking-wide opacity-50">Constraints</div>
-          <ul className="space-y-1">{intent.constraints.map((c, i) => <li key={i} className="flex gap-2 text-sm"><span className="opacity-30">—</span><span>{c}</span></li>)}</ul>
-        </div>
-        <div className="space-y-1">
-          <div className="text-xs uppercase tracking-wide opacity-50">Inputs Needed</div>
-          <ul className="space-y-1">{intent.inputs_needed.map((q, i) => <li key={i} className="flex gap-2 text-sm"><span className="opacity-30">—</span><span>{q}</span></li>)}</ul>
-        </div>
-        <hr className="border-white/10" />
-      </>
-    )}
+          <section className="space-y-4 rounded-2xl border border-black/10 p-5 dark:border-white/10">
+            {appMode === "pro" && (
+              <>
+                <div className="text-xs uppercase tracking-wide opacity-50">How we structured it</div>
+                <div className="space-y-1">
+                  <div className="text-xs uppercase tracking-wide opacity-50">Goal</div>
+                  <p className="text-sm leading-relaxed">{intent.goal}</p>
+                </div>
+                <div className="space-y-1">
+                  <div className="text-xs uppercase tracking-wide opacity-50">Context</div>
+                  <p className="text-sm leading-relaxed">{intent.context}</p>
+                </div>
+                <div className="space-y-1">
+                  <div className="text-xs uppercase tracking-wide opacity-50">Constraints</div>
+                  <ul className="space-y-1">{intent.constraints.map((c, i) => <li key={i} className="flex gap-2 text-sm"><span className="opacity-30">—</span><span>{c}</span></li>)}</ul>
+                </div>
+                <hr className="border-white/10" />
+              </>
+            )}
 
-    <div className="rounded-xl border border-black/10 bg-black/[0.02] p-4 dark:border-white/10 dark:bg-white/[0.02]">
-      <div className="text-xs uppercase tracking-wide opacity-50 mb-2">Ready to use</div>
-      <p className="text-sm leading-relaxed whitespace-pre-wrap">{buildPolishedPrompt(intent)}</p>
-    </div>
+            <div className="space-y-3">
+              <div className="text-xs uppercase tracking-wide opacity-50">Answer these to get better results <span className="opacity-50 normal-case">(optional)</span></div>
+              {intent.inputs_needed.map((question, i) => (
+                <div key={i} className="space-y-1">
+                  <label className="text-xs opacity-60">{question}</label>
+                  <input
+                    type="text"
+                    value={userAnswers[i] ?? ""}
+                    onChange={(e) => {
+                      const updated = [...userAnswers];
+                      updated[i] = e.target.value;
+                      setUserAnswers(updated);
+                    }}
+                    placeholder="Your answer…"
+                    className="w-full rounded-xl border border-black/10 bg-transparent px-3 py-2 text-sm outline-none focus:border-black/30 dark:border-white/10 dark:focus:border-white/30"
+                  />
+                </div>
+              ))}
+            </div>
+
+            <div className="rounded-xl border border-black/10 bg-black/[0.02] p-4 dark:border-white/10 dark:bg-white/[0.02]">
+              <div className="text-xs uppercase tracking-wide opacity-50 mb-2">Ready to use</div>
+              <p className="text-sm leading-relaxed whitespace-pre-wrap">{buildPolishedPrompt(intent, userAnswers)}</p>
+            </div>
 
             <div className="flex flex-wrap items-center gap-2">
               <button onClick={onCopy} className="rounded-xl border border-black/10 px-3 py-2 text-sm dark:border-white/10">{copied ? "Copied" : "Copy Prompt"}</button>
