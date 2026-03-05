@@ -473,7 +473,7 @@ export default function Home() {
                 className="absolute top-0 left-0 w-full p-4 text-sm pointer-events-none select-none opacity-30 leading-relaxed"
                 aria-hidden="true"
               >
-                <div className="mb-3">What are you trying to figure out?</div>
+                <div className="mb-5">What are you trying to figure out?</div>
                 <div>Type any question, decision, or problem and Zorelan will structure it and run it across multiple AI models for you.</div>
               </div>
             )}
