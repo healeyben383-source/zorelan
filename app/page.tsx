@@ -41,17 +41,15 @@ function buildPolishedPrompt(intent: Intent): string {
 }
 
 function renderMarkdown(text: string) {
-  return text
-    .split("\n")
-    .map((line, i) => {
-      if (line.startsWith("### ")) return <h3 key={i} className="font-semibold text-sm mt-3 mb-1">{line.slice(4)}</h3>;
-      if (line.startsWith("## ")) return <h2 key={i} className="font-semibold text-sm mt-3 mb-1">{line.slice(3)}</h2>;
-      if (line.startsWith("# ")) return <h2 key={i} className="font-semibold text-sm mt-3 mb-1">{line.slice(2)}</h2>;
-      if (line.startsWith("- ") || line.startsWith("* ")) return <li key={i} className="text-sm ml-3 list-disc">{renderInline(line.slice(2))}</li>;
-      if (line.trim() === "---") return <hr key={i} className="border-black/10 dark:border-white/10 my-2" />;
-      if (line.trim() === "") return <div key={i} className="h-2" />;
-      return <p key={i} className="text-sm leading-relaxed">{renderInline(line)}</p>;
-    });
+  return text.split("\n").map((line, i) => {
+    if (line.startsWith("### ")) return <h3 key={i} className="font-semibold text-sm mt-3 mb-1">{line.slice(4)}</h3>;
+    if (line.startsWith("## ")) return <h2 key={i} className="font-semibold text-sm mt-3 mb-1">{line.slice(3)}</h2>;
+    if (line.startsWith("# ")) return <h2 key={i} className="font-semibold text-sm mt-3 mb-1">{line.slice(2)}</h2>;
+    if (line.startsWith("- ") || line.startsWith("* ")) return <li key={i} className="text-sm ml-3 list-disc">{renderInline(line.slice(2))}</li>;
+    if (line.trim() === "---") return <hr key={i} className="border-black/10 dark:border-white/10 my-2" />;
+    if (line.trim() === "") return <div key={i} className="h-2" />;
+    return <p key={i} className="text-sm leading-relaxed">{renderInline(line)}</p>;
+  });
 }
 
 function renderInline(text: string) {
@@ -62,6 +60,9 @@ function renderInline(text: string) {
       : part
   );
 }
+
+const selectedStyle = { border: "1px solid rgba(255,255,255,0.5)", background: "rgba(255,255,255,0.1)" };
+const unselectedStyle = { border: "1px solid rgba(255,255,255,0.1)" };
 
 export default function Home() {
   const [appMode, setAppMode] = useState<AppMode>("simple");
@@ -150,9 +151,8 @@ export default function Home() {
     setTimeout(() => setCopied(false), 1200);
   }
 
-  async function openAI(name: string) {
-    if (!intent) return;
-    const prompt = buildPolishedPrompt(intent);
+  async function openAI(name: string, text?: string) {
+    const prompt = text ?? (intent ? buildPolishedPrompt(intent) : "");
     const encoded = encodeURIComponent(prompt);
     if (name === "ChatGPT") { await navigator.clipboard.writeText(prompt); window.open("https://chat.openai.com/", "_blank"); return; }
     if (name === "Claude") { window.open(`https://claude.ai/new?q=${encoded}`, "_blank"); return; }
@@ -181,7 +181,9 @@ export default function Home() {
                 <div className="text-xs uppercase tracking-wide opacity-60">Thinking Mode</div>
                 <div className="grid grid-cols-3 gap-2">
                   {(Object.keys(MODE_LABEL) as Mode[]).map((m) => (
-                    <button key={m} onClick={() => setMode(m)} className={cx("rounded-xl border px-3 py-2 text-sm", m === mode ? "border-black/40 dark:border-white/40" : "border-black/10 dark:border-white/10", m === mode ? "bg-black/5 dark:bg-white/10" : "bg-transparent")}>{MODE_LABEL[m]}</button>
+                    <button key={m} onClick={() => setMode(m)} style={m === mode ? selectedStyle : unselectedStyle} className="rounded-xl px-3 py-2 text-sm">
+                      {MODE_LABEL[m]}
+                    </button>
                   ))}
                 </div>
               </div>
@@ -189,7 +191,9 @@ export default function Home() {
                 <div className="text-xs uppercase tracking-wide opacity-60">Context</div>
                 <div className="grid grid-cols-3 gap-2">
                   {(Object.keys(CONTEXT_LABEL) as Context[]).map((c) => (
-                    <button key={c} onClick={() => setContext(c)} className={cx("rounded-xl border px-3 py-2 text-sm", c === context ? "border-black/40 dark:border-white/40" : "border-black/10 dark:border-white/10", c === context ? "bg-black/5 dark:bg-white/10" : "bg-transparent")}>{CONTEXT_LABEL[c]}</button>
+                    <button key={c} onClick={() => setContext(c)} style={c === context ? selectedStyle : unselectedStyle} className="rounded-xl px-3 py-2 text-sm">
+                      {CONTEXT_LABEL[c]}
+                    </button>
                   ))}
                 </div>
               </div>
@@ -273,21 +277,21 @@ export default function Home() {
         )}
 
         {synthesis && (
-  <section className="rounded-2xl border border-black/10 p-5 dark:border-white/10 space-y-3">
-    <div className="text-xs uppercase tracking-wide opacity-50">Combined Insight</div>
-    <div>{renderMarkdown(synthesis)}</div>
-    <div className="flex flex-wrap items-center gap-2 pt-2">
-      <button onClick={() => { navigator.clipboard.writeText(synthesis); }} className="rounded-xl border border-black/10 px-3 py-2 text-sm dark:border-white/10">
-        Copy Insight
-      </button>
-      {AI_BUTTONS.map((a) => (
-        <button key={a.name} onClick={() => { const encoded = encodeURIComponent(synthesis); if (a.name === "ChatGPT") { navigator.clipboard.writeText(synthesis); window.open("https://chat.openai.com/", "_blank"); } else if (a.name === "Claude") { window.open(`https://claude.ai/new?q=${encoded}`, "_blank"); } else if (a.name === "Gemini") { window.open(`https://gemini.google.com/app?q=${encoded}`, "_blank"); } else if (a.name === "Perplexity") { window.open(`https://www.perplexity.ai/search?q=${encoded}`, "_blank"); } }} className="rounded-xl border border-black/10 px-3 py-2 text-sm opacity-80 hover:opacity-100 dark:border-white/10">
-          {a.name === "ChatGPT" ? "ChatGPT (copies)" : a.name}
-        </button>
-      ))}
-    </div>
-  </section>
-)}
+          <section className="rounded-2xl border border-black/10 p-5 dark:border-white/10 space-y-3">
+            <div className="text-xs uppercase tracking-wide opacity-50">Combined Insight</div>
+            <div>{renderMarkdown(synthesis)}</div>
+            <div className="flex flex-wrap items-center gap-2 pt-2">
+              <button onClick={() => navigator.clipboard.writeText(synthesis)} className="rounded-xl border border-black/10 px-3 py-2 text-sm dark:border-white/10">
+                Copy Insight
+              </button>
+              {AI_BUTTONS.map((a) => (
+                <button key={a.name} onClick={() => openAI(a.name, synthesis)} className="rounded-xl border border-black/10 px-3 py-2 text-sm opacity-80 hover:opacity-100 dark:border-white/10">
+                  {a.name === "ChatGPT" ? "ChatGPT (copies)" : a.name}
+                </button>
+              ))}
+            </div>
+          </section>
+        )}
       </div>
     </main>
   );
