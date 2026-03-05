@@ -331,9 +331,6 @@ export default function Home() {
             <button onClick={onRunAnalysis} disabled={!canAnalyse} className={cx("w-full rounded-2xl px-4 py-3 text-sm font-medium", canAnalyse ? "bg-black text-white dark:bg-white dark:text-black" : "bg-black/20 text-black/50 dark:bg-white/20 dark:text-white/50")}>
               {running ? <><Spinner />Running analysis…</> : "Run Analysis"}
             </button>
-            {!running && !answers && (
-              <p className="text-xs text-center opacity-40">This usually takes 15–20 seconds</p>
-            )}
           </section>
         )}
 
@@ -356,9 +353,6 @@ export default function Home() {
         {answers && !running && (
           <section className="space-y-4">
             <div className="text-xs uppercase tracking-wide opacity-50 text-center">AI Comparison</div>
-            <button onClick={onSynthesize} disabled={!canSynthesize} className={cx("w-full rounded-2xl px-4 py-3 text-sm font-medium", canSynthesize ? "bg-black text-white dark:bg-white dark:text-black" : "bg-black/20 text-black/50 dark:bg-white/20 dark:text-white/50")}>
-              {synthesizing ? <><Spinner />Combining insights…</> : "Combine Best Insights"}
-            </button>
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
               <div className="rounded-2xl border border-black/10 p-5 dark:border-white/10 space-y-2">
                 <div className="text-xs uppercase tracking-wide opacity-50">GPT-4o mini</div>
@@ -369,6 +363,10 @@ export default function Home() {
                 <div>{renderMarkdown(answers.anthropic)}</div>
               </div>
             </div>
+
+            <button onClick={onSynthesize} disabled={!canSynthesize} className={cx("w-full rounded-2xl px-4 py-3 text-sm font-medium", canSynthesize ? "bg-black text-white dark:bg-white dark:text-black" : "bg-black/20 text-black/50 dark:bg-white/20 dark:text-white/50")}>
+              {synthesizing ? <><Spinner />Combining insights…</> : "Combine Best Insights"}
+            </button>
           </section>
         )}
 
