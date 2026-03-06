@@ -1,4 +1,4 @@
-"use client"; 
+"use client";
 
 import { useMemo, useState, useRef, useEffect } from "react";
 
@@ -29,15 +29,15 @@ interface HistoryEntry {
 }
 
 const MODE_LABEL: Record<Mode, string> = {
-  execution: "Execution",
+  execution: "Action",
   strategy: "Strategy",
   decision: "Decision",
 };
 
 const CONTEXT_LABEL: Record<Context, string> = {
-  operator: "Operator",
+  operator: "Work",
   general: "Personal",
-  student: "Student",
+  student: "Study",
 };
 
 const HISTORY_KEY = "zorelan_history";
@@ -202,7 +202,6 @@ export default function Home() {
   const canAnalyse = useMemo(() => !!intent && !running, [intent, running]);
   const canSynthesize = useMemo(() => !!answers && !synthesizing, [answers, synthesizing]);
 
-  // Only hide placeholder when there is actual content
   const showPlaceholder = input.trim().length === 0;
 
   function handleEditableInput() {
@@ -445,21 +444,21 @@ export default function Home() {
           {appMode === "pro" && (
             <>
               <div className="space-y-2">
-                <div className="text-xs uppercase tracking-wide opacity-60">Thinking Mode</div>
+                <div className="text-xs uppercase tracking-wide opacity-60">I am asking about</div>
                 <div className="grid grid-cols-3 gap-2">
-                  {(Object.keys(MODE_LABEL) as Mode[]).map((m) => (
-                    <button key={m} onClick={() => setMode(m)} style={m === mode ? selectedStyle : unselectedStyle} className="rounded-xl px-3 py-2 text-sm">
-                      {MODE_LABEL[m]}
+                  {(Object.keys(CONTEXT_LABEL) as Context[]).map((c) => (
+                    <button key={c} onClick={() => setContext(c)} style={c === context ? selectedStyle : unselectedStyle} className="rounded-xl px-3 py-2 text-sm">
+                      {CONTEXT_LABEL[c]}
                     </button>
                   ))}
                 </div>
               </div>
               <div className="space-y-2">
-                <div className="text-xs uppercase tracking-wide opacity-60">Context</div>
+                <div className="text-xs uppercase tracking-wide opacity-60">I need help with</div>
                 <div className="grid grid-cols-3 gap-2">
-                  {(Object.keys(CONTEXT_LABEL) as Context[]).map((c) => (
-                    <button key={c} onClick={() => setContext(c)} style={c === context ? selectedStyle : unselectedStyle} className="rounded-xl px-3 py-2 text-sm">
-                      {CONTEXT_LABEL[c]}
+                  {(Object.keys(MODE_LABEL) as Mode[]).map((m) => (
+                    <button key={m} onClick={() => setMode(m)} style={m === mode ? selectedStyle : unselectedStyle} className="rounded-xl px-3 py-2 text-sm">
+                      {MODE_LABEL[m]}
                     </button>
                   ))}
                 </div>
