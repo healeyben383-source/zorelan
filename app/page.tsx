@@ -443,8 +443,8 @@ export default function Home() {
         <section className="space-y-3">
           {appMode === "pro" && (
             <>
-              <div className="space-y-2">
-                <div className="text-sm font-medium opacity-80">I am asking about</div>
+              <div className="space-y-4">
+                <div className="text-base font-medium opacity-90">I am asking about</div>
                 <div className="grid grid-cols-3 gap-2">
                   {(Object.keys(CONTEXT_LABEL) as Context[]).map((c) => (
                     <button key={c} onClick={() => setContext(c)} style={c === context ? selectedStyle : unselectedStyle} className="rounded-xl px-3 py-2 text-sm">
@@ -453,8 +453,8 @@ export default function Home() {
                   ))}
                 </div>
               </div>
-              <div className="space-y-2">
-                <div className="text-sm font-medium opacity-80">I need help with</div>
+              <div className="space-y-4">
+                <div className="text-base font-medium opacity-90">I need help with</div>
                 <div className="grid grid-cols-3 gap-2">
                   {(Object.keys(MODE_LABEL) as Mode[]).map((m) => (
                     <button key={m} onClick={() => setMode(m)} style={m === mode ? selectedStyle : unselectedStyle} className="rounded-xl px-3 py-2 text-sm">
