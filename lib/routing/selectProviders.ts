@@ -1,6 +1,8 @@
+import { PROVIDER_PROFILES, type TaskType } from "@/lib/routing/providerProfiles";
+
 export type ProviderName = "openai" | "anthropic";
 
-export function selectProvidersFromPrompt(prompt: string): ProviderName[] {
+function detectTaskType(prompt: string): TaskType {
   const text = prompt.toLowerCase();
 
   const technicalKeywords = [
@@ -51,18 +53,29 @@ export function selectProvidersFromPrompt(prompt: string): ProviderName[] {
   const isStrategy = strategyKeywords.some((keyword) => text.includes(keyword));
   const isCreative = creativeKeywords.some((keyword) => text.includes(keyword));
 
-  // For now both providers still run.
-  // These branches establish a scalable routing structure.
-  if (isTechnical) {
-    return ["openai", "anthropic"];
+  if (isTechnical) return "technical";
+  if (isStrategy) return "strategy";
+  if (isCreative) return "creative";
+  return "general";
+}
+
+export function selectProvidersFromPrompt(prompt: string): ProviderName[] {
+  const taskType = detectTaskType(prompt);
+
+  const matchedProviders = PROVIDER_PROFILES
+    .filter((profile) => profile.strengths.includes(taskType))
+    .map((profile) => profile.name);
+
+  if (matchedProviders.length >= 2) {
+    return matchedProviders.slice(0, 2);
   }
 
-  if (isStrategy) {
-    return ["anthropic", "openai"];
-  }
+  if (matchedProviders.length === 1) {
+    const fallbackProviders = PROVIDER_PROFILES
+      .map((profile) => profile.name)
+      .filter((name) => name !== matchedProviders[0]);
 
-  if (isCreative) {
-    return ["anthropic", "openai"];
+    return [matchedProviders[0], ...fallbackProviders].slice(0, 2);
   }
 
   return ["openai", "anthropic"];
