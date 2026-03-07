@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import OpenAI from "openai";
+import { compareAnswers } from "@/lib/synthesis/compareAnswers";
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
@@ -14,14 +15,79 @@ function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
   ]);
 }
 
+function buildSystemPrompt(input: {
+  agreementLevel: "high" | "medium" | "low";
+  likelyConflict: boolean;
+}) {
+  if (input.agreementLevel === "high") {
+    return [
+      "You are a synthesis engine.",
+      "You will be given a question and two AI responses.",
+      "The responses are broadly aligned.",
+      "Combine the best insights into a single superior answer.",
+      "Be concise, direct, and remove duplication.",
+      "Do not mention that you are combining two answers.",
+      "Do not mention agreement level.",
+      "Just give the best final answer.",
+    ].join(" ");
+  }
+
+  if (input.agreementLevel === "medium") {
+    return [
+      "You are a synthesis engine.",
+      "You will be given a question and two AI responses.",
+      "The responses partially align but differ in emphasis.",
+      "Produce a single strong answer that captures the shared core insight while preserving meaningful nuance.",
+      "If one response adds an important caveat or tradeoff, retain it.",
+      "Be concise and direct.",
+      "Do not mention that you are combining two answers.",
+      "Do not mention agreement level.",
+      "Just give the best final answer.",
+    ].join(" ");
+  }
+
+  return [
+    "You are a synthesis engine.",
+    "You will be given a question and two AI responses.",
+    "The responses diverge or may conflict.",
+    "Do not force a false consensus.",
+    "Write a clear final answer that identifies the strongest shared ground, then preserves the key decision tradeoff or disagreement in a useful way.",
+    "If the best answer depends on context, say so plainly.",
+    "Be concise and direct.",
+    "Do not mention that you are combining two answers.",
+    "Do not mention agreement level.",
+    "Just give the best final answer.",
+  ].join(" ");
+}
+
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
     const { prompt, openai: openaiAnswer, anthropic } = body;
 
     if (!prompt || !openaiAnswer || !anthropic) {
-      return NextResponse.json({ ok: false, error: "missing_fields" }, { status: 400 });
+      return NextResponse.json(
+        { ok: false, error: "missing_fields" },
+        { status: 400 }
+      );
     }
+
+    const comparison = compareAnswers(openaiAnswer, anthropic);
+
+    console.log(
+      "[SYNTHESIS_COMPARISON]",
+      JSON.stringify({
+        agreementLevel: comparison.agreementLevel,
+        likelyConflict: comparison.likelyConflict,
+        overlapRatio: comparison.overlapRatio,
+        summary: comparison.summary,
+      })
+    );
+
+    const systemPrompt = buildSystemPrompt({
+      agreementLevel: comparison.agreementLevel,
+      likelyConflict: comparison.likelyConflict,
+    });
 
     const completion = await withTimeout(
       openai.chat.completions.create({
@@ -30,11 +96,22 @@ export async function POST(req: NextRequest) {
         messages: [
           {
             role: "system",
-            content: "You are a synthesis engine. You will be given a question and two AI responses to it. Your job is to combine the best insights from both into a single, superior answer. Be concise and direct. Do not mention that you are combining two answers. Just give the best possible answer.",
+            content: systemPrompt,
           },
           {
             role: "user",
-            content: `Question: ${prompt}\n\nResponse A:\n${openaiAnswer}\n\nResponse B:\n${anthropic}`,
+            content: [
+              `Question: ${prompt}`,
+              "",
+              `Agreement summary: ${comparison.summary}`,
+              `Likely conflict: ${comparison.likelyConflict ? "yes" : "no"}`,
+              "",
+              "Response A:",
+              openaiAnswer,
+              "",
+              "Response B:",
+              anthropic,
+            ].join("\n"),
           },
         ],
       }),
@@ -44,11 +121,21 @@ export async function POST(req: NextRequest) {
     const result = completion.choices[0]?.message?.content ?? "";
 
     if (!result) {
-      return NextResponse.json({ ok: false, error: "empty_synthesis" }, { status: 500 });
+      return NextResponse.json(
+        { ok: false, error: "empty_synthesis" },
+        { status: 500 }
+      );
     }
 
-    return NextResponse.json({ ok: true, synthesis: result });
-
+    return NextResponse.json({
+      ok: true,
+      synthesis: result,
+      comparison: {
+        agreementLevel: comparison.agreementLevel,
+        likelyConflict: comparison.likelyConflict,
+        summary: comparison.summary,
+      },
+    });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "unknown_error";
     console.error("[/api/synthesize] error:", message);
