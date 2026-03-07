@@ -1,12 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { runOpenAI } from "@/lib/providers/openai";
 import { runAnthropic } from "@/lib/providers/anthropic";
+import { selectProvidersFromPrompt, type ProviderName } from "@/lib/routing/selectProviders";
 
 export const runtime = "nodejs";
 
 const PROVIDER_TIMEOUT_MS = 20000;
-
-type ProviderName = "openai" | "anthropic";
 
 type RunRequest = {
   prompt: string;
@@ -36,74 +35,6 @@ function withTimeout<T>(
         resolve(fallbackValue);
       });
   });
-}
-
-function selectProvidersFromPrompt(prompt: string): ProviderName[] {
-  const text = prompt.toLowerCase();
-
-  const technicalKeywords = [
-    "code",
-    "debug",
-    "typescript",
-    "javascript",
-    "next.js",
-    "nextjs",
-    "react",
-    "api",
-    "bug",
-    "error",
-    "server",
-    "programming",
-    "developer",
-    "software",
-  ];
-
-  const strategyKeywords = [
-    "strategy",
-    "plan",
-    "growth",
-    "positioning",
-    "marketing",
-    "business",
-    "pricing",
-    "profit",
-    "decision",
-    "compare",
-    "tradeoff",
-    "framework",
-  ];
-
-  const creativeKeywords = [
-    "write",
-    "story",
-    "creative",
-    "script",
-    "headline",
-    "brand",
-    "name",
-    "slogan",
-    "caption",
-  ];
-
-  const isTechnical = technicalKeywords.some((keyword) => text.includes(keyword));
-  const isStrategy = strategyKeywords.some((keyword) => text.includes(keyword));
-  const isCreative = creativeKeywords.some((keyword) => text.includes(keyword));
-
-  // For now both providers still run.
-  // These branches exist to establish routing structure safely.
-  if (isTechnical) {
-    return ["openai", "anthropic"];
-  }
-
-  if (isStrategy) {
-    return ["anthropic", "openai"];
-  }
-
-  if (isCreative) {
-    return ["anthropic", "openai"];
-  }
-
-  return ["openai", "anthropic"];
 }
 
 async function routeProviders(
