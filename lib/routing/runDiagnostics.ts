@@ -8,9 +8,12 @@ export type ProviderDiagnostic = {
   usedFallback: boolean;
 };
 
+export type SelectionMode = "manual" | "adaptive" | "fallback";
+
 export type RunDiagnostic = {
   taskType: TaskType;
   selectedProviders: ProviderName[];
+  selectionMode: SelectionMode;
   providerResults: ProviderDiagnostic[];
 };
 

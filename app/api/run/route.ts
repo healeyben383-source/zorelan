@@ -2,11 +2,19 @@ import { NextRequest, NextResponse } from "next/server";
 import { runOpenAI } from "@/lib/providers/openai";
 import { runAnthropic } from "@/lib/providers/anthropic";
 import {
-  selectProvidersFromPrompt,
   detectTaskType,
   type ProviderName,
 } from "@/lib/routing/selectProviders";
-import { logRunDiagnostic, type ProviderDiagnostic } from "@/lib/routing/runDiagnostics";
+import { adaptiveSelectProviders } from "@/lib/routing/adaptiveSelect";
+import {
+  logRunDiagnostic,
+  type ProviderDiagnostic,
+  type SelectionMode,
+} from "@/lib/routing/runDiagnostics";
+import {
+  updateProviderScore,
+  getProviderScores,
+} from "@/lib/routing/providerScores";
 
 export const runtime = "nodejs";
 
@@ -70,10 +78,12 @@ function withTimeout<T>(
 
 async function routeProviders(
   prompt: string,
-  providers?: ProviderName[]
-): Promise<{ results: RunResponse; diagnostics: ProviderDiagnostic[]; selectedProviders: ProviderName[] }> {
-  const selectedProviders = providers ?? selectProvidersFromPrompt(prompt);
-
+  selectedProviders: ProviderName[]
+): Promise<{
+  results: RunResponse;
+  diagnostics: ProviderDiagnostic[];
+  selectedProviders: ProviderName[];
+}> {
   const results: RunResponse = {
     openai: "",
     anthropic: "",
@@ -90,12 +100,15 @@ async function routeProviders(
         "OpenAI timed out or failed to respond."
       ).then((res) => {
         results.openai = res.value;
-        diagnostics.push({
+
+        const diagnostic: ProviderDiagnostic = {
           provider: "openai",
           durationMs: res.durationMs,
           timedOut: res.timedOut,
           usedFallback: res.usedFallback,
-        });
+        };
+
+        diagnostics.push(diagnostic);
       })
     );
   }
@@ -108,12 +121,15 @@ async function routeProviders(
         "Anthropic timed out or failed to respond."
       ).then((res) => {
         results.anthropic = res.value;
-        diagnostics.push({
+
+        const diagnostic: ProviderDiagnostic = {
           provider: "anthropic",
           durationMs: res.durationMs,
           timedOut: res.timedOut,
           usedFallback: res.usedFallback,
-        });
+        };
+
+        diagnostics.push(diagnostic);
       })
     );
   }
@@ -147,16 +163,47 @@ export async function POST(req: NextRequest) {
 
     const taskType = detectTaskType(body.prompt);
 
-    const { results, diagnostics, selectedProviders } = await routeProviders(
+    let selectedProviders: ProviderName[];
+    let selectionMode: SelectionMode;
+
+    if (body.providers && body.providers.length > 0) {
+      selectedProviders = body.providers;
+      selectionMode = "manual";
+    } else {
+      const adaptiveSelection = adaptiveSelectProviders(body.prompt, taskType);
+      selectedProviders = adaptiveSelection.selectedProviders;
+      selectionMode = adaptiveSelection.selectionMode;
+    }
+
+    const { results, diagnostics } = await routeProviders(
       body.prompt,
-      body.providers
+      selectedProviders
     );
+
+    for (const diagnostic of diagnostics) {
+      updateProviderScore({
+        taskType,
+        provider: diagnostic.provider,
+        durationMs: diagnostic.durationMs,
+        timedOut: diagnostic.timedOut,
+        usedFallback: diagnostic.usedFallback,
+      });
+    }
 
     logRunDiagnostic({
       taskType,
       selectedProviders,
+      selectionMode,
       providerResults: diagnostics,
     });
+
+    console.log(
+      "[PROVIDER_SCORES_UPDATED]",
+      JSON.stringify({
+        taskType,
+        scores: getProviderScores(taskType),
+      })
+    );
 
     return NextResponse.json({
       ok: true,
