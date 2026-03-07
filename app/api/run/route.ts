@@ -4,9 +4,13 @@ import { runAnthropic } from "@/lib/providers/anthropic";
 
 export const runtime = "nodejs";
 
+const PROVIDER_TIMEOUT_MS = 20000;
+
+type ProviderName = "openai" | "anthropic";
+
 type RunRequest = {
   prompt: string;
-  providers?: ("openai" | "anthropic")[];
+  providers?: ProviderName[];
 };
 
 type RunResponse = {
@@ -14,13 +18,29 @@ type RunResponse = {
   anthropic: string;
 };
 
-/**
- * Provider router
- * Default = both providers
- */
+function withTimeout<T>(
+  promise: Promise<T>,
+  ms: number,
+  fallbackValue: T
+): Promise<T> {
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => resolve(fallbackValue), ms);
+
+    promise
+      .then((value) => {
+        clearTimeout(timer);
+        resolve(value);
+      })
+      .catch(() => {
+        clearTimeout(timer);
+        resolve(fallbackValue);
+      });
+  });
+}
+
 async function routeProviders(
   prompt: string,
-  providers?: ("openai" | "anthropic")[]
+  providers?: ProviderName[]
 ): Promise<RunResponse> {
   const useProviders = providers ?? ["openai", "anthropic"];
 
@@ -33,25 +53,25 @@ async function routeProviders(
 
   if (useProviders.includes("openai")) {
     tasks.push(
-      runOpenAI(prompt)
-        .then((res) => {
-          results.openai = res;
-        })
-        .catch(() => {
-          results.openai = "OpenAI failed to respond.";
-        })
+      withTimeout(
+        runOpenAI(prompt),
+        PROVIDER_TIMEOUT_MS,
+        "OpenAI timed out or failed to respond."
+      ).then((res) => {
+        results.openai = res;
+      })
     );
   }
 
   if (useProviders.includes("anthropic")) {
     tasks.push(
-      runAnthropic(prompt)
-        .then((res) => {
-          results.anthropic = res;
-        })
-        .catch(() => {
-          results.anthropic = "Anthropic failed to respond.";
-        })
+      withTimeout(
+        runAnthropic(prompt),
+        PROVIDER_TIMEOUT_MS,
+        "Anthropic timed out or failed to respond."
+      ).then((res) => {
+        results.anthropic = res;
+      })
     );
   }
 
