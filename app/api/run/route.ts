@@ -1,7 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { runOpenAI } from "@/lib/providers/openai";
 import { runAnthropic } from "@/lib/providers/anthropic";
-import { selectProvidersFromPrompt, type ProviderName } from "@/lib/routing/selectProviders";
+import {
+  selectProvidersFromPrompt,
+  detectTaskType,
+  type ProviderName,
+} from "@/lib/routing/selectProviders";
+import { logRunDiagnostic, type ProviderDiagnostic } from "@/lib/routing/runDiagnostics";
 
 export const runtime = "nodejs";
 
@@ -17,22 +22,48 @@ type RunResponse = {
   anthropic: string;
 };
 
+type TimedResult<T> = {
+  value: T;
+  durationMs: number;
+  timedOut: boolean;
+  usedFallback: boolean;
+};
+
 function withTimeout<T>(
   promise: Promise<T>,
   ms: number,
   fallbackValue: T
-): Promise<T> {
+): Promise<TimedResult<T>> {
   return new Promise((resolve) => {
-    const timer = setTimeout(() => resolve(fallbackValue), ms);
+    const startedAt = Date.now();
+
+    const timer = setTimeout(() => {
+      resolve({
+        value: fallbackValue,
+        durationMs: Date.now() - startedAt,
+        timedOut: true,
+        usedFallback: true,
+      });
+    }, ms);
 
     promise
       .then((value) => {
         clearTimeout(timer);
-        resolve(value);
+        resolve({
+          value,
+          durationMs: Date.now() - startedAt,
+          timedOut: false,
+          usedFallback: false,
+        });
       })
       .catch(() => {
         clearTimeout(timer);
-        resolve(fallbackValue);
+        resolve({
+          value: fallbackValue,
+          durationMs: Date.now() - startedAt,
+          timedOut: false,
+          usedFallback: true,
+        });
       });
   });
 }
@@ -40,42 +71,60 @@ function withTimeout<T>(
 async function routeProviders(
   prompt: string,
   providers?: ProviderName[]
-): Promise<RunResponse> {
-  const useProviders = providers ?? selectProvidersFromPrompt(prompt);
+): Promise<{ results: RunResponse; diagnostics: ProviderDiagnostic[]; selectedProviders: ProviderName[] }> {
+  const selectedProviders = providers ?? selectProvidersFromPrompt(prompt);
 
   const results: RunResponse = {
     openai: "",
     anthropic: "",
   };
 
+  const diagnostics: ProviderDiagnostic[] = [];
   const tasks: Promise<void>[] = [];
 
-  if (useProviders.includes("openai")) {
+  if (selectedProviders.includes("openai")) {
     tasks.push(
       withTimeout(
         runOpenAI(prompt),
         PROVIDER_TIMEOUT_MS,
         "OpenAI timed out or failed to respond."
       ).then((res) => {
-        results.openai = res;
+        results.openai = res.value;
+        diagnostics.push({
+          provider: "openai",
+          durationMs: res.durationMs,
+          timedOut: res.timedOut,
+          usedFallback: res.usedFallback,
+        });
       })
     );
   }
 
-  if (useProviders.includes("anthropic")) {
+  if (selectedProviders.includes("anthropic")) {
     tasks.push(
       withTimeout(
         runAnthropic(prompt),
         PROVIDER_TIMEOUT_MS,
         "Anthropic timed out or failed to respond."
       ).then((res) => {
-        results.anthropic = res;
+        results.anthropic = res.value;
+        diagnostics.push({
+          provider: "anthropic",
+          durationMs: res.durationMs,
+          timedOut: res.timedOut,
+          usedFallback: res.usedFallback,
+        });
       })
     );
   }
 
   await Promise.all(tasks);
-  return results;
+
+  return {
+    results,
+    diagnostics,
+    selectedProviders,
+  };
 }
 
 export async function POST(req: NextRequest) {
@@ -96,7 +145,18 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const results = await routeProviders(body.prompt, body.providers);
+    const taskType = detectTaskType(body.prompt);
+
+    const { results, diagnostics, selectedProviders } = await routeProviders(
+      body.prompt,
+      body.providers
+    );
+
+    logRunDiagnostic({
+      taskType,
+      selectedProviders,
+      providerResults: diagnostics,
+    });
 
     return NextResponse.json({
       ok: true,

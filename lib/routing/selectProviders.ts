@@ -2,7 +2,7 @@ import { PROVIDER_PROFILES, type TaskType } from "@/lib/routing/providerProfiles
 
 export type ProviderName = "openai" | "anthropic";
 
-function detectTaskType(prompt: string): TaskType {
+export function detectTaskType(prompt: string): TaskType {
   const text = prompt.toLowerCase();
 
   const technicalKeywords = [
