@@ -7,7 +7,6 @@ import { getProviderScoresForTask } from "@/lib/routing/providerMemory";
 import type { SelectionMode } from "@/lib/routing/runDiagnostics";
 
 const MIN_SAMPLE_SIZE = 2;
-const PERPLEXITY_MIN_SAMPLE_SIZE = 3;
 
 type ProviderMetrics = {
   totalRuns: number;
@@ -40,9 +39,6 @@ function calculateAdaptiveRankScore(metrics: ProviderMetrics): number {
 }
 
 function isProviderEligible(provider: ProviderName, totalRuns: number): boolean {
-  if (provider === "perplexity") {
-    return totalRuns >= PERPLEXITY_MIN_SAMPLE_SIZE;
-  }
   return totalRuns >= MIN_SAMPLE_SIZE;
 }
 

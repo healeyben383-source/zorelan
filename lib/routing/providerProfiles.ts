@@ -12,13 +12,6 @@ export type ProviderProfile = {
 
 export const PROVIDER_PROFILES: ProviderProfile[] = [
   {
-    name: "openai",
-    label: "OpenAI GPT-4o mini",
-    strengths: ["technical", "general"],
-    speedTier: "fast",
-    costTier: "low",
-  },
-  {
     name: "anthropic",
     label: "Anthropic Claude Haiku",
     strengths: ["strategy", "creative", "general"],
@@ -29,6 +22,13 @@ export const PROVIDER_PROFILES: ProviderProfile[] = [
     name: "perplexity",
     label: "Perplexity Sonar",
     strengths: ["technical", "strategy", "general"],
+    speedTier: "fast",
+    costTier: "low",
+  },
+  {
+    name: "openai",
+    label: "OpenAI GPT-4o mini",
+    strengths: ["technical", "general"],
     speedTier: "fast",
     costTier: "low",
   },
