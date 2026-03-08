@@ -5,7 +5,7 @@ import { useMemo, useState, useRef, useEffect } from "react";
 type Mode = "execution" | "strategy" | "decision";
 type Context = "operator" | "general" | "student";
 type AppMode = "simple" | "pro";
-type ProviderName = "openai" | "anthropic" | "gemini";
+type ProviderName = "openai" | "anthropic" | "perplexity";
 
 interface Intent {
   goal: string;
@@ -17,7 +17,7 @@ interface Intent {
 interface Answers {
   openai: string;
   anthropic: string;
-  gemini: string;
+  perplexity: string;
 }
 
 interface StructuredSynthesis {
@@ -182,8 +182,8 @@ function getProviderLabel(provider: ProviderName): string {
       return "GPT-4o mini";
     case "anthropic":
       return "Claude Haiku";
-    case "gemini":
-      return "Gemini 2.5 Flash";
+    case "perplexity":
+      return "Perplexity Sonar";
     default:
       return provider;
   }
@@ -549,7 +549,7 @@ export default function Home() {
       const providerPayload = {
         openai: answers.openai,
         anthropic: answers.anthropic,
-        gemini: answers.gemini,
+        perplexity: answers.perplexity,
       };
 
       const res = await fetch("/api/synthesize", {
