@@ -356,6 +356,12 @@ export default function Home() {
   const [synthesis, setSynthesis] = useState<string | null>(null);
   const [structuredSynthesis, setStructuredSynthesis] =
     useState<StructuredSynthesis | null>(null);
+    const [comparison, setComparison] = useState<{
+  agreementLevel: "high" | "medium" | "low";
+  likelyConflict: boolean;
+  overlapRatio: number;
+  summary: string;
+} | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [running, setRunning] = useState(false);
@@ -571,6 +577,7 @@ export default function Home() {
 
       setSynthesis(json.synthesis);
       setStructuredSynthesis(json.structuredSynthesis ?? null);
+      setComparison(json.comparison ?? null);
 
       setTimeout(() => {
         synthesisRef.current?.scrollIntoView({
@@ -1104,13 +1111,30 @@ export default function Home() {
         )}
 
         {synthesis && !synthesizing && (
-          <section
-            ref={synthesisRef}
-            className="rounded-2xl border border-black/10 p-5 dark:border-white/10 space-y-4"
-          >
-            <div className="text-xs uppercase tracking-wide opacity-50">
-              Best Answer
-            </div>
+  <section
+    ref={synthesisRef}
+    className="rounded-2xl border border-black/10 p-5 dark:border-white/10 space-y-4"
+  >
+    <div className="flex items-center justify-between">
+      <div className="text-xs uppercase tracking-wide opacity-50">
+        Best Answer
+      </div>
+      {comparison && (
+        <div className={`text-xs font-medium px-3 py-1 rounded-full ${
+          comparison.agreementLevel === "high"
+            ? "bg-green-500/10 text-green-500"
+            : comparison.agreementLevel === "medium"
+            ? "bg-yellow-500/10 text-yellow-500"
+            : "bg-red-500/10 text-red-500"
+        }`}>
+          {comparison.agreementLevel === "high"
+            ? "✓ High Confidence"
+            : comparison.agreementLevel === "medium"
+            ? "~ Medium Confidence"
+            : "⚠ Low Confidence"}
+        </div>
+      )}
+    </div>
 
             <div className="relative space-y-2 rounded-xl border border-black/10 dark:border-white/10 p-4 pr-16 overflow-hidden">
               <div className="absolute top-3 right-3">
