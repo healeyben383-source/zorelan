@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import OpenAI from "openai";
 import { compareAnswers } from "@/lib/synthesis/compareAnswers";
+import { updateProviderQualityScore } from "@/lib/routing/providerScores";
+import { detectTaskType } from "@/lib/routing/selectProviders";
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
@@ -20,6 +22,9 @@ type StructuredSynthesis = {
   sharedConclusion: string;
   keyDifference: string;
   decisionRule: string;
+  qualityScoreopenai?: number;
+  qualityScoreanthropic?: number;
+  qualityScoregemini?: number;
 };
 
 function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
@@ -106,6 +111,7 @@ function buildStructuringSystemPrompt() {
     "You are a synthesis formatter.",
     "You will be given a question, a final synthesized answer, and a comparison summary.",
     "Your job is to extract a structured decision summary from the synthesis.",
+    "Also rate the quality of each AI response from 1-10.",
     "Return valid JSON only.",
   ].join(" ");
 }
@@ -116,6 +122,8 @@ function buildStructuringUserPrompt(input: {
   agreementSummary: string;
   agreementLevel: AgreementLevel;
   likelyConflict: boolean;
+  providerA: ProviderName;
+  providerB: ProviderName;
 }) {
   return [
     `Question: ${input.prompt}`,
@@ -127,12 +135,14 @@ function buildStructuringUserPrompt(input: {
     "Final synthesized answer:",
     input.synthesis,
     "",
-    'Return JSON with exactly these keys:',
+    "Return JSON with exactly these keys:",
     "{",
     '  "finalAnswer": string,',
     '  "sharedConclusion": string,',
     '  "keyDifference": string,',
-    '  "decisionRule": string',
+    '  "decisionRule": string,',
+    `  "qualityScore${input.providerA}": number,`,
+    `  "qualityScore${input.providerB}": number`,
     "}",
     "",
     "Rules:",
@@ -140,6 +150,8 @@ function buildStructuringUserPrompt(input: {
     "- sharedConclusion should state what both model responses broadly agree on.",
     "- keyDifference should state the most important difference in emphasis or recommendation.",
     "- decisionRule should tell the user how to decide, or what context changes the answer.",
+    `- qualityScore${input.providerA} should rate Response A's quality from 1-10 based on accuracy, depth, and usefulness.`,
+    `- qualityScore${input.providerB} should rate Response B's quality from 1-10 based on accuracy, depth, and usefulness.`,
     "- Keep each field useful and concise.",
     "- Return JSON only with no markdown fences.",
   ].join("\n");
@@ -286,7 +298,7 @@ export async function POST(req: NextRequest) {
       const structuringCompletion = await withTimeout(
         openai.chat.completions.create({
           model: "gpt-4o-mini",
-          max_tokens: 500,
+          max_tokens: 600,
           response_format: { type: "json_object" },
           messages: [
             {
@@ -301,6 +313,8 @@ export async function POST(req: NextRequest) {
                 agreementSummary: comparison.summary,
                 agreementLevel: comparison.agreementLevel,
                 likelyConflict: comparison.likelyConflict,
+                providerA,
+                providerB,
               }),
             },
           ],
@@ -321,6 +335,17 @@ export async function POST(req: NextRequest) {
         summary: comparison.summary,
         agreementLevel: comparison.agreementLevel,
       });
+    }
+
+    // Feed quality scores back into provider learning
+    const taskType = detectTaskType(prompt);
+    for (const provider of selectedProviders) {
+      const key = `qualityScore${provider}` as keyof typeof structuredSynthesis;
+      const score = structuredSynthesis[key];
+      if (typeof score === "number") {
+        updateProviderQualityScore({ taskType, provider, qualityScore: score });
+        console.log("[QUALITY_SCORE]", { provider, taskType, score });
+      }
     }
 
     return NextResponse.json({

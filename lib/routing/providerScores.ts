@@ -8,6 +8,8 @@ export type ProviderScore = {
   timeouts: number;
   fallbacks: number;
   totalDurationMs: number;
+  totalQualityScore: number;
+  qualityRatings: number;
 };
 
 type TaskScoreMap = Record<ProviderName, ProviderScore>;
@@ -19,6 +21,8 @@ const DEFAULT_PROVIDER_SCORE: ProviderScore = {
   timeouts: 0,
   fallbacks: 0,
   totalDurationMs: 0,
+  totalQualityScore: 0,
+  qualityRatings: 0,
 };
 
 const DEFAULT_TASK_SCORE_MAP: TaskScoreMap = {
@@ -81,6 +85,18 @@ export function updateProviderScore(input: {
   entry.successes += 1;
 }
 
+export function updateProviderQualityScore(input: {
+  taskType: TaskType;
+  provider: ProviderName;
+  qualityScore: number; // 1-10
+}) {
+  const entry = scoreStore[input.taskType]?.[input.provider];
+  if (!entry) return;
+
+  entry.totalQualityScore += input.qualityScore;
+  entry.qualityRatings += 1;
+}
+
 function clamp(value: number, min = 0, max = 1) {
   return Math.max(min, Math.min(max, value));
 }
@@ -94,17 +110,24 @@ export function calculateProviderRankScore(score: ProviderScore): number {
   const successScore = score.successes / totalRuns;
 
   const avgDurationMs = score.totalDurationMs / totalRuns;
-
-  // 2s = excellent, 20s = poor
   const speedScore = clamp((20000 - avgDurationMs) / 18000);
 
-  // prevents tiny sample sizes from dominating
   const sampleScore = clamp(totalRuns / 10);
 
+  const avgQuality =
+    score.qualityRatings > 0
+      ? score.totalQualityScore / score.qualityRatings / 10
+      : 0.5;
+
+  const qualityWeight = clamp(score.qualityRatings / 5);
+
+  const qualityScore = avgQuality * qualityWeight + 0.5 * (1 - qualityWeight);
+
   return (
-    reliabilityScore * 0.55 +
-    successScore * 0.2 +
-    speedScore * 0.2 +
-    sampleScore * 0.05
+    reliabilityScore * 0.45 +
+    successScore * 0.15 +
+    speedScore * 0.15 +
+    sampleScore * 0.05 +
+    qualityScore * 0.20
   );
 }
