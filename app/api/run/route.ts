@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { runOpenAI } from "@/lib/providers/openai";
 import { runAnthropic } from "@/lib/providers/anthropic";
-import { runGemini } from "@/lib/providers/gemini";
+import { runPerplexity } from "@/lib/providers/perplexity";
 import {
   detectTaskType,
   type ProviderName,
@@ -29,7 +29,7 @@ type RunRequest = {
 type RunResponse = {
   openai: string;
   anthropic: string;
-  gemini: string;
+  perplexity: string;
 };
 
 type TimedResult<T> = {
@@ -95,7 +95,7 @@ async function routeProviders(
   const results: RunResponse = {
     openai: "",
     anthropic: "",
-    gemini: "",
+    perplexity: "",
   };
 
   const diagnostics: ProviderDiagnostic[] = [];
@@ -118,14 +118,12 @@ async function routeProviders(
           });
         }
 
-        const diagnostic: ProviderDiagnostic = {
+        diagnostics.push({
           provider: "openai",
           durationMs: res.durationMs,
           timedOut: res.timedOut,
           usedFallback: res.usedFallback,
-        };
-
-        diagnostics.push(diagnostic);
+        });
       })
     );
   }
@@ -147,43 +145,39 @@ async function routeProviders(
           });
         }
 
-        const diagnostic: ProviderDiagnostic = {
+        diagnostics.push({
           provider: "anthropic",
           durationMs: res.durationMs,
           timedOut: res.timedOut,
           usedFallback: res.usedFallback,
-        };
-
-        diagnostics.push(diagnostic);
+        });
       })
     );
   }
 
-  if (selectedProviders.includes("gemini")) {
+  if (selectedProviders.includes("perplexity")) {
     tasks.push(
       withTimeout(
-        runGemini({ prompt }),
+        runPerplexity(prompt),
         PROVIDER_TIMEOUT_MS,
-        "Gemini timed out or failed to respond."
+        "Perplexity timed out or failed to respond."
       ).then((res) => {
-        results.gemini = res.value;
+        results.perplexity = res.value;
 
         if (res.errorMessage) {
-          console.error("[RUN_API] Gemini failed", {
+          console.error("[RUN_API] Perplexity failed", {
             error: res.errorMessage,
             durationMs: res.durationMs,
             timedOut: res.timedOut,
           });
         }
 
-        const diagnostic: ProviderDiagnostic = {
-          provider: "gemini",
+        diagnostics.push({
+          provider: "perplexity",
           durationMs: res.durationMs,
           timedOut: res.timedOut,
           usedFallback: res.usedFallback,
-        };
-
-        diagnostics.push(diagnostic);
+        });
       })
     );
   }
@@ -208,7 +202,7 @@ export async function POST(req: NextRequest) {
           answers: {
             openai: "",
             anthropic: "",
-            gemini: "",
+            perplexity: "",
           },
           selectedProviders: [] as ProviderName[],
         },
@@ -276,7 +270,7 @@ export async function POST(req: NextRequest) {
         answers: {
           openai: "",
           anthropic: "",
-          gemini: "",
+          perplexity: "",
         },
         selectedProviders: [] as ProviderName[],
       },

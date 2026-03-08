@@ -1,6 +1,6 @@
 import { PROVIDER_PROFILES, type TaskType } from "@/lib/routing/providerProfiles";
 
-export type ProviderName = "openai" | "anthropic" | "gemini";
+export type ProviderName = "openai" | "anthropic" | "perplexity";
 
 export function detectTaskType(prompt: string): TaskType {
   const text = prompt.toLowerCase();

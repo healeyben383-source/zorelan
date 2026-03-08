@@ -26,10 +26,10 @@ export const PROVIDER_PROFILES: ProviderProfile[] = [
     costTier: "low",
   },
   {
-    name: "gemini",
-    label: "Google Gemini 1.5 Pro",
+    name: "perplexity",
+    label: "Perplexity Sonar",
     strengths: ["technical", "strategy", "general"],
-    speedTier: "medium",
+    speedTier: "fast",
     costTier: "low",
   },
 ];

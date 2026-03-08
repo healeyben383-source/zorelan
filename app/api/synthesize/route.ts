@@ -8,13 +8,13 @@ const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
 const TIMEOUT_MS = 30_000;
 
-type ProviderName = "openai" | "anthropic" | "gemini";
+type ProviderName = "openai" | "anthropic" | "perplexity";
 type AgreementLevel = "high" | "medium" | "low";
 
 type AnswersPayload = {
   openai: string;
   anthropic: string;
-  gemini: string;
+  perplexity: string;
 };
 
 type StructuredSynthesis = {
@@ -51,8 +51,8 @@ function getProviderLabel(provider: ProviderName): string {
       return "OpenAI";
     case "anthropic":
       return "Anthropic";
-    case "gemini":
-      return "Gemini";
+    case "perplexity":
+      return "Perplexity";
     default:
       return provider;
   }
