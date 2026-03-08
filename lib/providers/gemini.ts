@@ -31,7 +31,7 @@ export async function runGemini({
     throw new Error("Missing GEMINI_API_KEY");
   }
 
-  const modelName = "gemini-2.5-flash";
+  const modelName = "gemini-2.5-flash-lite";
 
   try {
     const model = genAI.getGenerativeModel({
