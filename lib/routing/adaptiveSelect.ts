@@ -3,19 +3,38 @@ import {
   selectProvidersFromPrompt,
   type ProviderName,
 } from "@/lib/routing/selectProviders";
-import {
-  calculateProviderRankScore,
-  getProviderScores,
-} from "@/lib/routing/providerScores";
+import { getProviderScoresForTask } from "@/lib/routing/providerMemory";
 import type { SelectionMode } from "@/lib/routing/runDiagnostics";
 
-const MIN_SAMPLE_SIZE = 3;
+const MIN_SAMPLE_SIZE = 2;
 
 type RankedProvider = {
   provider: ProviderName;
   score: number;
   totalRuns: number;
 };
+
+function calculateAdaptiveRankScore(metrics: {
+  totalRuns: number;
+  successRate: number;
+  failureRate: number;
+  timeoutRate: number;
+  fallbackRate: number;
+  averageDurationMs: number;
+}) {
+  const reliabilityScore =
+    metrics.successRate * 100 -
+    metrics.failureRate * 40 -
+    metrics.timeoutRate * 60 -
+    metrics.fallbackRate * 20;
+
+  const speedScore =
+    metrics.averageDurationMs > 0
+      ? Math.max(0, 20_000 - metrics.averageDurationMs) / 1000
+      : 0;
+
+  return reliabilityScore + speedScore;
+}
 
 export function adaptiveSelectProviders(
   prompt: string,
@@ -25,21 +44,38 @@ export function adaptiveSelectProviders(
   selectionMode: SelectionMode;
 } {
   const fallbackProviders = selectProvidersFromPrompt(prompt);
-  const taskScores = getProviderScores(taskType);
+  const taskScores = getProviderScoresForTask(taskType);
 
   const rankedProviders: RankedProvider[] = (Object.entries(taskScores) as Array<
-    [ProviderName, (typeof taskScores)[ProviderName]]
+    [
+      ProviderName,
+      {
+        totalRuns: number;
+        successRate: number;
+        failureRate: number;
+        timeoutRate: number;
+        fallbackRate: number;
+        averageDurationMs: number;
+      }
+    ]
   >)
     .map(([provider, metrics]) => ({
       provider,
-      score: calculateProviderRankScore(metrics),
+      score: calculateAdaptiveRankScore(metrics),
       totalRuns: metrics.totalRuns,
     }))
     .sort((a, b) => b.score - a.score);
 
-  const hasEnoughHistory = rankedProviders.every(
-    (entry) => entry.totalRuns >= MIN_SAMPLE_SIZE
-  );
+  if (rankedProviders.length < 2) {
+    return {
+      selectedProviders: fallbackProviders,
+      selectionMode: "fallback",
+    };
+  }
+
+  const hasEnoughHistory = rankedProviders
+    .slice(0, 2)
+    .every((entry) => entry.totalRuns >= MIN_SAMPLE_SIZE);
 
   if (!hasEnoughHistory) {
     return {
@@ -49,15 +85,8 @@ export function adaptiveSelectProviders(
   }
 
   const adaptiveProviders = rankedProviders
-    .map((entry) => entry.provider)
-    .slice(0, 2);
-
-  if (adaptiveProviders.length < 2) {
-    return {
-      selectedProviders: fallbackProviders,
-      selectionMode: "fallback",
-    };
-  }
+    .slice(0, 2)
+    .map((entry) => entry.provider);
 
   return {
     selectedProviders: adaptiveProviders,
