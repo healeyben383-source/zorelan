@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { runOpenAI } from "@/lib/providers/openai";
 import { runAnthropic } from "@/lib/providers/anthropic";
+import { runGemini } from "@/lib/providers/gemini";
 import {
   detectTaskType,
   type ProviderName,
@@ -18,7 +19,7 @@ import {
 
 export const runtime = "nodejs";
 
-const PROVIDER_TIMEOUT_MS = 20000;
+const PROVIDER_TIMEOUT_MS = 30000;
 
 type RunRequest = {
   prompt: string;
@@ -28,6 +29,7 @@ type RunRequest = {
 type RunResponse = {
   openai: string;
   anthropic: string;
+  gemini: string;
 };
 
 type TimedResult<T> = {
@@ -35,6 +37,7 @@ type TimedResult<T> = {
   durationMs: number;
   timedOut: boolean;
   usedFallback: boolean;
+  errorMessage?: string;
 };
 
 function withTimeout<T>(
@@ -51,6 +54,7 @@ function withTimeout<T>(
         durationMs: Date.now() - startedAt,
         timedOut: true,
         usedFallback: true,
+        errorMessage: "timeout",
       });
     }, ms);
 
@@ -64,13 +68,18 @@ function withTimeout<T>(
           usedFallback: false,
         });
       })
-      .catch(() => {
+      .catch((error) => {
         clearTimeout(timer);
+
+        const errorMessage =
+          error instanceof Error ? error.message : "Unknown provider error";
+
         resolve({
           value: fallbackValue,
           durationMs: Date.now() - startedAt,
           timedOut: false,
           usedFallback: true,
+          errorMessage,
         });
       });
   });
@@ -82,11 +91,11 @@ async function routeProviders(
 ): Promise<{
   results: RunResponse;
   diagnostics: ProviderDiagnostic[];
-  selectedProviders: ProviderName[];
 }> {
   const results: RunResponse = {
     openai: "",
     anthropic: "",
+    gemini: "",
   };
 
   const diagnostics: ProviderDiagnostic[] = [];
@@ -100,6 +109,14 @@ async function routeProviders(
         "OpenAI timed out or failed to respond."
       ).then((res) => {
         results.openai = res.value;
+
+        if (res.errorMessage) {
+          console.error("[RUN_API] OpenAI failed", {
+            error: res.errorMessage,
+            durationMs: res.durationMs,
+            timedOut: res.timedOut,
+          });
+        }
 
         const diagnostic: ProviderDiagnostic = {
           provider: "openai",
@@ -122,8 +139,45 @@ async function routeProviders(
       ).then((res) => {
         results.anthropic = res.value;
 
+        if (res.errorMessage) {
+          console.error("[RUN_API] Anthropic failed", {
+            error: res.errorMessage,
+            durationMs: res.durationMs,
+            timedOut: res.timedOut,
+          });
+        }
+
         const diagnostic: ProviderDiagnostic = {
           provider: "anthropic",
+          durationMs: res.durationMs,
+          timedOut: res.timedOut,
+          usedFallback: res.usedFallback,
+        };
+
+        diagnostics.push(diagnostic);
+      })
+    );
+  }
+
+  if (selectedProviders.includes("gemini")) {
+    tasks.push(
+      withTimeout(
+        runGemini({ prompt }),
+        PROVIDER_TIMEOUT_MS,
+        "Gemini timed out or failed to respond."
+      ).then((res) => {
+        results.gemini = res.value;
+
+        if (res.errorMessage) {
+          console.error("[RUN_API] Gemini failed", {
+            error: res.errorMessage,
+            durationMs: res.durationMs,
+            timedOut: res.timedOut,
+          });
+        }
+
+        const diagnostic: ProviderDiagnostic = {
+          provider: "gemini",
           durationMs: res.durationMs,
           timedOut: res.timedOut,
           usedFallback: res.usedFallback,
@@ -139,7 +193,6 @@ async function routeProviders(
   return {
     results,
     diagnostics,
-    selectedProviders,
   };
 }
 
@@ -155,7 +208,9 @@ export async function POST(req: NextRequest) {
           answers: {
             openai: "",
             anthropic: "",
+            gemini: "",
           },
+          selectedProviders: [] as ProviderName[],
         },
         { status: 400 }
       );
@@ -201,6 +256,7 @@ export async function POST(req: NextRequest) {
       "[PROVIDER_SCORES_UPDATED]",
       JSON.stringify({
         taskType,
+        selectedProviders,
         scores: getProviderScores(taskType),
       })
     );
@@ -208,6 +264,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({
       ok: true,
       answers: results,
+      selectedProviders,
     });
   } catch (error) {
     console.error("RUN API ERROR:", error);
@@ -219,7 +276,9 @@ export async function POST(req: NextRequest) {
         answers: {
           openai: "",
           anthropic: "",
+          gemini: "",
         },
+        selectedProviders: [] as ProviderName[],
       },
       { status: 500 }
     );

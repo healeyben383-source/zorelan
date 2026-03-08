@@ -6,7 +6,14 @@ const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
 const TIMEOUT_MS = 30_000;
 
+type ProviderName = "openai" | "anthropic" | "gemini";
 type AgreementLevel = "high" | "medium" | "low";
+
+type AnswersPayload = {
+  openai: string;
+  anthropic: string;
+  gemini: string;
+};
 
 type StructuredSynthesis = {
   finalAnswer: string;
@@ -31,6 +38,19 @@ function stripCodeFences(text: string): string {
     .replace(/```markdown\s*/gi, "")
     .replace(/```\s*/g, "")
     .trim();
+}
+
+function getProviderLabel(provider: ProviderName): string {
+  switch (provider) {
+    case "openai":
+      return "OpenAI";
+    case "anthropic":
+      return "Anthropic";
+    case "gemini":
+      return "Gemini";
+    default:
+      return provider;
+  }
 }
 
 function buildSynthesisSystemPrompt(input: {
@@ -174,20 +194,41 @@ function buildFallbackStructuredSynthesis(
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { prompt, openai: openaiAnswer, anthropic } = body;
 
-    if (!prompt || !openaiAnswer || !anthropic) {
+    const prompt = body?.prompt;
+    const selectedProviders = body?.selectedProviders as ProviderName[] | undefined;
+    const answers = body?.answers as AnswersPayload | undefined;
+
+    if (
+      !prompt ||
+      typeof prompt !== "string" ||
+      !Array.isArray(selectedProviders) ||
+      selectedProviders.length !== 2 ||
+      !answers
+    ) {
       return NextResponse.json(
         { ok: false, error: "missing_fields" },
         { status: 400 }
       );
     }
 
-    const comparison = compareAnswers(openaiAnswer, anthropic);
+    const [providerA, providerB] = selectedProviders;
+    const answerA = answers[providerA];
+    const answerB = answers[providerB];
+
+    if (!answerA || !answerB) {
+      return NextResponse.json(
+        { ok: false, error: "missing_fields" },
+        { status: 400 }
+      );
+    }
+
+    const comparison = compareAnswers(answerA, answerB);
 
     console.log(
       "[SYNTHESIS_COMPARISON]",
       JSON.stringify({
+        selectedProviders,
         agreementLevel: comparison.agreementLevel,
         likelyConflict: comparison.likelyConflict,
         overlapRatio: comparison.overlapRatio,
@@ -215,11 +256,11 @@ export async function POST(req: NextRequest) {
               `Agreement summary: ${comparison.summary}`,
               `Likely conflict: ${comparison.likelyConflict ? "yes" : "no"}`,
               "",
-              "Response A:",
-              openaiAnswer,
+              `Response A (${getProviderLabel(providerA)}):`,
+              answerA,
               "",
-              "Response B:",
-              anthropic,
+              `Response B (${getProviderLabel(providerB)}):`,
+              answerB,
             ].join("\n"),
           },
         ],
@@ -287,6 +328,7 @@ export async function POST(req: NextRequest) {
       synthesis,
       structuredSynthesis,
       comparison: {
+        selectedProviders,
         agreementLevel: comparison.agreementLevel,
         likelyConflict: comparison.likelyConflict,
         summary: comparison.summary,

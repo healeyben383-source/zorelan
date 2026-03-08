@@ -1,6 +1,6 @@
 import { PROVIDER_PROFILES, type TaskType } from "@/lib/routing/providerProfiles";
 
-export type ProviderName = "openai" | "anthropic";
+export type ProviderName = "openai" | "anthropic" | "gemini";
 
 export function detectTaskType(prompt: string): TaskType {
   const text = prompt.toLowerCase();
@@ -64,7 +64,7 @@ export function selectProvidersFromPrompt(prompt: string): ProviderName[] {
 
   const matchedProviders = PROVIDER_PROFILES
     .filter((profile) => profile.strengths.includes(taskType))
-    .map((profile) => profile.name);
+    .map((profile) => profile.name as ProviderName);
 
   if (matchedProviders.length >= 2) {
     return matchedProviders.slice(0, 2);
@@ -72,7 +72,7 @@ export function selectProvidersFromPrompt(prompt: string): ProviderName[] {
 
   if (matchedProviders.length === 1) {
     const fallbackProviders = PROVIDER_PROFILES
-      .map((profile) => profile.name)
+      .map((profile) => profile.name as ProviderName)
       .filter((name) => name !== matchedProviders[0]);
 
     return [matchedProviders[0], ...fallbackProviders].slice(0, 2);

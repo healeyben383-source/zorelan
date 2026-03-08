@@ -5,6 +5,7 @@ import { useMemo, useState, useRef, useEffect } from "react";
 type Mode = "execution" | "strategy" | "decision";
 type Context = "operator" | "general" | "student";
 type AppMode = "simple" | "pro";
+type ProviderName = "openai" | "anthropic" | "gemini";
 
 interface Intent {
   goal: string;
@@ -16,6 +17,7 @@ interface Intent {
 interface Answers {
   openai: string;
   anthropic: string;
+  gemini: string;
 }
 
 interface StructuredSynthesis {
@@ -32,6 +34,7 @@ interface HistoryEntry {
   intent: Intent;
   userAnswers: string[];
   answers: Answers | null;
+  selectedProviders?: ProviderName[];
   synthesis: string | null;
   structuredSynthesis?: StructuredSynthesis | null;
 }
@@ -146,7 +149,10 @@ function renderMarkdown(text: string) {
       elements.push(<div key={i} className="h-2" />);
     } else {
       elements.push(
-        <p key={i} className="text-sm leading-relaxed whitespace-pre-wrap">
+        <p
+          key={i}
+          className="text-sm leading-relaxed whitespace-pre-wrap break-words"
+        >
           {renderInline(line)}
         </p>
       );
@@ -170,6 +176,19 @@ function renderInline(text: string) {
   );
 }
 
+function getProviderLabel(provider: ProviderName): string {
+  switch (provider) {
+    case "openai":
+      return "GPT-4o mini";
+    case "anthropic":
+      return "Claude Haiku";
+    case "gemini":
+      return "Gemini 2.5 Flash";
+    default:
+      return provider;
+  }
+}
+
 function Spinner() {
   return (
     <svg
@@ -186,7 +205,11 @@ function Spinner() {
         stroke="currentColor"
         strokeWidth="4"
       />
-      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
+      <path
+        className="opacity-75"
+        fill="currentColor"
+        d="M4 12a8 8 0 018-8v8z"
+      />
     </svg>
   );
 }
@@ -214,7 +237,9 @@ function InsightBlock({
   return (
     <div className="rounded-xl border border-black/10 p-4 dark:border-white/10 space-y-1">
       <div className="text-xs uppercase tracking-wide opacity-50">{title}</div>
-      <div className="text-sm leading-relaxed whitespace-pre-wrap">{value}</div>
+      <div className="text-sm leading-relaxed whitespace-pre-wrap break-words">
+        {value}
+      </div>
     </div>
   );
 }
@@ -278,6 +303,47 @@ const unselectedStyle = {
   border: "1px solid rgba(255,255,255,0.1)",
 };
 
+function ProviderAnswerCard({
+  provider,
+  answer,
+}: {
+  provider: ProviderName;
+  answer: string;
+}) {
+  return (
+    <div className="rounded-2xl border border-black/10 p-5 dark:border-white/10 space-y-2 min-w-0 overflow-hidden">
+      <div className="space-y-0.5">
+        <div className="text-xs uppercase tracking-wide opacity-50">
+          {getProviderLabel(provider)}
+        </div>
+        <div className="text-[11px] uppercase tracking-wide opacity-35">
+          Selected by Zorelan
+        </div>
+      </div>
+
+      <div className="min-w-0 max-w-full overflow-x-auto overflow-y-hidden [&_*]:max-w-full [&_pre]:max-w-full [&_pre]:overflow-x-auto [&_pre]:whitespace-pre-wrap [&_pre]:break-words [&_code]:break-words">
+        {renderMarkdown(answer || "No response returned.")}
+      </div>
+    </div>
+  );
+}
+
+function LoadingProviderCard() {
+  return (
+    <div className="rounded-2xl border border-white/10 p-5 space-y-3">
+      <div className="space-y-0.5">
+        <div className="text-xs uppercase tracking-wide opacity-50">
+          Selecting AI models…
+        </div>
+        <div className="text-[11px] uppercase tracking-wide opacity-35">
+          Zorelan is routing the best providers for this task
+        </div>
+      </div>
+      <PulsePlaceholder />
+    </div>
+  );
+}
+
 export default function Home() {
   const [appMode, setAppMode] = useState<AppMode>("simple");
   const [mode, setMode] = useState<Mode>("decision");
@@ -286,6 +352,7 @@ export default function Home() {
   const [intent, setIntent] = useState<Intent | null>(null);
   const [userAnswers, setUserAnswers] = useState<string[]>(["", "", ""]);
   const [answers, setAnswers] = useState<Answers | null>(null);
+  const [selectedProviders, setSelectedProviders] = useState<ProviderName[]>([]);
   const [synthesis, setSynthesis] = useState<string | null>(null);
   const [structuredSynthesis, setStructuredSynthesis] =
     useState<StructuredSynthesis | null>(null);
@@ -323,6 +390,7 @@ export default function Home() {
       intent,
       userAnswers,
       answers,
+      selectedProviders,
       synthesis,
       structuredSynthesis,
     };
@@ -330,7 +398,15 @@ export default function Home() {
     const updated = [entry, ...loadHistory().filter((h) => h.input !== input)];
     saveHistory(updated);
     setHistory(updated);
-  }, [synthesis, structuredSynthesis, answers, input, intent, userAnswers]);
+  }, [
+    synthesis,
+    structuredSynthesis,
+    answers,
+    selectedProviders,
+    input,
+    intent,
+    userAnswers,
+  ]);
 
   useEffect(() => {
     if (editableRef.current && editableRef.current.innerText !== input) {
@@ -341,25 +417,30 @@ export default function Home() {
   const canRun = useMemo(() => input.trim().length > 0 && !busy, [input, busy]);
   const canAnalyse = useMemo(() => !!intent && !running, [intent, running]);
   const canSynthesize = useMemo(
-    () => !!answers && !synthesizing,
-    [answers, synthesizing]
+    () => !!answers && selectedProviders.length === 2 && !synthesizing,
+    [answers, selectedProviders, synthesizing]
   );
 
   const showPlaceholder = input.trim().length === 0;
+
+  function resetAnalysisState() {
+    setIntent(null);
+    setAnswers(null);
+    setSelectedProviders([]);
+    setSynthesis(null);
+    setStructuredSynthesis(null);
+    setUserAnswers(["", "", ""]);
+    setError(null);
+    setPromptCopied(false);
+    setInsightCopied(false);
+  }
 
   function handleEditableInput() {
     const text = editableRef.current?.innerText ?? "";
     setInput(text);
 
     if (intent || answers || synthesis || structuredSynthesis) {
-      setIntent(null);
-      setAnswers(null);
-      setSynthesis(null);
-      setStructuredSynthesis(null);
-      setUserAnswers(["", "", ""]);
-      setError(null);
-      setPromptCopied(false);
-      setInsightCopied(false);
+      resetAnalysisState();
     }
   }
 
@@ -368,6 +449,7 @@ export default function Home() {
     setIntent(entry.intent);
     setUserAnswers(entry.userAnswers);
     setAnswers(entry.answers);
+    setSelectedProviders(entry.selectedProviders ?? ["openai", "anthropic"]);
     setSynthesis(entry.synthesis);
     setStructuredSynthesis(entry.structuredSynthesis ?? null);
     setError(null);
@@ -396,12 +478,7 @@ export default function Home() {
     setPromptCopied(false);
     setInsightCopied(false);
     setBusy(true);
-    setIntent(null);
-    setAnswers(null);
-    setSynthesis(null);
-    setStructuredSynthesis(null);
-    setUserAnswers(["", "", ""]);
-    setError(null);
+    resetAnalysisState();
 
     try {
       const res = await fetch("/api/intent", {
@@ -428,6 +505,7 @@ export default function Home() {
 
     setRunning(true);
     setAnswers(null);
+    setSelectedProviders([]);
     setSynthesis(null);
     setStructuredSynthesis(null);
     setInsightCopied(false);
@@ -450,13 +528,14 @@ export default function Home() {
       }
 
       setAnswers(json.answers);
+      setSelectedProviders((json.selectedProviders ?? []).slice(0, 2));
     } finally {
       setRunning(false);
     }
   }
 
   async function onSynthesize() {
-    if (!intent || !answers) return;
+    if (!intent || !answers || selectedProviders.length !== 2) return;
 
     setSynthesizing(true);
     setSynthesis(null);
@@ -467,13 +546,19 @@ export default function Home() {
     try {
       const prompt = buildPolishedPrompt(intent, userAnswers);
 
+      const providerPayload = {
+        openai: answers.openai,
+        anthropic: answers.anthropic,
+        gemini: answers.gemini,
+      };
+
       const res = await fetch("/api/synthesize", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           prompt,
-          openai: answers.openai,
-          anthropic: answers.anthropic,
+          selectedProviders,
+          answers: providerPayload,
         }),
       });
 
@@ -544,6 +629,11 @@ export default function Home() {
     { name: "Gemini" },
     { name: "Perplexity" },
   ];
+
+  const comparisonProviders: ProviderName[] =
+    selectedProviders.length === 2
+      ? selectedProviders
+      : ["openai", "anthropic"];
 
   const SynthesizeButton = () => (
     <button
@@ -920,7 +1010,7 @@ export default function Home() {
               <div className="text-xs uppercase tracking-wide opacity-50 mb-2">
                 Ready to use
               </div>
-              <p className="text-sm leading-relaxed whitespace-pre-wrap">
+              <p className="text-sm leading-relaxed whitespace-pre-wrap break-words">
                 {buildPolishedPrompt(intent, userAnswers)}
               </p>
             </div>
@@ -972,18 +1062,8 @@ export default function Home() {
             </div>
 
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-              <div className="rounded-2xl border border-white/10 p-5 space-y-3">
-                <div className="text-xs uppercase tracking-wide opacity-50">
-                  GPT-4o mini
-                </div>
-                <PulsePlaceholder />
-              </div>
-              <div className="rounded-2xl border border-white/10 p-5 space-y-3">
-                <div className="text-xs uppercase tracking-wide opacity-50">
-                  Claude Haiku
-                </div>
-                <PulsePlaceholder />
-              </div>
+              <LoadingProviderCard />
+              <LoadingProviderCard />
             </div>
           </section>
         )}
@@ -999,19 +1079,13 @@ export default function Home() {
             </div>
 
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-              <div className="rounded-2xl border border-black/10 p-5 dark:border-white/10 space-y-2">
-                <div className="text-xs uppercase tracking-wide opacity-50">
-                  GPT-4o mini
-                </div>
-                <div>{renderMarkdown(answers.openai)}</div>
-              </div>
-
-              <div className="rounded-2xl border border-black/10 p-5 dark:border-white/10 space-y-2">
-                <div className="text-xs uppercase tracking-wide opacity-50">
-                  Claude Haiku
-                </div>
-                <div>{renderMarkdown(answers.anthropic)}</div>
-              </div>
+              {comparisonProviders.map((provider) => (
+                <ProviderAnswerCard
+                  key={provider}
+                  provider={provider}
+                  answer={answers[provider] || "No response returned."}
+                />
+              ))}
             </div>
 
             <div className="hidden md:block">
@@ -1038,7 +1112,7 @@ export default function Home() {
               Best Answer
             </div>
 
-            <div className="relative space-y-2 rounded-xl border border-black/10 dark:border-white/10 p-4 pr-16">
+            <div className="relative space-y-2 rounded-xl border border-black/10 dark:border-white/10 p-4 pr-16 overflow-hidden">
               <div className="absolute top-3 right-3">
                 <CopyIconButton
                   copied={insightCopied}
@@ -1050,7 +1124,9 @@ export default function Home() {
               <div className="text-xs uppercase tracking-wide opacity-50">
                 Explanation
               </div>
-              <div>{renderMarkdown(synthesis)}</div>
+              <div className="min-w-0 max-w-full overflow-x-auto [&_*]:max-w-full [&_pre]:max-w-full [&_pre]:overflow-x-auto [&_pre]:whitespace-pre-wrap [&_pre]:break-words [&_code]:break-words">
+                {renderMarkdown(synthesis)}
+              </div>
             </div>
 
             <div className="flex flex-wrap items-center gap-2">

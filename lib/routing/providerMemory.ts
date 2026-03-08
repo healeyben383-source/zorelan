@@ -50,12 +50,11 @@ export function recordProviderOutcome(input: {
   if (input.timedOut) {
     record.timeouts += 1;
     record.failures += 1;
+  } else if (input.usedFallback) {
+    record.fallbacks += 1;
+    record.failures += 1;
   } else {
     record.successes += 1;
-  }
-
-  if (input.usedFallback) {
-    record.fallbacks += 1;
   }
 }
 
@@ -70,14 +69,19 @@ export function getProviderMemory(taskType?: TaskType) {
 export function getProviderScoresForTask(taskType: TaskType) {
   const records = getProviderMemory(taskType);
 
-  return records.reduce<Record<ProviderName, {
-    totalRuns: number;
-    successRate: number;
-    failureRate: number;
-    timeoutRate: number;
-    fallbackRate: number;
-    averageDurationMs: number;
-  }>>((acc, record) => {
+  return records.reduce<
+    Record<
+      ProviderName,
+      {
+        totalRuns: number;
+        successRate: number;
+        failureRate: number;
+        timeoutRate: number;
+        fallbackRate: number;
+        averageDurationMs: number;
+      }
+    >
+  >((acc, record) => {
     const total = Math.max(record.totalRuns, 1);
 
     acc[record.provider] = {
@@ -90,14 +94,17 @@ export function getProviderScoresForTask(taskType: TaskType) {
     };
 
     return acc;
-  }, {} as Record<ProviderName, {
-    totalRuns: number;
-    successRate: number;
-    failureRate: number;
-    timeoutRate: number;
-    fallbackRate: number;
-    averageDurationMs: number;
-  }>);
+  }, {} as Record<
+    ProviderName,
+    {
+      totalRuns: number;
+      successRate: number;
+      failureRate: number;
+      timeoutRate: number;
+      fallbackRate: number;
+      averageDurationMs: number;
+    }
+  >);
 }
 
 export function resetProviderMemory() {

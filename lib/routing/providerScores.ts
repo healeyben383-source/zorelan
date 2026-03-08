@@ -24,24 +24,29 @@ const DEFAULT_PROVIDER_SCORE: ProviderScore = {
 const DEFAULT_TASK_SCORE_MAP: TaskScoreMap = {
   openai: { ...DEFAULT_PROVIDER_SCORE },
   anthropic: { ...DEFAULT_PROVIDER_SCORE },
+  gemini: { ...DEFAULT_PROVIDER_SCORE },
 };
 
 const scoreStore: Record<TaskType, TaskScoreMap> = {
   technical: {
     openai: { ...DEFAULT_PROVIDER_SCORE },
     anthropic: { ...DEFAULT_PROVIDER_SCORE },
+    gemini: { ...DEFAULT_PROVIDER_SCORE },
   },
   strategy: {
     openai: { ...DEFAULT_PROVIDER_SCORE },
     anthropic: { ...DEFAULT_PROVIDER_SCORE },
+    gemini: { ...DEFAULT_PROVIDER_SCORE },
   },
   creative: {
     openai: { ...DEFAULT_PROVIDER_SCORE },
     anthropic: { ...DEFAULT_PROVIDER_SCORE },
+    gemini: { ...DEFAULT_PROVIDER_SCORE },
   },
   general: {
     openai: { ...DEFAULT_PROVIDER_SCORE },
     anthropic: { ...DEFAULT_PROVIDER_SCORE },
+    gemini: { ...DEFAULT_PROVIDER_SCORE },
   },
 };
 

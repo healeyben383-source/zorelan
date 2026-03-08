@@ -7,6 +7,7 @@ import { getProviderScoresForTask } from "@/lib/routing/providerMemory";
 import type { SelectionMode } from "@/lib/routing/runDiagnostics";
 
 const MIN_SAMPLE_SIZE = 2;
+const GEMINI_MIN_SAMPLE_SIZE = 3;
 
 type RankedProvider = {
   provider: ProviderName;
@@ -34,6 +35,14 @@ function calculateAdaptiveRankScore(metrics: {
       : 0;
 
   return reliabilityScore + speedScore;
+}
+
+function isProviderEligible(provider: ProviderName, totalRuns: number) {
+  if (provider === "gemini") {
+    return totalRuns >= GEMINI_MIN_SAMPLE_SIZE;
+  }
+
+  return totalRuns >= MIN_SAMPLE_SIZE;
 }
 
 export function adaptiveSelectProviders(
@@ -73,18 +82,18 @@ export function adaptiveSelectProviders(
     };
   }
 
-  const hasEnoughHistory = rankedProviders
-    .slice(0, 2)
-    .every((entry) => entry.totalRuns >= MIN_SAMPLE_SIZE);
+  const eligibleProviders = rankedProviders.filter((entry) =>
+    isProviderEligible(entry.provider, entry.totalRuns)
+  );
 
-  if (!hasEnoughHistory) {
+  if (eligibleProviders.length < 2) {
     return {
       selectedProviders: fallbackProviders,
       selectionMode: "fallback",
     };
   }
 
-  const adaptiveProviders = rankedProviders
+  const adaptiveProviders = eligibleProviders
     .slice(0, 2)
     .map((entry) => entry.provider);
 
