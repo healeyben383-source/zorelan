@@ -3,19 +3,14 @@ import {
   selectProvidersFromPrompt,
   type ProviderName,
 } from "@/lib/routing/selectProviders";
-import { getProviderScoresForTask } from "@/lib/routing/providerMemory";
+import {
+  getProviderScores,
+  calculateProviderRankScore,
+  type ProviderScore,
+} from "@/lib/routing/providerScores";
 import type { SelectionMode } from "@/lib/routing/runDiagnostics";
 
 const MIN_SAMPLE_SIZE = 2;
-
-type ProviderMetrics = {
-  totalRuns: number;
-  successRate: number;
-  failureRate: number;
-  timeoutRate: number;
-  fallbackRate: number;
-  averageDurationMs: number;
-};
 
 type RankedProvider = {
   provider: ProviderName;
@@ -23,58 +18,48 @@ type RankedProvider = {
   totalRuns: number;
 };
 
-function calculateAdaptiveRankScore(metrics: ProviderMetrics): number {
-  const reliabilityScore =
-    metrics.successRate * 100 -
-    metrics.failureRate * 40 -
-    metrics.timeoutRate * 60 -
-    metrics.fallbackRate * 20;
-
-  const speedScore =
-    metrics.averageDurationMs > 0
-      ? Math.max(0, 20_000 - metrics.averageDurationMs) / 1000
-      : 0;
-
-  return reliabilityScore + speedScore;
-}
-
-function isProviderEligible(provider: ProviderName, totalRuns: number): boolean {
+function isProviderEligible(totalRuns: number): boolean {
   return totalRuns >= MIN_SAMPLE_SIZE;
 }
 
-export function adaptiveSelectProviders(
+export async function adaptiveSelectProviders(
   prompt: string,
   taskType: TaskType
-): {
+): Promise<{
   selectedProviders: ProviderName[];
   selectionMode: SelectionMode;
-} {
+}> {
   const fallbackProviders = selectProvidersFromPrompt(prompt);
-  const taskScores = getProviderScoresForTask(taskType) as Record<ProviderName, ProviderMetrics>;
 
-  const rankedProviders: RankedProvider[] = Object.entries(taskScores)
-    .map(([provider, metrics]) => ({
-      provider: provider as ProviderName,
-      score: calculateAdaptiveRankScore(metrics as ProviderMetrics),
-      totalRuns: (metrics as ProviderMetrics).totalRuns,
-    }))
-    .sort((a, b) => b.score - a.score);
+  try {
+    const taskScores = await getProviderScores(taskType);
 
-  if (rankedProviders.length < 2) {
+    const rankedProviders: RankedProvider[] = Object.entries(taskScores)
+      .map(([provider, score]) => ({
+        provider: provider as ProviderName,
+        score: calculateProviderRankScore(score as ProviderScore),
+        totalRuns: (score as ProviderScore).totalRuns,
+      }))
+      .sort((a, b) => b.score - a.score);
+
+    if (rankedProviders.length < 2) {
+      return { selectedProviders: fallbackProviders, selectionMode: "fallback" };
+    }
+
+    const eligibleProviders = rankedProviders.filter((entry) =>
+      isProviderEligible(entry.totalRuns)
+    );
+
+    if (eligibleProviders.length < 2) {
+      return { selectedProviders: fallbackProviders, selectionMode: "fallback" };
+    }
+
+    const adaptiveProviders = eligibleProviders
+      .slice(0, 2)
+      .map((entry) => entry.provider);
+
+    return { selectedProviders: adaptiveProviders, selectionMode: "adaptive" };
+  } catch {
     return { selectedProviders: fallbackProviders, selectionMode: "fallback" };
   }
-
-  const eligibleProviders = rankedProviders.filter((entry) =>
-    isProviderEligible(entry.provider, entry.totalRuns)
-  );
-
-  if (eligibleProviders.length < 2) {
-    return { selectedProviders: fallbackProviders, selectionMode: "fallback" };
-  }
-
-  const adaptiveProviders = eligibleProviders
-    .slice(0, 2)
-    .map((entry) => entry.provider);
-
-  return { selectedProviders: adaptiveProviders, selectionMode: "adaptive" };
 }

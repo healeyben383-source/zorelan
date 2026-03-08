@@ -70,10 +70,8 @@ function withTimeout<T>(
       })
       .catch((error) => {
         clearTimeout(timer);
-
         const errorMessage =
           error instanceof Error ? error.message : "Unknown provider error";
-
         resolve({
           value: fallbackValue,
           durationMs: Date.now() - startedAt,
@@ -109,7 +107,6 @@ async function routeProviders(
         "OpenAI timed out or failed to respond."
       ).then((res) => {
         results.openai = res.value;
-
         if (res.errorMessage) {
           console.error("[RUN_API] OpenAI failed", {
             error: res.errorMessage,
@@ -117,7 +114,6 @@ async function routeProviders(
             timedOut: res.timedOut,
           });
         }
-
         diagnostics.push({
           provider: "openai",
           durationMs: res.durationMs,
@@ -136,7 +132,6 @@ async function routeProviders(
         "Anthropic timed out or failed to respond."
       ).then((res) => {
         results.anthropic = res.value;
-
         if (res.errorMessage) {
           console.error("[RUN_API] Anthropic failed", {
             error: res.errorMessage,
@@ -144,7 +139,6 @@ async function routeProviders(
             timedOut: res.timedOut,
           });
         }
-
         diagnostics.push({
           provider: "anthropic",
           durationMs: res.durationMs,
@@ -163,7 +157,6 @@ async function routeProviders(
         "Perplexity timed out or failed to respond."
       ).then((res) => {
         results.perplexity = res.value;
-
         if (res.errorMessage) {
           console.error("[RUN_API] Perplexity failed", {
             error: res.errorMessage,
@@ -171,7 +164,6 @@ async function routeProviders(
             timedOut: res.timedOut,
           });
         }
-
         diagnostics.push({
           provider: "perplexity",
           durationMs: res.durationMs,
@@ -183,11 +175,7 @@ async function routeProviders(
   }
 
   await Promise.all(tasks);
-
-  return {
-    results,
-    diagnostics,
-  };
+  return { results, diagnostics };
 }
 
 export async function POST(req: NextRequest) {
@@ -199,11 +187,7 @@ export async function POST(req: NextRequest) {
         {
           ok: false,
           error: "missing_prompt",
-          answers: {
-            openai: "",
-            anthropic: "",
-            perplexity: "",
-          },
+          answers: { openai: "", anthropic: "", perplexity: "" },
           selectedProviders: [] as ProviderName[],
         },
         { status: 400 }
@@ -219,7 +203,7 @@ export async function POST(req: NextRequest) {
       selectedProviders = body.providers;
       selectionMode = "manual";
     } else {
-      const adaptiveSelection = adaptiveSelectProviders(body.prompt, taskType);
+      const adaptiveSelection = await adaptiveSelectProviders(body.prompt, taskType);
       selectedProviders = adaptiveSelection.selectedProviders;
       selectionMode = adaptiveSelection.selectionMode;
     }
@@ -229,15 +213,17 @@ export async function POST(req: NextRequest) {
       selectedProviders
     );
 
-    for (const diagnostic of diagnostics) {
-      updateProviderScore({
-        taskType,
-        provider: diagnostic.provider,
-        durationMs: diagnostic.durationMs,
-        timedOut: diagnostic.timedOut,
-        usedFallback: diagnostic.usedFallback,
-      });
-    }
+    await Promise.all(
+      diagnostics.map((diagnostic) =>
+        updateProviderScore({
+          taskType,
+          provider: diagnostic.provider,
+          durationMs: diagnostic.durationMs,
+          timedOut: diagnostic.timedOut,
+          usedFallback: diagnostic.usedFallback,
+        })
+      )
+    );
 
     logRunDiagnostic({
       taskType,
@@ -246,13 +232,10 @@ export async function POST(req: NextRequest) {
       providerResults: diagnostics,
     });
 
+    const scores = await getProviderScores(taskType);
     console.log(
       "[PROVIDER_SCORES_UPDATED]",
-      JSON.stringify({
-        taskType,
-        selectedProviders,
-        scores: getProviderScores(taskType),
-      })
+      JSON.stringify({ taskType, selectedProviders, scores })
     );
 
     return NextResponse.json({
@@ -262,16 +245,11 @@ export async function POST(req: NextRequest) {
     });
   } catch (error) {
     console.error("RUN API ERROR:", error);
-
     return NextResponse.json(
       {
         ok: false,
         error: "server_error",
-        answers: {
-          openai: "",
-          anthropic: "",
-          perplexity: "",
-        },
+        answers: { openai: "", anthropic: "", perplexity: "" },
         selectedProviders: [] as ProviderName[],
       },
       { status: 500 }
