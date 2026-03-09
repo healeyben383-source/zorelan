@@ -57,6 +57,17 @@ function getConfidenceReason(agreementLevel: "high" | "medium" | "low", likelyCo
 
 export async function POST(req: NextRequest) {
   try {
+    // API key auth
+    const authHeader = req.headers.get("authorization");
+    const token = authHeader?.startsWith("Bearer ") ? authHeader.slice(7) : null;
+
+    if (!token || token !== process.env.DECISION_API_KEY) {
+      return NextResponse.json(
+        { ok: false, error: "unauthorized" },
+        { status: 401 }
+      );
+    }
+
     const body = await req.json();
     const prompt = body?.prompt;
 
