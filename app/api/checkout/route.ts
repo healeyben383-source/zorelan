@@ -39,9 +39,19 @@ export async function POST(req: Request) {
           quantity: 1,
         },
       ],
-      success_url: `${appUrl}/api-docs?checkout=success`,
+      success_url: `${appUrl}/api-docs?checkout=success&session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${appUrl}/api-docs?checkout=cancelled`,
       allow_promotion_codes: true,
+      metadata: {
+        app: "zorelan",
+        plan,
+      },
+      subscription_data: {
+        metadata: {
+          app: "zorelan",
+          plan,
+        },
+      },
     });
 
     if (!session.url) {
