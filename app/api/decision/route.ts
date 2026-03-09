@@ -10,10 +10,15 @@ import {
   updateProviderQualityScore,
 } from "@/lib/routing/providerScores";
 import OpenAI from "openai";
+import { Redis } from "@upstash/redis";
 
 export const runtime = "nodejs";
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+const redis = new Redis({
+  url: process.env.KV_REST_API_URL!,
+  token: process.env.KV_REST_API_TOKEN!,
+});
 
 const TIMEOUT_MS = 30_000;
 
@@ -61,11 +66,41 @@ export async function POST(req: NextRequest) {
     const authHeader = req.headers.get("authorization");
     const token = authHeader?.startsWith("Bearer ") ? authHeader.slice(7) : null;
 
-    if (!token || token !== process.env.DECISION_API_KEY) {
+    if (!token) {
       return NextResponse.json(
         { ok: false, error: "unauthorized" },
         { status: 401 }
       );
+    }
+
+    // Check master key first (for internal use)
+    const isMasterKey = token === process.env.DECISION_API_KEY;
+
+    if (!isMasterKey) {
+      // Look up in Redis
+      const keyData = await redis.get<string>(`apikey:${token}`);
+      if (!keyData) {
+        return NextResponse.json(
+          { ok: false, error: "unauthorized" },
+          { status: 401 }
+        );
+      }
+
+      const parsed = typeof keyData === "string" ? JSON.parse(keyData) : keyData;
+
+      // Check usage limits
+      if (parsed.callsUsed >= parsed.callsLimit) {
+        return NextResponse.json(
+          { ok: false, error: "rate_limit_exceeded" },
+          { status: 429 }
+        );
+      }
+
+      // Increment usage
+      await redis.set(`apikey:${token}`, JSON.stringify({
+        ...parsed,
+        callsUsed: parsed.callsUsed + 1,
+      }));
     }
 
     const body = await req.json();
