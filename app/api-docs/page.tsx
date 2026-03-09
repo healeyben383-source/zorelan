@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import PricingButtons from "./PricingButtons";
 
 export const metadata: Metadata = {
   title: "API Docs — Zorelan",
@@ -39,7 +40,7 @@ const fields = [
   ["meta.task_type", "The detected category of your query (strategy, technical, creative, general)."],
   ["meta.overlap_ratio", "0.0–1.0 score of how similar the two model outputs were."],
   ["meta.agreement_summary", "A one-line summary of how the models compared."],
-];
+] as const;
 
 export default function ApiDocsPage() {
   return (
@@ -55,12 +56,11 @@ export default function ApiDocsPage() {
 
       <section className="mb-12">
         <h2 className="text-xs uppercase tracking-widest text-white/40 mb-4">Access</h2>
-        <div className="rounded-2xl border border-white/10 p-6 space-y-3">
-          <p className="text-white/80">The API is currently in early access. To request an API key, email:</p>
-          <a href="mailto:api@zorelan.com" className="inline-block text-white font-medium underline underline-offset-4">
-            api@zorelan.com
-          </a>
-          <p className="text-white/40 text-sm">We will get back to you within 24 hours.</p>
+        <div className="rounded-2xl border border-white/10 p-6 space-y-4">
+          <p className="text-white/80">
+            Start a sandbox subscription below to test the Zorelan API checkout flow.
+          </p>
+          <PricingButtons />
         </div>
       </section>
 
@@ -81,7 +81,9 @@ export default function ApiDocsPage() {
         </div>
         <div className="mt-4 text-sm flex gap-4">
           <span className="font-mono text-white/60 w-20">prompt</span>
-          <span className="text-white/40">string — required. The question or decision you want verified.</span>
+          <span className="text-white/40">
+            string — required. The question or decision you want verified.
+          </span>
         </div>
       </section>
 
@@ -114,14 +116,10 @@ export default function ApiDocsPage() {
       <section>
         <div className="rounded-2xl border border-white/10 p-8 text-center space-y-4">
           <h2 className="text-xl font-semibold">Ready to integrate?</h2>
-          <p className="text-white/50">Request early access and we will set you up within 24 hours.</p>
-          
-            <a
-            href="mailto:api@zorelan.com"
-            className="inline-block bg-white text-black font-medium px-6 py-3 rounded-full hover:bg-white/90 transition-colors"
-          >
-            Request API Access
-          </a>
+          <p className="text-white/50">
+            Choose a plan and continue through Stripe Checkout to test the billing flow.
+          </p>
+          <PricingButtons />
         </div>
       </section>
     </main>
