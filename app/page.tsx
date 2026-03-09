@@ -780,7 +780,7 @@ export default function Home() {
           <div className="flex items-center justify-between">
             <div className="w-16" />
             <h1 className="text-4xl font-semibold tracking-tight">Zorelan</h1>
-            <div className="w-16 flex justify-end">
+            <div className="flex items-center gap-2 justify-end">
               <button
                 onClick={() => setHistoryOpen(true)}
                 className="flex items-center gap-1.5 rounded-xl border border-black/10 dark:border-white/10 px-3 py-1.5 text-xs opacity-60 hover:opacity-100 transition-opacity"
@@ -801,6 +801,11 @@ export default function Home() {
                 </svg>
                 <span>{history.length > 0 ? history.length : "History"}</span>
               </button>
+            <a  href="/api-docs"
+              className="flex items-center rounded-xl border border-black/10 dark:border-white/10 px-3 py-1.5 text-xs opacity-60 hover:opacity-100 transition-opacity"
+>
+  API
+</a>
             </div>
           </div>
 
