@@ -95,7 +95,7 @@ export default function PricingButtons() {
       {error ? <p className="text-sm text-red-400">{error}</p> : null}
 
       <p className="text-white/40 text-sm">
-        Sandbox checkout is enabled first for safe testing. Live billing comes after validation.
+        Subscribe to get your Zorelan API key and start using the live developer API.
       </p>
     </div>
   );
