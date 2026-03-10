@@ -43,8 +43,82 @@ const PRICE_TO_PLAN: Record<string, string> = {
   [process.env.STRIPE_PRICE_SCALE!]: "scale",
 };
 
+type ApiKeyRecord = {
+  email?: string | null;
+  plan: string;
+  callsLimit: number;
+  callsUsed: number;
+  customerId?: string;
+  subscriptionId?: string;
+  status?: "active" | "inactive";
+  createdAt?: number;
+};
+
 function generateApiKey(): string {
   return "zrl_live_" + crypto.randomBytes(24).toString("base64url");
+}
+
+function parseApiKeyRecord(input: unknown): ApiKeyRecord | null {
+  try {
+    const parsed =
+      typeof input === "string" ? JSON.parse(input) : (input as ApiKeyRecord);
+
+    if (
+      !parsed ||
+      typeof parsed !== "object" ||
+      typeof parsed.plan !== "string" ||
+      typeof parsed.callsLimit !== "number" ||
+      typeof parsed.callsUsed !== "number"
+    ) {
+      return null;
+    }
+
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+async function updateApiKeyStatusByCustomerOrSubscription({
+  customerId,
+  subscriptionId,
+  status,
+}: {
+  customerId?: string | null;
+  subscriptionId?: string | null;
+  status: "active" | "inactive";
+}) {
+  const apiKey =
+    (subscriptionId
+      ? await redis.get<string>(`subscription:${subscriptionId}:apikey`)
+      : null) ||
+    (customerId ? await redis.get<string>(`customer:${customerId}:apikey`) : null);
+
+  if (!apiKey) {
+    console.log(
+      `[WEBHOOK] no API key found for customer=${customerId ?? "none"} subscription=${
+        subscriptionId ?? "none"
+      }`
+    );
+    return;
+  }
+
+  const raw = await redis.get(`apikey:${apiKey}`);
+  const parsed = parseApiKeyRecord(raw);
+
+  if (!parsed) {
+    console.log(`[WEBHOOK] invalid API key record for ${apiKey}`);
+    return;
+  }
+
+  const updatedRecord: ApiKeyRecord = {
+    ...parsed,
+    status,
+  };
+
+  await redis.set(`apikey:${apiKey}`, JSON.stringify(updatedRecord));
+
+  console.log(`[WEBHOOK] API key ${apiKey} marked ${status}`);
 }
 
 async function sendApiKeyEmail({
@@ -136,6 +210,13 @@ export async function POST(req: NextRequest) {
         await redis.set(`checkout_session:${sessionId}:apikey`, existingApiKey, {
           ex: 60 * 60 * 24,
         });
+
+        await updateApiKeyStatusByCustomerOrSubscription({
+          customerId,
+          subscriptionId,
+          status: "active",
+        });
+
         console.log(
           `[WEBHOOK] existing API key already present for customer ${customerId}`
         );
@@ -149,13 +230,14 @@ export async function POST(req: NextRequest) {
 
       const apiKey = generateApiKey();
 
-      const keyPayload = {
+      const keyPayload: ApiKeyRecord = {
         email,
         plan,
         callsLimit,
         callsUsed: 0,
         customerId,
         subscriptionId,
+        status: "active",
         createdAt: Date.now(),
       };
 
@@ -176,6 +258,40 @@ export async function POST(req: NextRequest) {
           callsLimit,
         });
       }
+    }
+
+    if (event.type === "invoice.payment_failed") {
+      const invoice = event.data.object as Stripe.Invoice;
+      const customerId = invoice.customer as string | null;
+      const subscriptionId =
+        typeof invoice.subscription === "string" ? invoice.subscription : null;
+
+      await updateApiKeyStatusByCustomerOrSubscription({
+        customerId,
+        subscriptionId,
+        status: "inactive",
+      });
+
+      console.log(
+        `[WEBHOOK] payment failed; API key marked inactive for customer ${customerId}`
+      );
+    }
+
+    if (event.type === "invoice.payment_succeeded") {
+      const invoice = event.data.object as Stripe.Invoice;
+      const customerId = invoice.customer as string | null;
+      const subscriptionId =
+        typeof invoice.subscription === "string" ? invoice.subscription : null;
+
+      await updateApiKeyStatusByCustomerOrSubscription({
+        customerId,
+        subscriptionId,
+        status: "active",
+      });
+
+      console.log(
+        `[WEBHOOK] payment succeeded; API key marked active for customer ${customerId}`
+      );
     }
 
     if (event.type === "customer.subscription.deleted") {

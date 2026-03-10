@@ -39,6 +39,7 @@ type ApiKeyRecord = {
   callsUsed: number;
   customerId?: string;
   subscriptionId?: string;
+  status?: "active" | "inactive";
   createdAt?: number;
 };
 
@@ -146,6 +147,7 @@ export async function POST(req: NextRequest) {
           callsLimit: number;
           callsUsed: number;
           callsRemaining: number;
+          status: "active" | "inactive";
         }
       | undefined;
 
@@ -160,6 +162,18 @@ export async function POST(req: NextRequest) {
         );
       }
 
+      const keyStatus = parsed.status ?? "active";
+
+      if (keyStatus !== "active") {
+        return NextResponse.json(
+          {
+            ok: false,
+            error: "subscription_inactive",
+          },
+          { status: 403 }
+        );
+      }
+
       if (parsed.callsUsed >= parsed.callsLimit) {
         return NextResponse.json(
           {
@@ -169,6 +183,7 @@ export async function POST(req: NextRequest) {
             calls_limit: parsed.callsLimit,
             calls_used: parsed.callsUsed,
             calls_remaining: 0,
+            status: keyStatus,
           },
           { status: 429 }
         );
@@ -176,6 +191,7 @@ export async function POST(req: NextRequest) {
 
       const updatedKeyData: ApiKeyRecord = {
         ...parsed,
+        status: keyStatus,
         callsUsed: parsed.callsUsed + 1,
       };
 
@@ -189,6 +205,7 @@ export async function POST(req: NextRequest) {
           0,
           updatedKeyData.callsLimit - updatedKeyData.callsUsed
         ),
+        status: updatedKeyData.status ?? "active",
       };
     }
 
