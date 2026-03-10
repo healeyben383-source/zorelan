@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { Suspense } from "react";
 import PricingButtons from "./PricingButtons";
 import CheckoutStatusBanner from "./CheckoutStatusBanner";
 
@@ -70,7 +71,9 @@ const fields = [
 export default function ApiDocsPage() {
   return (
     <main className="min-h-screen bg-black text-white px-6 py-16 max-w-3xl mx-auto">
-      <CheckoutStatusBanner />
+      <Suspense fallback={null}>
+        <CheckoutStatusBanner />
+      </Suspense>
 
       <div className="mb-12">
         <div className="text-xs uppercase tracking-widest text-white/40 mb-3">
