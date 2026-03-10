@@ -261,7 +261,7 @@ export async function POST(req: NextRequest) {
     }
 
     if (event.type === "invoice.payment_failed") {
-      const invoice = event.data.object as Stripe.Invoice;
+      const invoice = event.data.object as any;
       const customerId = invoice.customer as string | null;
       const subscriptionId =
         typeof invoice.subscription === "string" ? invoice.subscription : null;
@@ -278,7 +278,7 @@ export async function POST(req: NextRequest) {
     }
 
     if (event.type === "invoice.payment_succeeded") {
-      const invoice = event.data.object as Stripe.Invoice;
+      const invoice = event.data.object as any;
       const customerId = invoice.customer as string | null;
       const subscriptionId =
         typeof invoice.subscription === "string" ? invoice.subscription : null;
