@@ -36,7 +36,7 @@ const responseExample = `{
   }
 }`;
 
-const curlExample = `curl -X POST https://zorelan.com/api/decision \\
+const curlExample = `curl -X POST https://zorelan.com/v1/decision \\
   -H "Authorization: Bearer YOUR_API_KEY" \\
   -H "Content-Type: application/json" \\
   -d '{"prompt": "Should I hire staff or stay solo?"}'`;
@@ -112,7 +112,7 @@ export default function ApiDocsPage() {
               POST
             </span>
             <span className="font-mono text-white/80">
-              https://zorelan.com/api/decision
+              https://zorelan.com/v1/decision
             </span>
           </div>
         </div>

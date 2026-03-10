@@ -79,7 +79,7 @@ async function sendApiKeyEmail({
           <p><strong>API key:</strong></p>
           <pre style="padding:12px;background:#f4f4f4;border-radius:6px;overflow:auto;">${apiKey}</pre>
           <p>Example request:</p>
-          <pre style="padding:12px;background:#f4f4f4;border-radius:6px;overflow:auto;">curl -X POST "${appUrl}/api/decision" \\
+          <pre style="padding:12px;background:#f4f4f4;border-radius:6px;overflow:auto;">curl -X POST "${appUrl}/v1/decision" \\
   -H "Authorization: Bearer ${apiKey}" \\
   -H "Content-Type: application/json" \\
   -d '{"prompt":"Should I hire staff or stay solo?"}'</pre>
