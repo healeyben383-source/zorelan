@@ -43,7 +43,7 @@ export default function CheckoutStatusBanner() {
 
       try {
         const res = await fetch(
-          `/api/checkout/session-key?session_id=${encodeURIComponent(sessionId)}`,
+          `/api/checkout/session-key?session_id=${encodeURIComponent(sessionId ?? "")}`,
           { cache: "no-store" }
         );
 
