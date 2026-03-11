@@ -1,4 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
+import crypto from "crypto";
+import OpenAI from "openai";
+import { Redis } from "@upstash/redis";
+import { Ratelimit } from "@upstash/ratelimit";
+
 import { runOpenAI } from "@/lib/providers/openai";
 import { runAnthropic } from "@/lib/providers/anthropic";
 import { runPerplexity } from "@/lib/providers/perplexity";
@@ -9,8 +14,6 @@ import {
   updateProviderScore,
   updateProviderQualityScore,
 } from "@/lib/routing/providerScores";
-import OpenAI from "openai";
-import { Redis } from "@upstash/redis";
 
 export const runtime = "nodejs";
 
@@ -29,6 +32,24 @@ const redis = new Redis({
 });
 
 const TIMEOUT_MS = 30_000;
+const MAX_PROMPT_CHARS = 10_000;
+const MAX_PROVIDERS = 2;
+
+const ENABLE_API_RATE_LIMIT = process.env.ENABLE_API_RATE_LIMIT === "true";
+
+const apiKeyRateLimit = new Ratelimit({
+  redis,
+  limiter: Ratelimit.fixedWindow(10, "10 s"),
+  analytics: true,
+  timeout: 1000,
+});
+
+const ipRateLimit = new Ratelimit({
+  redis,
+  limiter: Ratelimit.fixedWindow(30, "10 s"),
+  analytics: true,
+  timeout: 1000,
+});
 
 type ProviderName = "openai" | "anthropic" | "perplexity";
 
@@ -43,21 +64,39 @@ type ApiKeyRecord = {
   createdAt?: number;
 };
 
-function withTimeout<T>(
-  promise: Promise<T>,
-  ms: number,
-  fallback: T
-): Promise<{
+type WithTimeoutResult<T> = {
   value: T;
   durationMs: number;
   timedOut: boolean;
   usedFallback: boolean;
-}> {
+};
+
+type ProviderRunner = (
+  prompt: string,
+  signal?: AbortSignal
+) => Promise<string>;
+
+function withTimeout<T>(
+  promiseFactory: (signal: AbortSignal) => Promise<T>,
+  ms: number,
+  fallback: T
+): Promise<WithTimeoutResult<T>> {
   return new Promise((resolve) => {
     const start = Date.now();
+    const controller = new AbortController();
+    let settled = false;
+
+    const finish = (result: WithTimeoutResult<T>) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      resolve(result);
+    };
 
     const timer = setTimeout(() => {
-      resolve({
+      controller.abort();
+
+      finish({
         value: fallback,
         durationMs: Date.now() - start,
         timedOut: true,
@@ -65,10 +104,9 @@ function withTimeout<T>(
       });
     }, ms);
 
-    promise
+    promiseFactory(controller.signal)
       .then((value) => {
-        clearTimeout(timer);
-        resolve({
+        finish({
           value,
           durationMs: Date.now() - start,
           timedOut: false,
@@ -76,8 +114,7 @@ function withTimeout<T>(
         });
       })
       .catch(() => {
-        clearTimeout(timer);
-        resolve({
+        finish({
           value: fallback,
           durationMs: Date.now() - start,
           timedOut: false,
@@ -125,18 +162,80 @@ function parseApiKeyRecord(input: unknown): ApiKeyRecord | null {
   }
 }
 
+function extractBearerToken(req: NextRequest): string | null {
+  const authHeader = req.headers.get("authorization");
+
+  if (!authHeader?.startsWith("Bearer ")) {
+    return null;
+  }
+
+  const token = authHeader.slice(7).trim();
+  return token || null;
+}
+
+function getClientIp(req: NextRequest): string {
+  const forwardedFor = req.headers.get("x-forwarded-for");
+  if (forwardedFor) {
+    return forwardedFor.split(",")[0]?.trim() || "unknown";
+  }
+
+  return req.headers.get("x-real-ip")?.trim() || "unknown";
+}
+
+function hashKey(value: string): string {
+  return crypto.createHash("sha256").update(value).digest("hex");
+}
+
+function getRetryAfterSeconds(reset: number): number {
+  return Math.max(1, Math.ceil((reset - Date.now()) / 1000));
+}
+
+function rateLimitResponse(scope: "ip" | "api_key", reset: number) {
+  const retryAfter = getRetryAfterSeconds(reset);
+
+  return NextResponse.json(
+    {
+      ok: false,
+      error: "too_many_requests",
+      scope,
+      retry_after: retryAfter,
+    },
+    {
+      status: 429,
+      headers: {
+        "Retry-After": String(retryAfter),
+      },
+    }
+  );
+}
+
+function badRequest(error: string) {
+  return NextResponse.json({ ok: false, error }, { status: 400 });
+}
+
+function unauthorized() {
+  return NextResponse.json(
+    { ok: false, error: "unauthorized" },
+    { status: 401 }
+  );
+}
+
 export async function POST(req: NextRequest) {
   try {
-    const authHeader = req.headers.get("authorization");
-    const token = authHeader?.startsWith("Bearer ")
-      ? authHeader.slice(7).trim()
-      : null;
+    const token = extractBearerToken(req);
 
     if (!token) {
-      return NextResponse.json(
-        { ok: false, error: "unauthorized" },
-        { status: 401 }
-      );
+      return unauthorized();
+    }
+
+    const clientIp = getClientIp(req);
+
+    if (ENABLE_API_RATE_LIMIT) {
+      const ipLimitResult = await ipRateLimit.limit(`rl:ip:${clientIp}`);
+
+      if (!ipLimitResult.success) {
+        return rateLimitResponse("ip", ipLimitResult.reset);
+      }
     }
 
     const isMasterKey = token === process.env.DECISION_API_KEY;
@@ -151,18 +250,27 @@ export async function POST(req: NextRequest) {
         }
       | undefined;
 
+    let parsedKeyRecord: ApiKeyRecord | null = null;
+
     if (!isMasterKey) {
       const rawKeyData = await redis.get(`apikey:${token}`);
-      const parsed = parseApiKeyRecord(rawKeyData);
+      parsedKeyRecord = parseApiKeyRecord(rawKeyData);
 
-      if (!parsed) {
-        return NextResponse.json(
-          { ok: false, error: "unauthorized" },
-          { status: 401 }
-        );
+      if (!parsedKeyRecord) {
+        return unauthorized();
       }
 
-      const keyStatus = parsed.status ?? "active";
+      if (ENABLE_API_RATE_LIMIT) {
+        const keyLimitResult = await apiKeyRateLimit.limit(
+          `rl:key:${hashKey(token)}`
+        );
+
+        if (!keyLimitResult.success) {
+          return rateLimitResponse("api_key", keyLimitResult.reset);
+        }
+      }
+
+      const keyStatus = parsedKeyRecord.status ?? "active";
 
       if (keyStatus !== "active") {
         return NextResponse.json(
@@ -174,25 +282,48 @@ export async function POST(req: NextRequest) {
         );
       }
 
-      if (parsed.callsUsed >= parsed.callsLimit) {
+      if (parsedKeyRecord.callsUsed >= parsedKeyRecord.callsLimit) {
         return NextResponse.json(
           {
             ok: false,
             error: "rate_limit_exceeded",
-            plan: parsed.plan,
-            calls_limit: parsed.callsLimit,
-            calls_used: parsed.callsUsed,
+            plan: parsedKeyRecord.plan,
+            calls_limit: parsedKeyRecord.callsLimit,
+            calls_used: parsedKeyRecord.callsUsed,
             calls_remaining: 0,
             status: keyStatus,
           },
           { status: 429 }
         );
       }
+    } else if (ENABLE_API_RATE_LIMIT) {
+      const masterKeyLimitResult = await apiKeyRateLimit.limit(
+        `rl:key:${hashKey(token)}`
+      );
+
+      if (!masterKeyLimitResult.success) {
+        return rateLimitResponse("api_key", masterKeyLimitResult.reset);
+      }
+    }
+
+    const body = await req.json().catch(() => null);
+    const prompt = body?.prompt;
+
+    if (!prompt || typeof prompt !== "string") {
+      return badRequest("missing_prompt");
+    }
+
+    if (prompt.length > MAX_PROMPT_CHARS) {
+      return badRequest("prompt_too_large");
+    }
+
+    if (!isMasterKey && parsedKeyRecord) {
+      const keyStatus = parsedKeyRecord.status ?? "active";
 
       const updatedKeyData: ApiKeyRecord = {
-        ...parsed,
+        ...parsedKeyRecord,
         status: keyStatus,
-        callsUsed: parsed.callsUsed + 1,
+        callsUsed: parsedKeyRecord.callsUsed + 1,
       };
 
       await redis.set(`apikey:${token}`, JSON.stringify(updatedKeyData));
@@ -209,21 +340,27 @@ export async function POST(req: NextRequest) {
       };
     }
 
-    const body = await req.json();
-    const prompt = body?.prompt;
+    const taskType = detectTaskType(prompt);
+    const { selectedProviders } = await adaptiveSelectProviders(prompt, taskType);
 
-    if (!prompt || typeof prompt !== "string") {
+    const limitedProviders = selectedProviders.slice(
+      0,
+      MAX_PROVIDERS
+    ) as ProviderName[];
+
+    if (limitedProviders.length < 2) {
       return NextResponse.json(
-        { ok: false, error: "missing_prompt" },
-        { status: 400 }
+        {
+          ok: false,
+          error: "provider_selection_failed",
+        },
+        { status: 500 }
       );
     }
 
-    const taskType = detectTaskType(prompt);
-    const { selectedProviders } = await adaptiveSelectProviders(prompt, taskType);
-    const [providerA, providerB] = selectedProviders;
+    const [providerA, providerB] = limitedProviders;
 
-    const providerMap: Record<ProviderName, (p: string) => Promise<string>> = {
+    const providerMap: Record<ProviderName, ProviderRunner> = {
       openai: runOpenAI,
       anthropic: runAnthropic,
       perplexity: runPerplexity,
@@ -231,12 +368,12 @@ export async function POST(req: NextRequest) {
 
     const [resultA, resultB] = await Promise.all([
       withTimeout(
-        providerMap[providerA](prompt),
+        (signal) => providerMap[providerA](prompt, signal),
         TIMEOUT_MS,
         `${providerA} timed out.`
       ),
       withTimeout(
-        providerMap[providerB](prompt),
+        (signal) => providerMap[providerB](prompt, signal),
         TIMEOUT_MS,
         `${providerB} timed out.`
       ),
@@ -266,7 +403,7 @@ export async function POST(req: NextRequest) {
 
     const synthesisCompletion = await openai.chat.completions.create({
       model: "gpt-4o-mini",
-      max_tokens: 1024,
+      max_tokens: 400,
       messages: [
         {
           role: "system",
@@ -313,7 +450,9 @@ export async function POST(req: NextRequest) {
       );
       scoreA = parsed.scoreA ?? 7;
       scoreB = parsed.scoreB ?? 7;
-    } catch {}
+    } catch {
+      // Keep defaults
+    }
 
     await Promise.all([
       updateProviderQualityScore({
@@ -336,7 +475,7 @@ export async function POST(req: NextRequest) {
         comparison.agreementLevel,
         comparison.likelyConflict
       ),
-      providers_used: selectedProviders,
+      providers_used: limitedProviders,
       model_diagnostics: {
         [providerA]: {
           quality_score: scoreA,
@@ -351,6 +490,7 @@ export async function POST(req: NextRequest) {
         task_type: taskType,
         overlap_ratio: comparison.overlapRatio,
         agreement_summary: comparison.summary,
+        prompt_chars: prompt.length,
       },
       usage: customerKeyMeta ?? null,
     });
