@@ -27,6 +27,23 @@ interface StructuredSynthesis {
   decisionRule: string;
 }
 
+interface DecisionVerification {
+  verdict: string;
+  consensus: {
+    level: "high" | "medium" | "low";
+    modelsAligned: number;
+  };
+  riskLevel: "low" | "moderate" | "high";
+  keyDisagreement: string;
+  recommendedAction: string;
+}
+
+interface TrustScore {
+  score: number;
+  label: "high" | "moderate" | "low";
+  reason: string;
+}
+
 interface HistoryEntry {
   id: string;
   timestamp: number;
@@ -37,6 +54,14 @@ interface HistoryEntry {
   selectedProviders?: ProviderName[];
   synthesis: string | null;
   structuredSynthesis?: StructuredSynthesis | null;
+  comparison?: {
+    agreementLevel: "high" | "medium" | "low";
+    likelyConflict: boolean;
+    overlapRatio?: number;
+    summary: string;
+  } | null;
+  decisionVerification?: DecisionVerification | null;
+  trustScore?: TrustScore | null;
 }
 
 const MODE_LABEL: Record<Mode, string> = {
@@ -187,6 +212,36 @@ function getProviderLabel(provider: ProviderName): string {
     default:
       return provider;
   }
+}
+
+function getConfidenceBadgeClasses(level: "high" | "medium" | "low") {
+  if (level === "high") return "bg-green-500/10 text-green-500";
+  if (level === "medium") return "bg-yellow-500/10 text-yellow-500";
+  return "bg-red-500/10 text-red-500";
+}
+
+function getConfidenceLabel(level: "high" | "medium" | "low") {
+  if (level === "high") return "High Confidence";
+  if (level === "medium") return "Medium Confidence";
+  return "Low Confidence";
+}
+
+function getRiskBadgeClasses(level: "low" | "moderate" | "high") {
+  if (level === "low") return "bg-green-500/10 text-green-500";
+  if (level === "moderate") return "bg-yellow-500/10 text-yellow-500";
+  return "bg-red-500/10 text-red-500";
+}
+
+function getTrustBadgeClasses(label: "high" | "moderate" | "low") {
+  if (label === "high") return "bg-green-500/10 text-green-500";
+  if (label === "moderate") return "bg-yellow-500/10 text-yellow-500";
+  return "bg-red-500/10 text-red-500";
+}
+
+function getTrustLabel(label: "high" | "moderate" | "low") {
+  if (label === "high") return "Strong";
+  if (label === "moderate") return "Use With Caution";
+  return "Needs Review";
 }
 
 function Spinner() {
@@ -356,12 +411,15 @@ export default function Home() {
   const [synthesis, setSynthesis] = useState<string | null>(null);
   const [structuredSynthesis, setStructuredSynthesis] =
     useState<StructuredSynthesis | null>(null);
-    const [comparison, setComparison] = useState<{
-  agreementLevel: "high" | "medium" | "low";
-  likelyConflict: boolean;
-  overlapRatio: number;
-  summary: string;
-} | null>(null);
+  const [comparison, setComparison] = useState<{
+    agreementLevel: "high" | "medium" | "low";
+    likelyConflict: boolean;
+    overlapRatio?: number;
+    summary: string;
+  } | null>(null);
+  const [decisionVerification, setDecisionVerification] =
+    useState<DecisionVerification | null>(null);
+  const [trustScore, setTrustScore] = useState<TrustScore | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [running, setRunning] = useState(false);
@@ -399,6 +457,9 @@ export default function Home() {
       selectedProviders,
       synthesis,
       structuredSynthesis,
+      comparison,
+      decisionVerification,
+      trustScore,
     };
 
     const updated = [entry, ...loadHistory().filter((h) => h.input !== input)];
@@ -412,6 +473,9 @@ export default function Home() {
     input,
     intent,
     userAnswers,
+    comparison,
+    decisionVerification,
+    trustScore,
   ]);
 
   useEffect(() => {
@@ -435,6 +499,9 @@ export default function Home() {
     setSelectedProviders([]);
     setSynthesis(null);
     setStructuredSynthesis(null);
+    setComparison(null);
+    setDecisionVerification(null);
+    setTrustScore(null);
     setUserAnswers(["", "", ""]);
     setError(null);
     setPromptCopied(false);
@@ -445,7 +512,14 @@ export default function Home() {
     const text = editableRef.current?.innerText ?? "";
     setInput(text);
 
-    if (intent || answers || synthesis || structuredSynthesis) {
+    if (
+      intent ||
+      answers ||
+      synthesis ||
+      structuredSynthesis ||
+      comparison ||
+      trustScore
+    ) {
       resetAnalysisState();
     }
   }
@@ -458,6 +532,9 @@ export default function Home() {
     setSelectedProviders(entry.selectedProviders ?? ["openai", "anthropic"]);
     setSynthesis(entry.synthesis);
     setStructuredSynthesis(entry.structuredSynthesis ?? null);
+    setComparison(entry.comparison ?? null);
+    setDecisionVerification(entry.decisionVerification ?? null);
+    setTrustScore(entry.trustScore ?? null);
     setError(null);
     setHistoryOpen(false);
     setPromptCopied(false);
@@ -514,6 +591,9 @@ export default function Home() {
     setSelectedProviders([]);
     setSynthesis(null);
     setStructuredSynthesis(null);
+    setComparison(null);
+    setDecisionVerification(null);
+    setTrustScore(null);
     setInsightCopied(false);
     setError(null);
 
@@ -546,6 +626,9 @@ export default function Home() {
     setSynthesizing(true);
     setSynthesis(null);
     setStructuredSynthesis(null);
+    setComparison(null);
+    setDecisionVerification(null);
+    setTrustScore(null);
     setInsightCopied(false);
     setError(null);
 
@@ -578,6 +661,8 @@ export default function Home() {
       setSynthesis(json.synthesis);
       setStructuredSynthesis(json.structuredSynthesis ?? null);
       setComparison(json.comparison ?? null);
+      setDecisionVerification(json.decisionVerification ?? null);
+      setTrustScore(json.trustScore ?? null);
 
       setTimeout(() => {
         synthesisRef.current?.scrollIntoView({
@@ -801,11 +886,12 @@ export default function Home() {
                 </svg>
                 <span>{history.length > 0 ? history.length : "History"}</span>
               </button>
-            <a  href="/api-docs"
-              className="flex items-center rounded-xl border border-black/10 dark:border-white/10 px-3 py-1.5 text-xs opacity-60 hover:opacity-100 transition-opacity"
->
-  API
-</a>
+              <a
+                href="/api-docs"
+                className="flex items-center rounded-xl border border-black/10 dark:border-white/10 px-3 py-1.5 text-xs opacity-60 hover:opacity-100 transition-opacity"
+              >
+                API
+              </a>
             </div>
           </div>
 
@@ -1116,30 +1202,159 @@ export default function Home() {
         )}
 
         {synthesis && !synthesizing && (
-  <section
-    ref={synthesisRef}
-    className="rounded-2xl border border-black/10 p-5 dark:border-white/10 space-y-4"
-  >
-    <div className="flex items-center justify-between">
-      <div className="text-xs uppercase tracking-wide opacity-50">
-        Best Answer
-      </div>
-      {comparison && (
-        <div className={`text-xs font-medium px-3 py-1 rounded-full ${
-          comparison.agreementLevel === "high"
-            ? "bg-green-500/10 text-green-500"
-            : comparison.agreementLevel === "medium"
-            ? "bg-yellow-500/10 text-yellow-500"
-            : "bg-red-500/10 text-red-500"
-        }`}>
-          {comparison.agreementLevel === "high"
-            ? "✓ High Confidence"
-            : comparison.agreementLevel === "medium"
-            ? "~ Medium Confidence"
-            : "⚠ Low Confidence"}
-        </div>
-      )}
-    </div>
+          <section
+            ref={synthesisRef}
+            className="rounded-2xl border border-black/10 p-5 dark:border-white/10 space-y-4"
+          >
+            <div className="flex items-center justify-between gap-3 flex-wrap">
+              <div className="text-xs uppercase tracking-wide opacity-50">
+                Verified Decision
+              </div>
+              {comparison && (
+                <div
+                  className={cx(
+                    "text-xs font-medium px-3 py-1 rounded-full",
+                    getConfidenceBadgeClasses(comparison.agreementLevel)
+                  )}
+                >
+                  {getConfidenceLabel(comparison.agreementLevel)}
+                </div>
+              )}
+            </div>
+
+            {trustScore && (
+              <div className="rounded-xl border border-black/10 dark:border-white/10 p-5 space-y-4 bg-black/[0.02] dark:bg-white/[0.02]">
+                <div className="text-xs uppercase tracking-wide opacity-50">
+                  Trust Score
+                </div>
+
+                <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
+                  <div className="space-y-3">
+                    <div className="flex items-end gap-1.5">
+                      <div className="text-6xl md:text-7xl font-semibold tracking-tight leading-none">
+                        {trustScore.score}
+                      </div>
+                      <div className="text-base md:text-lg opacity-40 pb-1.5">
+                        /100
+                      </div>
+                    </div>
+
+                    <div
+                      className={cx(
+                        "inline-flex rounded-full px-3 py-1 text-xs font-medium",
+                        getTrustBadgeClasses(trustScore.label)
+                      )}
+                    >
+                      {getTrustLabel(trustScore.label)}
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:w-[360px]">
+                    <div className="rounded-xl border border-black/10 dark:border-white/10 p-4 space-y-1">
+                      <div className="text-xs uppercase tracking-wide opacity-50">
+                        Confidence
+                      </div>
+                      <div className="text-sm font-medium">
+                        {comparison ? getConfidenceLabel(comparison.agreementLevel) : "—"}
+                      </div>
+                    </div>
+
+                    <div className="rounded-xl border border-black/10 dark:border-white/10 p-4 space-y-1">
+                      <div className="text-xs uppercase tracking-wide opacity-50">
+                        Risk
+                      </div>
+                      <div className="text-sm font-medium capitalize">
+                        {decisionVerification?.riskLevel ?? "—"}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="rounded-xl border border-black/10 dark:border-white/10 p-4">
+                  <div className="text-xs uppercase tracking-wide opacity-50 mb-2">
+                    Why this score
+                  </div>
+                  <div className="text-sm leading-relaxed whitespace-pre-wrap break-words">
+                    {trustScore.reason}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {decisionVerification && (
+              <div className="rounded-xl border border-black/10 dark:border-white/10 p-4 space-y-4 bg-black/[0.02] dark:bg-white/[0.02]">
+                <div className="text-xs uppercase tracking-wide opacity-50">
+                  Verification Summary
+                </div>
+
+                <InsightBlock
+                  title="Decision Verdict"
+                  value={decisionVerification.verdict}
+                />
+
+                <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                  <InsightBlock
+                    title="Recommended Action"
+                    value={decisionVerification.recommendedAction}
+                  />
+                  <InsightBlock
+                    title="Key Disagreement"
+                    value={decisionVerification.keyDisagreement}
+                  />
+                </div>
+
+                <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+                  <div className="rounded-xl border border-black/10 dark:border-white/10 p-4 space-y-1">
+                    <div className="text-xs uppercase tracking-wide opacity-50">
+                      Consensus
+                    </div>
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="text-sm font-medium capitalize">
+                        {decisionVerification.consensus.level}
+                      </div>
+                      <div
+                        className={cx(
+                          "text-xs font-medium px-2.5 py-1 rounded-full",
+                          getConfidenceBadgeClasses(
+                            decisionVerification.consensus.level
+                          )
+                        )}
+                      >
+                        {decisionVerification.consensus.modelsAligned}/2 aligned
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="rounded-xl border border-black/10 dark:border-white/10 p-4 space-y-1">
+                    <div className="text-xs uppercase tracking-wide opacity-50">
+                      Risk Level
+                    </div>
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="text-sm font-medium capitalize">
+                        {decisionVerification.riskLevel}
+                      </div>
+                      <div
+                        className={cx(
+                          "text-xs font-medium px-2.5 py-1 rounded-full capitalize",
+                          getRiskBadgeClasses(decisionVerification.riskLevel)
+                        )}
+                      >
+                        {decisionVerification.riskLevel}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="rounded-xl border border-black/10 dark:border-white/10 p-4 space-y-1">
+                    <div className="text-xs uppercase tracking-wide opacity-50">
+                      Model Disagreement
+                    </div>
+                    <div className="text-sm font-medium">
+                      {comparison?.likelyConflict ? "Present" : "Limited"}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
 
             <div className="relative space-y-2 rounded-xl border border-black/10 dark:border-white/10 p-4 pr-16 overflow-hidden">
               <div className="absolute top-3 right-3">

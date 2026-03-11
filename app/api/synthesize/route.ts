@@ -10,6 +10,8 @@ const TIMEOUT_MS = 30_000;
 
 type ProviderName = "openai" | "anthropic" | "perplexity";
 type AgreementLevel = "high" | "medium" | "low";
+type RiskLevel = "low" | "moderate" | "high";
+type TrustLabel = "high" | "moderate" | "low";
 
 type AnswersPayload = {
   openai: string;
@@ -24,7 +26,24 @@ type StructuredSynthesis = {
   decisionRule: string;
   qualityScoreopenai?: number;
   qualityScoreanthropic?: number;
-  qualityScoregemini?: number;
+  qualityScoreperplexity?: number;
+};
+
+type DecisionVerification = {
+  verdict: string;
+  consensus: {
+    level: AgreementLevel;
+    modelsAligned: number;
+  };
+  riskLevel: RiskLevel;
+  keyDisagreement: string;
+  recommendedAction: string;
+};
+
+type TrustScore = {
+  score: number;
+  label: TrustLabel;
+  reason: string;
 };
 
 function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
@@ -56,6 +75,136 @@ function getProviderLabel(provider: ProviderName): string {
     default:
       return provider;
   }
+}
+
+function getRiskLevel(
+  agreementLevel: AgreementLevel,
+  likelyConflict: boolean
+): RiskLevel {
+  if (likelyConflict || agreementLevel === "low") {
+    return "high";
+  }
+
+  if (agreementLevel === "medium") {
+    return "moderate";
+  }
+
+  return "low";
+}
+
+function getModelsAligned(agreementLevel: AgreementLevel): number {
+  if (agreementLevel === "low") {
+    return 1;
+  }
+
+  return 2;
+}
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value));
+}
+
+function averageQualityScore(
+  structuredSynthesis: StructuredSynthesis,
+  selectedProviders: ProviderName[]
+): number {
+  const scores = selectedProviders
+    .map((provider) => {
+      const key = `qualityScore${provider}` as keyof StructuredSynthesis;
+      const value = structuredSynthesis[key];
+      return typeof value === "number" ? value : null;
+    })
+    .filter((value): value is number => value !== null);
+
+  if (scores.length === 0) {
+    return 7;
+  }
+
+  return scores.reduce((sum, value) => sum + value, 0) / scores.length;
+}
+
+function getAgreementBaseScore(agreementLevel: AgreementLevel): number {
+  if (agreementLevel === "high") return 90;
+  if (agreementLevel === "medium") return 72;
+  return 42;
+}
+
+function getTrustLabel(score: number): TrustLabel {
+  if (score >= 80) return "high";
+  if (score >= 60) return "moderate";
+  return "low";
+}
+
+function buildTrustReason(input: {
+  agreementLevel: AgreementLevel;
+  likelyConflict: boolean;
+  averageQuality: number;
+  riskLevel: RiskLevel;
+}): string {
+  const agreementText =
+    input.agreementLevel === "high"
+      ? "Models strongly agree"
+      : input.agreementLevel === "medium"
+      ? "Models partially agree"
+      : "Models show meaningful divergence";
+
+  const qualityText =
+    input.averageQuality >= 8
+      ? "provider output quality is strong"
+      : input.averageQuality >= 6.5
+      ? "provider output quality is solid"
+      : "provider output quality is mixed";
+
+  const conflictText = input.likelyConflict
+    ? "and conflict is present"
+    : "and conflict is limited";
+
+  const riskText =
+    input.riskLevel === "low"
+      ? "overall risk is low."
+      : input.riskLevel === "moderate"
+      ? "overall risk is moderate."
+      : "overall risk is elevated.";
+
+  return `${agreementText}, ${qualityText}, ${conflictText}; ${riskText}`;
+}
+
+function calculateTrustScore(input: {
+  agreementLevel: AgreementLevel;
+  likelyConflict: boolean;
+  averageQuality: number;
+  riskLevel: RiskLevel;
+}): TrustScore {
+  const agreementBase = getAgreementBaseScore(input.agreementLevel);
+  const qualityNormalized = input.averageQuality * 10;
+
+  let score =
+    agreementBase * 0.55 +
+    qualityNormalized * 0.30 +
+    100 * 0.15;
+
+  if (input.likelyConflict) {
+    score -= 12;
+  }
+
+  if (input.riskLevel === "moderate") {
+    score -= 6;
+  } else if (input.riskLevel === "high") {
+    score -= 14;
+  }
+
+  const finalScore = Math.round(clamp(score, 0, 100));
+
+  return {
+    score: finalScore,
+    label: getTrustLabel(finalScore),
+    reason: buildTrustReason({
+      agreementLevel: input.agreementLevel,
+      likelyConflict: input.likelyConflict,
+      averageQuality: input.averageQuality,
+      riskLevel: input.riskLevel,
+    }),
+  };
 }
 
 function buildSynthesisSystemPrompt(input: {
@@ -157,6 +306,53 @@ function buildStructuringUserPrompt(input: {
   ].join("\n");
 }
 
+function buildVerificationSystemPrompt() {
+  return [
+    "You are a decision-verification engine.",
+    "You will be given a question, a synthesized answer, and a structured summary extracted from two AI responses.",
+    "Return valid JSON only.",
+    "Use this exact shape:",
+    '{"verdict":"string","keyDisagreement":"string","recommendedAction":"string"}',
+    "Rules:",
+    "- verdict should be a concise decision-oriented conclusion.",
+    "- keyDisagreement should capture the main tension, tradeoff, or area of nuance between the two responses.",
+    "- recommendedAction should be a practical next step.",
+    "- Keep all fields concise and useful.",
+  ].join(" ");
+}
+
+function buildVerificationUserPrompt(input: {
+  prompt: string;
+  synthesis: string;
+  structuredSynthesis: StructuredSynthesis;
+  agreementLevel: AgreementLevel;
+  likelyConflict: boolean;
+}) {
+  return [
+    `Question: ${input.prompt}`,
+    "",
+    `Agreement level: ${input.agreementLevel}`,
+    `Likely conflict: ${input.likelyConflict ? "yes" : "no"}`,
+    "",
+    "Synthesized answer:",
+    input.synthesis,
+    "",
+    "Structured summary:",
+    JSON.stringify(
+      {
+        finalAnswer: input.structuredSynthesis.finalAnswer,
+        sharedConclusion: input.structuredSynthesis.sharedConclusion,
+        keyDifference: input.structuredSynthesis.keyDifference,
+        decisionRule: input.structuredSynthesis.decisionRule,
+      },
+      null,
+      2
+    ),
+    "",
+    "Return JSON only.",
+  ].join("\n");
+}
+
 function isStructuredSynthesis(value: unknown): value is StructuredSynthesis {
   if (!value || typeof value !== "object") return false;
 
@@ -175,6 +371,35 @@ function tryParseStructuredJson(raw: string): StructuredSynthesis | null {
     const cleaned = stripCodeFences(raw);
     const parsed = JSON.parse(cleaned);
     return isStructuredSynthesis(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function tryParseDecisionVerification(raw: string): {
+  verdict: string;
+  keyDisagreement: string;
+  recommendedAction: string;
+} | null {
+  try {
+    const cleaned = stripCodeFences(raw);
+    const parsed = JSON.parse(cleaned);
+
+    if (
+      !parsed ||
+      typeof parsed !== "object" ||
+      typeof parsed.verdict !== "string" ||
+      typeof parsed.keyDisagreement !== "string" ||
+      typeof parsed.recommendedAction !== "string"
+    ) {
+      return null;
+    }
+
+    return {
+      verdict: parsed.verdict.trim(),
+      keyDisagreement: parsed.keyDisagreement.trim(),
+      recommendedAction: parsed.recommendedAction.trim(),
+    };
   } catch {
     return null;
   }
@@ -200,6 +425,67 @@ function buildFallbackStructuredSynthesis(
       comparison.agreementLevel === "low"
         ? "Choose based on your context, constraints, and risk tolerance, because the strongest answer depends on which tradeoff matters most."
         : "Use the shared conclusion as the base answer, then adjust based on your specific context and constraints.",
+  };
+}
+
+async function buildDecisionVerification(input: {
+  prompt: string;
+  synthesis: string;
+  structuredSynthesis: StructuredSynthesis;
+  agreementLevel: AgreementLevel;
+  likelyConflict: boolean;
+}): Promise<DecisionVerification> {
+  try {
+    const verificationCompletion = await withTimeout(
+      openai.chat.completions.create({
+        model: "gpt-4o-mini",
+        max_tokens: 180,
+        response_format: { type: "json_object" },
+        messages: [
+          {
+            role: "system",
+            content: buildVerificationSystemPrompt(),
+          },
+          {
+            role: "user",
+            content: buildVerificationUserPrompt(input),
+          },
+        ],
+      }),
+      TIMEOUT_MS
+    );
+
+    const raw =
+      verificationCompletion.choices[0]?.message?.content ?? "{}";
+    const parsed = tryParseDecisionVerification(raw);
+
+    if (parsed) {
+      return {
+        verdict: parsed.verdict || input.structuredSynthesis.finalAnswer,
+        consensus: {
+          level: input.agreementLevel,
+          modelsAligned: getModelsAligned(input.agreementLevel),
+        },
+        riskLevel: getRiskLevel(input.agreementLevel, input.likelyConflict),
+        keyDisagreement:
+          parsed.keyDisagreement || input.structuredSynthesis.keyDifference,
+        recommendedAction:
+          parsed.recommendedAction || input.structuredSynthesis.decisionRule,
+      };
+    }
+  } catch (error) {
+    console.error("[/api/synthesize] verification_error:", error);
+  }
+
+  return {
+    verdict: input.structuredSynthesis.finalAnswer,
+    consensus: {
+      level: input.agreementLevel,
+      modelsAligned: getModelsAligned(input.agreementLevel),
+    },
+    riskLevel: getRiskLevel(input.agreementLevel, input.likelyConflict),
+    keyDisagreement: input.structuredSynthesis.keyDifference,
+    recommendedAction: input.structuredSynthesis.decisionRule,
   };
 }
 
@@ -251,7 +537,7 @@ export async function POST(req: NextRequest) {
     const synthesisCompletion = await withTimeout(
       openai.chat.completions.create({
         model: "gpt-4o-mini",
-        max_tokens: 1024,
+        max_tokens: 400,
         messages: [
           {
             role: "system",
@@ -337,21 +623,63 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    // Feed quality scores back into provider learning
+    const decisionVerification = await buildDecisionVerification({
+      prompt,
+      synthesis,
+      structuredSynthesis,
+      agreementLevel: comparison.agreementLevel,
+      likelyConflict: comparison.likelyConflict,
+    });
+
     const taskType = detectTaskType(prompt);
-    for (const provider of selectedProviders) {
-      const key = `qualityScore${provider}` as keyof typeof structuredSynthesis;
-      const score = structuredSynthesis[key];
-      if (typeof score === "number") {
-        updateProviderQualityScore({ taskType, provider, qualityScore: score });
-        console.log("[QUALITY_SCORE]", { provider, taskType, score });
-      }
-    }
+
+    await Promise.all(
+      selectedProviders.map(async (provider) => {
+        const key = `qualityScore${provider}` as keyof typeof structuredSynthesis;
+        const score = structuredSynthesis[key];
+        if (typeof score === "number") {
+          await updateProviderQualityScore({
+            taskType,
+            provider,
+            qualityScore: score,
+          });
+          console.log("[QUALITY_SCORE]", { provider, taskType, score });
+        }
+      })
+    );
+
+    const trustScore = calculateTrustScore({
+      agreementLevel: comparison.agreementLevel,
+      likelyConflict: comparison.likelyConflict,
+      averageQuality: averageQualityScore(
+        structuredSynthesis,
+        selectedProviders
+      ),
+      riskLevel: decisionVerification.riskLevel,
+    });
 
     return NextResponse.json({
       ok: true,
       synthesis,
       structuredSynthesis,
+
+      decisionVerification: {
+        verdict: decisionVerification.verdict,
+        consensus: {
+          level: decisionVerification.consensus.level,
+          modelsAligned: decisionVerification.consensus.modelsAligned,
+        },
+        riskLevel: decisionVerification.riskLevel,
+        keyDisagreement: decisionVerification.keyDisagreement,
+        recommendedAction: decisionVerification.recommendedAction,
+      },
+
+      trustScore: {
+        score: trustScore.score,
+        label: trustScore.label,
+        reason: trustScore.reason,
+      },
+
       comparison: {
         selectedProviders,
         agreementLevel: comparison.agreementLevel,

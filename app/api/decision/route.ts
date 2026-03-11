@@ -52,6 +52,8 @@ const ipRateLimit = new Ratelimit({
 });
 
 type ProviderName = "openai" | "anthropic" | "perplexity";
+type AgreementLevel = "high" | "medium" | "low";
+type RiskLevel = "low" | "moderate" | "high";
 
 type ApiKeyRecord = {
   email?: string | null;
@@ -75,6 +77,12 @@ type ProviderRunner = (
   prompt: string,
   signal?: AbortSignal
 ) => Promise<string>;
+
+type VerdictPayload = {
+  verdict: string;
+  keyDisagreement: string;
+  recommendedAction: string;
+};
 
 function withTimeout<T>(
   promiseFactory: (signal: AbortSignal) => Promise<T>,
@@ -125,7 +133,7 @@ function withTimeout<T>(
 }
 
 function getConfidenceReason(
-  agreementLevel: "high" | "medium" | "low",
+  agreementLevel: AgreementLevel,
   likelyConflict: boolean
 ): string {
   if (agreementLevel === "high") {
@@ -218,6 +226,102 @@ function unauthorized() {
     { ok: false, error: "unauthorized" },
     { status: 401 }
   );
+}
+
+function getRiskLevel(
+  agreementLevel: AgreementLevel,
+  likelyConflict: boolean
+): RiskLevel {
+  if (likelyConflict || agreementLevel === "low") {
+    return "high";
+  }
+
+  if (agreementLevel === "medium") {
+    return "moderate";
+  }
+
+  return "low";
+}
+
+function getModelsAligned(agreementLevel: AgreementLevel): number {
+  if (agreementLevel === "high") {
+    return 2;
+  }
+
+  if (agreementLevel === "medium") {
+    return 2;
+  }
+
+  return 1;
+}
+
+async function buildDecisionVerdict(params: {
+  prompt: string;
+  answerA: string;
+  answerB: string;
+  agreementLevel: AgreementLevel;
+  likelyConflict: boolean;
+  verifiedAnswer: string;
+}): Promise<VerdictPayload> {
+  const completion = await openai.chat.completions.create({
+    model: "gpt-4o-mini",
+    max_tokens: 180,
+    response_format: { type: "json_object" },
+    messages: [
+      {
+        role: "system",
+        content:
+          "You are a decision-verification engine. Return JSON only with this exact shape: " +
+          '{"verdict":"string","keyDisagreement":"string","recommendedAction":"string"}. ' +
+          "Keep each field concise, practical, and decision-oriented. " +
+          "If the model answers mostly agree, set keyDisagreement to the main area of nuance, not 'none'.",
+      },
+      {
+        role: "user",
+        content: [
+          `Question: ${params.prompt}`,
+          "",
+          `Agreement level: ${params.agreementLevel}`,
+          `Likely conflict: ${params.likelyConflict ? "yes" : "no"}`,
+          "",
+          `Response A: ${params.answerA}`,
+          "",
+          `Response B: ${params.answerB}`,
+          "",
+          `Verified synthesis: ${params.verifiedAnswer}`,
+        ].join("\n"),
+      },
+    ],
+  });
+
+  try {
+    const raw = completion.choices[0]?.message?.content ?? "{}";
+    const parsed = JSON.parse(raw);
+
+    return {
+      verdict:
+        typeof parsed.verdict === "string" && parsed.verdict.trim()
+          ? parsed.verdict.trim()
+          : "Proceed cautiously based on the verified synthesis.",
+      keyDisagreement:
+        typeof parsed.keyDisagreement === "string" && parsed.keyDisagreement.trim()
+          ? parsed.keyDisagreement.trim()
+          : "Different emphasis in reasoning and implementation approach.",
+      recommendedAction:
+        typeof parsed.recommendedAction === "string" && parsed.recommendedAction.trim()
+          ? parsed.recommendedAction.trim()
+          : "Take the next practical step in a limited, low-risk way.",
+    };
+  } catch {
+    return {
+      verdict: "Proceed cautiously based on the verified synthesis.",
+      keyDisagreement:
+        params.likelyConflict
+          ? "The models diverged on the strongest recommendation."
+          : "The models differed mainly in emphasis and execution details.",
+      recommendedAction: "Test the recommendation in a limited, low-risk way.",
+    };
+  }
 }
 
 export async function POST(req: NextRequest) {
@@ -426,6 +530,15 @@ export async function POST(req: NextRequest) {
     const verifiedAnswer =
       synthesisCompletion.choices[0]?.message?.content?.trim() ?? "";
 
+    const verdictPayload = await buildDecisionVerdict({
+      prompt,
+      answerA,
+      answerB,
+      agreementLevel: comparison.agreementLevel,
+      likelyConflict: comparison.likelyConflict,
+      verifiedAnswer,
+    });
+
     const qualityCompletion = await openai.chat.completions.create({
       model: "gpt-4o-mini",
       max_tokens: 100,
@@ -467,15 +580,38 @@ export async function POST(req: NextRequest) {
       }),
     ]);
 
+    const consensusLevel = comparison.agreementLevel;
+    const riskLevel = getRiskLevel(
+      comparison.agreementLevel,
+      comparison.likelyConflict
+    );
+    const modelsAligned = getModelsAligned(comparison.agreementLevel);
+
     return NextResponse.json({
       ok: true,
+
+      verdict: verdictPayload.verdict,
+
+      consensus: {
+        level: consensusLevel,
+        models_aligned: modelsAligned,
+      },
+
+      risk_level: riskLevel,
+      key_disagreement: verdictPayload.keyDisagreement,
+      recommended_action: verdictPayload.recommendedAction,
+
+      analysis: verifiedAnswer,
+
       verified_answer: verifiedAnswer,
       confidence: comparison.agreementLevel,
       confidence_reason: getConfidenceReason(
         comparison.agreementLevel,
         comparison.likelyConflict
       ),
+
       providers_used: limitedProviders,
+
       model_diagnostics: {
         [providerA]: {
           quality_score: scoreA,
@@ -486,12 +622,15 @@ export async function POST(req: NextRequest) {
           duration_ms: resultB.durationMs,
         },
       },
+
       meta: {
         task_type: taskType,
         overlap_ratio: comparison.overlapRatio,
         agreement_summary: comparison.summary,
         prompt_chars: prompt.length,
+        likely_conflict: comparison.likelyConflict,
       },
+
       usage: customerKeyMeta ?? null,
     });
   } catch (err) {
