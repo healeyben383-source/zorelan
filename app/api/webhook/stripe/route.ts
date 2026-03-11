@@ -79,14 +79,16 @@ function parseApiKeyRecord(input: unknown): ApiKeyRecord | null {
   }
 }
 
-async function updateApiKeyStatusByCustomerOrSubscription({
+async function updateApiKeyByCustomerOrSubscription({
   customerId,
   subscriptionId,
   status,
+  resetUsage = false,
 }: {
   customerId?: string | null;
   subscriptionId?: string | null;
-  status: "active" | "inactive";
+  status?: "active" | "inactive";
+  resetUsage?: boolean;
 }) {
   const apiKey =
     (subscriptionId
@@ -113,12 +115,15 @@ async function updateApiKeyStatusByCustomerOrSubscription({
 
   const updatedRecord: ApiKeyRecord = {
     ...parsed,
-    status,
+    ...(status ? { status } : {}),
+    ...(resetUsage ? { callsUsed: 0 } : {}),
   };
 
   await redis.set(`apikey:${apiKey}`, JSON.stringify(updatedRecord));
 
-  console.log(`[WEBHOOK] API key ${apiKey} marked ${status}`);
+  console.log(
+    `[WEBHOOK] API key ${apiKey} updated status=${updatedRecord.status ?? "unchanged"} resetUsage=${resetUsage}`
+  );
 }
 
 async function sendApiKeyEmail({
@@ -211,7 +216,7 @@ export async function POST(req: NextRequest) {
           ex: 60 * 60 * 24,
         });
 
-        await updateApiKeyStatusByCustomerOrSubscription({
+        await updateApiKeyByCustomerOrSubscription({
           customerId,
           subscriptionId,
           status: "active",
@@ -266,7 +271,7 @@ export async function POST(req: NextRequest) {
       const subscriptionId =
         typeof invoice.subscription === "string" ? invoice.subscription : null;
 
-      await updateApiKeyStatusByCustomerOrSubscription({
+      await updateApiKeyByCustomerOrSubscription({
         customerId,
         subscriptionId,
         status: "inactive",
@@ -283,14 +288,15 @@ export async function POST(req: NextRequest) {
       const subscriptionId =
         typeof invoice.subscription === "string" ? invoice.subscription : null;
 
-      await updateApiKeyStatusByCustomerOrSubscription({
+      await updateApiKeyByCustomerOrSubscription({
         customerId,
         subscriptionId,
         status: "active",
+        resetUsage: true,
       });
 
       console.log(
-        `[WEBHOOK] payment succeeded; API key marked active for customer ${customerId}`
+        `[WEBHOOK] payment succeeded; API key marked active and usage reset for customer ${customerId}`
       );
     }
 
