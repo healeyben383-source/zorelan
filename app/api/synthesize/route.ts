@@ -12,6 +12,11 @@ type ProviderName = "openai" | "anthropic" | "perplexity";
 type AgreementLevel = "high" | "medium" | "low";
 type RiskLevel = "low" | "moderate" | "high";
 type TrustLabel = "high" | "moderate" | "low";
+type DisagreementType =
+  | "none"
+  | "additive_nuance"
+  | "explanation_variation"
+  | "material_conflict";
 
 type AnswersPayload = {
   openai: string;
@@ -38,6 +43,8 @@ type DecisionVerification = {
   riskLevel: RiskLevel;
   keyDisagreement: string;
   recommendedAction: string;
+  finalConclusionAligned: boolean;
+  disagreementType: DisagreementType;
 };
 
 type TrustScore = {
@@ -77,27 +84,43 @@ function getProviderLabel(provider: ProviderName): string {
   }
 }
 
-function getRiskLevel(
-  agreementLevel: AgreementLevel,
-  likelyConflict: boolean
-): RiskLevel {
-  if (likelyConflict || agreementLevel === "low") {
+function getModelsAligned(input: {
+  totalProviders: number;
+  finalConclusionAligned: boolean;
+  agreementLevel: AgreementLevel;
+}): number {
+  if (input.finalConclusionAligned) {
+    return input.totalProviders;
+  }
+
+  if (input.agreementLevel === "low") {
+    return 1;
+  }
+
+  return Math.max(1, input.totalProviders - 1);
+}
+
+function getRiskLevel(input: {
+  agreementLevel: AgreementLevel;
+  disagreementType: DisagreementType;
+  finalConclusionAligned: boolean;
+}): RiskLevel {
+  if (
+    input.disagreementType === "material_conflict" ||
+    !input.finalConclusionAligned ||
+    input.agreementLevel === "low"
+  ) {
     return "high";
   }
 
-  if (agreementLevel === "medium") {
+  if (
+    input.agreementLevel === "medium" &&
+    input.disagreementType === "explanation_variation"
+  ) {
     return "moderate";
   }
 
   return "low";
-}
-
-function getModelsAligned(agreementLevel: AgreementLevel): number {
-  if (agreementLevel === "low") {
-    return 1;
-  }
-
-  return 2;
 }
 
 function clamp(value: number, min: number, max: number): number {
@@ -125,7 +148,7 @@ function averageQualityScore(
 
 function getAgreementBaseScore(agreementLevel: AgreementLevel): number {
   if (agreementLevel === "high") return 90;
-  if (agreementLevel === "medium") return 72;
+  if (agreementLevel === "medium") return 74;
   return 42;
 }
 
@@ -137,16 +160,17 @@ function getTrustLabel(score: number): TrustLabel {
 
 function buildTrustReason(input: {
   agreementLevel: AgreementLevel;
-  likelyConflict: boolean;
+  disagreementType: DisagreementType;
+  finalConclusionAligned: boolean;
   averageQuality: number;
   riskLevel: RiskLevel;
 }): string {
   const agreementText =
     input.agreementLevel === "high"
-      ? "Models strongly agree"
+      ? "Models strongly agree on the core conclusion"
       : input.agreementLevel === "medium"
-      ? "Models partially agree"
-      : "Models show meaningful divergence";
+      ? "Models broadly align on the core conclusion"
+      : "Models diverge on the core conclusion";
 
   const qualityText =
     input.averageQuality >= 8
@@ -155,9 +179,14 @@ function buildTrustReason(input: {
       ? "provider output quality is solid"
       : "provider output quality is mixed";
 
-  const conflictText = input.likelyConflict
-    ? "and conflict is present"
-    : "and conflict is limited";
+  const disagreementText =
+    input.disagreementType === "none"
+      ? "with no meaningful disagreement"
+      : input.disagreementType === "additive_nuance"
+      ? "with only additive nuance"
+      : input.disagreementType === "explanation_variation"
+      ? "with minor variation in explanation"
+      : "with material conflict between responses";
 
   const riskText =
     input.riskLevel === "low"
@@ -166,12 +195,17 @@ function buildTrustReason(input: {
       ? "overall risk is moderate."
       : "overall risk is elevated.";
 
-  return `${agreementText}, ${qualityText}, ${conflictText}; ${riskText}`;
+  const alignmentText = input.finalConclusionAligned
+    ? "The final conclusion is aligned,"
+    : "The final conclusion is not aligned,";
+
+  return `${alignmentText} ${agreementText}, ${qualityText}, ${disagreementText}; ${riskText}`;
 }
 
 function calculateTrustScore(input: {
   agreementLevel: AgreementLevel;
-  likelyConflict: boolean;
+  disagreementType: DisagreementType;
+  finalConclusionAligned: boolean;
   averageQuality: number;
   riskLevel: RiskLevel;
 }): TrustScore {
@@ -183,14 +217,31 @@ function calculateTrustScore(input: {
     qualityNormalized * 0.30 +
     100 * 0.15;
 
-  if (input.likelyConflict) {
+  if (!input.finalConclusionAligned) {
     score -= 12;
   }
 
+  if (input.disagreementType === "explanation_variation") {
+    score -= 4;
+  } else if (input.disagreementType === "material_conflict") {
+    score -= 18;
+  }
+
   if (input.riskLevel === "moderate") {
-    score -= 6;
+    score -= 4;
   } else if (input.riskLevel === "high") {
-    score -= 14;
+    score -= 12;
+  }
+
+  const isStrongAlignedCase =
+    input.finalConclusionAligned &&
+    input.agreementLevel === "high" &&
+    input.riskLevel === "low" &&
+    input.averageQuality >= 7 &&
+    input.disagreementType !== "material_conflict";
+
+  if (isStrongAlignedCase) {
+    score = Math.max(score, 84);
   }
 
   const finalScore = Math.round(clamp(score, 0, 100));
@@ -200,7 +251,8 @@ function calculateTrustScore(input: {
     label: getTrustLabel(finalScore),
     reason: buildTrustReason({
       agreementLevel: input.agreementLevel,
-      likelyConflict: input.likelyConflict,
+      disagreementType: input.disagreementType,
+      finalConclusionAligned: input.finalConclusionAligned,
       averageQuality: input.averageQuality,
       riskLevel: input.riskLevel,
     }),
@@ -312,11 +364,16 @@ function buildVerificationSystemPrompt() {
     "You will be given a question, a synthesized answer, and a structured summary extracted from two AI responses.",
     "Return valid JSON only.",
     "Use this exact shape:",
-    '{"verdict":"string","keyDisagreement":"string","recommendedAction":"string"}',
+    '{"verdict":"string","keyDisagreement":"string","recommendedAction":"string","finalConclusionAligned":boolean,"disagreementType":"none|additive_nuance|explanation_variation|material_conflict"}',
     "Rules:",
     "- verdict should be a concise decision-oriented conclusion.",
     "- keyDisagreement should capture the main tension, tradeoff, or area of nuance between the two responses.",
     "- recommendedAction should be a practical next step.",
+    "- finalConclusionAligned should be true when both responses support the same main conclusion, even if they differ in explanation or include extra detail.",
+    "- disagreementType must be one of: none, additive_nuance, explanation_variation, material_conflict.",
+    "- Use additive_nuance when one response mostly adds correct detail without changing the core conclusion.",
+    "- Use explanation_variation when both responses support the same conclusion but differ in framing, emphasis, or supporting reasoning.",
+    "- Use material_conflict only when the main recommendation, conclusion, or decision materially differs.",
     "- Keep all fields concise and useful.",
   ].join(" ");
 }
@@ -349,6 +406,9 @@ function buildVerificationUserPrompt(input: {
       2
     ),
     "",
+    "Classify whether the two model responses align on the main conclusion.",
+    "Do not treat minor supporting detail or added context as material conflict.",
+    "",
     "Return JSON only.",
   ].join("\n");
 }
@@ -376,10 +436,21 @@ function tryParseStructuredJson(raw: string): StructuredSynthesis | null {
   }
 }
 
+function isDisagreementType(value: unknown): value is DisagreementType {
+  return (
+    value === "none" ||
+    value === "additive_nuance" ||
+    value === "explanation_variation" ||
+    value === "material_conflict"
+  );
+}
+
 function tryParseDecisionVerification(raw: string): {
   verdict: string;
   keyDisagreement: string;
   recommendedAction: string;
+  finalConclusionAligned: boolean;
+  disagreementType: DisagreementType;
 } | null {
   try {
     const cleaned = stripCodeFences(raw);
@@ -390,7 +461,9 @@ function tryParseDecisionVerification(raw: string): {
       typeof parsed !== "object" ||
       typeof parsed.verdict !== "string" ||
       typeof parsed.keyDisagreement !== "string" ||
-      typeof parsed.recommendedAction !== "string"
+      typeof parsed.recommendedAction !== "string" ||
+      typeof parsed.finalConclusionAligned !== "boolean" ||
+      !isDisagreementType(parsed.disagreementType)
     ) {
       return null;
     }
@@ -399,6 +472,8 @@ function tryParseDecisionVerification(raw: string): {
       verdict: parsed.verdict.trim(),
       keyDisagreement: parsed.keyDisagreement.trim(),
       recommendedAction: parsed.recommendedAction.trim(),
+      finalConclusionAligned: parsed.finalConclusionAligned,
+      disagreementType: parsed.disagreementType,
     };
   } catch {
     return null;
@@ -428,18 +503,62 @@ function buildFallbackStructuredSynthesis(
   };
 }
 
+function buildFallbackDecisionVerification(input: {
+  structuredSynthesis: StructuredSynthesis;
+  agreementLevel: AgreementLevel;
+  likelyConflict: boolean;
+  totalProviders: number;
+}): DecisionVerification {
+  const finalConclusionAligned = input.agreementLevel !== "low";
+
+  const disagreementType: DisagreementType =
+    input.agreementLevel === "high"
+      ? "none"
+      : input.agreementLevel === "medium"
+      ? input.likelyConflict
+        ? "explanation_variation"
+        : "additive_nuance"
+      : "material_conflict";
+
+  return {
+    verdict: input.structuredSynthesis.finalAnswer,
+    consensus: {
+      level: finalConclusionAligned
+        ? input.agreementLevel === "high"
+          ? "high"
+          : "medium"
+        : input.agreementLevel,
+      modelsAligned: getModelsAligned({
+        totalProviders: input.totalProviders,
+        finalConclusionAligned,
+        agreementLevel: input.agreementLevel,
+      }),
+    },
+    riskLevel: getRiskLevel({
+      agreementLevel: input.agreementLevel,
+      disagreementType,
+      finalConclusionAligned,
+    }),
+    keyDisagreement: input.structuredSynthesis.keyDifference,
+    recommendedAction: input.structuredSynthesis.decisionRule,
+    finalConclusionAligned,
+    disagreementType,
+  };
+}
+
 async function buildDecisionVerification(input: {
   prompt: string;
   synthesis: string;
   structuredSynthesis: StructuredSynthesis;
   agreementLevel: AgreementLevel;
   likelyConflict: boolean;
+  totalProviders: number;
 }): Promise<DecisionVerification> {
   try {
     const verificationCompletion = await withTimeout(
       openai.chat.completions.create({
         model: "gpt-4o-mini",
-        max_tokens: 180,
+        max_tokens: 220,
         response_format: { type: "json_object" },
         messages: [
           {
@@ -460,33 +579,45 @@ async function buildDecisionVerification(input: {
     const parsed = tryParseDecisionVerification(raw);
 
     if (parsed) {
+      const consensusLevel: AgreementLevel = parsed.finalConclusionAligned
+        ? input.agreementLevel === "high"
+          ? "high"
+          : "medium"
+        : input.agreementLevel;
+
       return {
         verdict: parsed.verdict || input.structuredSynthesis.finalAnswer,
         consensus: {
-          level: input.agreementLevel,
-          modelsAligned: getModelsAligned(input.agreementLevel),
+          level: consensusLevel,
+          modelsAligned: getModelsAligned({
+            totalProviders: input.totalProviders,
+            finalConclusionAligned: parsed.finalConclusionAligned,
+            agreementLevel: input.agreementLevel,
+          }),
         },
-        riskLevel: getRiskLevel(input.agreementLevel, input.likelyConflict),
+        riskLevel: getRiskLevel({
+          agreementLevel: input.agreementLevel,
+          disagreementType: parsed.disagreementType,
+          finalConclusionAligned: parsed.finalConclusionAligned,
+        }),
         keyDisagreement:
           parsed.keyDisagreement || input.structuredSynthesis.keyDifference,
         recommendedAction:
           parsed.recommendedAction || input.structuredSynthesis.decisionRule,
+        finalConclusionAligned: parsed.finalConclusionAligned,
+        disagreementType: parsed.disagreementType,
       };
     }
   } catch (error) {
     console.error("[/api/synthesize] verification_error:", error);
   }
 
-  return {
-    verdict: input.structuredSynthesis.finalAnswer,
-    consensus: {
-      level: input.agreementLevel,
-      modelsAligned: getModelsAligned(input.agreementLevel),
-    },
-    riskLevel: getRiskLevel(input.agreementLevel, input.likelyConflict),
-    keyDisagreement: input.structuredSynthesis.keyDifference,
-    recommendedAction: input.structuredSynthesis.decisionRule,
-  };
+  return buildFallbackDecisionVerification({
+    structuredSynthesis: input.structuredSynthesis,
+    agreementLevel: input.agreementLevel,
+    likelyConflict: input.likelyConflict,
+    totalProviders: input.totalProviders,
+  });
 }
 
 export async function POST(req: NextRequest) {
@@ -629,6 +760,7 @@ export async function POST(req: NextRequest) {
       structuredSynthesis,
       agreementLevel: comparison.agreementLevel,
       likelyConflict: comparison.likelyConflict,
+      totalProviders: selectedProviders.length,
     });
 
     const taskType = detectTaskType(prompt);
@@ -649,8 +781,9 @@ export async function POST(req: NextRequest) {
     );
 
     const trustScore = calculateTrustScore({
-      agreementLevel: comparison.agreementLevel,
-      likelyConflict: comparison.likelyConflict,
+      agreementLevel: decisionVerification.consensus.level,
+      disagreementType: decisionVerification.disagreementType,
+      finalConclusionAligned: decisionVerification.finalConclusionAligned,
       averageQuality: averageQualityScore(
         structuredSynthesis,
         selectedProviders
@@ -672,6 +805,8 @@ export async function POST(req: NextRequest) {
         riskLevel: decisionVerification.riskLevel,
         keyDisagreement: decisionVerification.keyDisagreement,
         recommendedAction: decisionVerification.recommendedAction,
+        finalConclusionAligned: decisionVerification.finalConclusionAligned,
+        disagreementType: decisionVerification.disagreementType,
       },
 
       trustScore: {
@@ -685,6 +820,8 @@ export async function POST(req: NextRequest) {
         agreementLevel: comparison.agreementLevel,
         likelyConflict: comparison.likelyConflict,
         summary: comparison.summary,
+        finalConclusionAligned: decisionVerification.finalConclusionAligned,
+        disagreementType: decisionVerification.disagreementType,
       },
     });
   } catch (err: unknown) {

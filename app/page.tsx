@@ -6,6 +6,11 @@ type Mode = "execution" | "strategy" | "decision";
 type Context = "operator" | "general" | "student";
 type AppMode = "simple" | "pro";
 type ProviderName = "openai" | "anthropic" | "perplexity";
+type DisagreementType =
+  | "none"
+  | "additive_nuance"
+  | "explanation_variation"
+  | "material_conflict";
 
 interface Intent {
   goal: string;
@@ -36,6 +41,8 @@ interface DecisionVerification {
   riskLevel: "low" | "moderate" | "high";
   keyDisagreement: string;
   recommendedAction: string;
+  finalConclusionAligned?: boolean;
+  disagreementType?: DisagreementType;
 }
 
 interface TrustScore {
@@ -59,6 +66,8 @@ interface HistoryEntry {
     likelyConflict: boolean;
     overlapRatio?: number;
     summary: string;
+    finalConclusionAligned?: boolean;
+    disagreementType?: DisagreementType;
   } | null;
   decisionVerification?: DecisionVerification | null;
   trustScore?: TrustScore | null;
@@ -244,6 +253,14 @@ function getTrustLabel(label: "high" | "moderate" | "low") {
   return "Needs Review";
 }
 
+function getDisagreementLabel(disagreementType?: DisagreementType, likelyConflict?: boolean) {
+  if (disagreementType === "none") return "None";
+  if (disagreementType === "additive_nuance") return "None";
+  if (disagreementType === "explanation_variation") return "Minor";
+  if (disagreementType === "material_conflict") return "Present";
+  return likelyConflict ? "Present" : "Limited";
+}
+
 function Spinner() {
   return (
     <svg
@@ -416,6 +433,8 @@ export default function Home() {
     likelyConflict: boolean;
     overlapRatio?: number;
     summary: string;
+    finalConclusionAligned?: boolean;
+    disagreementType?: DisagreementType;
   } | null>(null);
   const [decisionVerification, setDecisionVerification] =
     useState<DecisionVerification | null>(null);
@@ -786,6 +805,18 @@ export default function Home() {
         ))}
       </>
     );
+
+  const displayedConfidenceLevel =
+    decisionVerification?.finalConclusionAligned
+      ? "high"
+      : decisionVerification?.consensus.level ??
+        comparison?.agreementLevel ??
+        "medium";
+
+  const displayedDisagreementLabel = getDisagreementLabel(
+    decisionVerification?.disagreementType ?? comparison?.disagreementType,
+    comparison?.likelyConflict
+  );
 
   return (
     <main className="min-h-screen px-4 py-10">
@@ -1210,14 +1241,14 @@ export default function Home() {
               <div className="text-xs uppercase tracking-wide opacity-50">
                 Verified Decision
               </div>
-              {comparison && (
+              {(comparison || decisionVerification) && (
                 <div
                   className={cx(
                     "text-xs font-medium px-3 py-1 rounded-full",
-                    getConfidenceBadgeClasses(comparison.agreementLevel)
+                    getConfidenceBadgeClasses(displayedConfidenceLevel)
                   )}
                 >
-                  {getConfidenceLabel(comparison.agreementLevel)}
+                  {getConfidenceLabel(displayedConfidenceLevel)}
                 </div>
               )}
             </div>
@@ -1255,7 +1286,7 @@ export default function Home() {
                         Confidence
                       </div>
                       <div className="text-sm font-medium">
-                        {comparison ? getConfidenceLabel(comparison.agreementLevel) : "—"}
+                        {getConfidenceLabel(displayedConfidenceLevel)}
                       </div>
                     </div>
 
@@ -1349,7 +1380,7 @@ export default function Home() {
                       Model Disagreement
                     </div>
                     <div className="text-sm font-medium">
-                      {comparison?.likelyConflict ? "Present" : "Limited"}
+                      {displayedDisagreementLabel}
                     </div>
                   </div>
                 </div>
