@@ -9,7 +9,17 @@ export type ComparisonSignal = {
 
 type DecisionDirection = "positive" | "negative" | "conditional" | "neutral";
 
-function normalize(text: string): string[] {
+type AnswerFeatures = {
+  direction: DecisionDirection;
+  positiveScore: number;
+  negativeScore: number;
+  conditionalScore: number;
+  cautionScore: number;
+  actionScore: number;
+  normalizedWords: Set<string>;
+};
+
+function normalizeWords(text: string): string[] {
   return text
     .toLowerCase()
     .replace(/[^a-z0-9\s]/g, " ")
@@ -25,8 +35,34 @@ function countMatches(text: string, phrases: string[]): number {
   );
 }
 
-function detectDecisionDirection(text: string): DecisionDirection {
+function clamp(value: number, min = 0, max = 1): number {
+  return Math.max(min, Math.min(max, value));
+}
+
+function getTokenOverlapRatio(aWords: Set<string>, bWords: Set<string>): number {
+  const overlapCount = [...aWords].filter((word) => bWords.has(word)).length;
+  const baseSize = Math.max(Math.min(aWords.size, bWords.size), 1);
+  return overlapCount / baseSize;
+}
+
+function extractFeatures(text: string): AnswerFeatures {
   const lower = text.toLowerCase();
+
+  const positivePhrases = [
+    "yes",
+    "should",
+    "recommended",
+    "advisable",
+    "good idea",
+    "worth it",
+    "go ahead",
+    "do it",
+    "beneficial",
+    "healthy",
+    "effective",
+    "useful",
+    "best option",
+  ];
 
   const negativePhrases = [
     "do not",
@@ -38,51 +74,90 @@ function detectDecisionDirection(text: string): DecisionDirection {
     "bad idea",
     "avoid",
     "unwise",
-    "no,",
-    "no ",
     "never",
-  ];
-
-  const positivePhrases = [
-    "yes,",
-    "yes ",
-    "should",
-    "recommended",
-    "advisable",
-    "good idea",
-    "worth it",
-    "go ahead",
-    "do it",
+    "risky",
+    "dangerous",
+    "harmful",
+    "not healthy",
+    "not worth it",
   ];
 
   const conditionalPhrases = [
     "it depends",
     "depends on",
     "depending on",
-    "if",
-    "unless",
+    "in some cases",
     "under certain conditions",
+    "that said",
     "in that case",
     "otherwise",
+    "context matters",
+    "case by case",
   ];
 
-  const negativeScore = countMatches(lower, negativePhrases);
+  const cautionPhrases = [
+    "be careful",
+    "caution",
+    "careful",
+    "risk",
+    "tradeoff",
+    "trade-off",
+    "downside",
+    "uncertain",
+    "uncertainty",
+    "not always",
+    "not necessarily",
+    "long-term",
+    "side effects",
+    "depends",
+  ];
+
+  const actionPhrases = [
+    "you should",
+    "consider",
+    "recommend",
+    "best to",
+    "the safest option",
+    "the better option",
+    "do this",
+    "avoid this",
+  ];
+
   const positiveScore = countMatches(lower, positivePhrases);
-  const conditionalScore = countMatches(lower, conditionalPhrases);
+  const negativeScore = countMatches(lower, negativePhrases);
+  const conditionalScore =
+    countMatches(lower, conditionalPhrases) +
+    countMatches(lower, [" if ", " unless ", " depending "]);
+  const cautionScore = countMatches(lower, cautionPhrases);
+  const actionScore = countMatches(lower, actionPhrases);
 
-  if (negativeScore > positiveScore && negativeScore >= 1) {
-    return conditionalScore >= 2 ? "conditional" : "negative";
-  }
+  let direction: DecisionDirection = "neutral";
 
-  if (positiveScore > negativeScore && positiveScore >= 1) {
-    return conditionalScore >= 2 ? "conditional" : "positive";
-  }
+  const positiveMargin = positiveScore - negativeScore;
+  const negativeMargin = negativeScore - positiveScore;
 
   if (conditionalScore >= 2) {
-    return "conditional";
+    direction = "conditional";
+  } else if (positiveMargin >= 1 && positiveScore >= 1) {
+    direction = "positive";
+  } else if (negativeMargin >= 1 && negativeScore >= 1) {
+    direction = "negative";
+  } else if (
+    conditionalScore >= 1 &&
+    (positiveScore >= 1 || negativeScore >= 1 || cautionScore >= 1)
+  ) {
+    direction = "conditional";
   }
 
-  return "neutral";
+  return {
+    direction,
+    positiveScore,
+    negativeScore,
+    conditionalScore,
+    cautionScore,
+    actionScore,
+    normalizedWords: new Set(normalizeWords(text)),
+  };
 }
 
 function getDirectionAgreementScore(
@@ -100,13 +175,10 @@ function getDirectionAgreementScore(
     pair === "conditional:positive" ||
     pair === "conditional:neutral"
   ) {
-    return 0.65;
+    return 0.7;
   }
 
-  if (
-    pair === "negative:neutral" ||
-    pair === "positive:neutral"
-  ) {
+  if (pair === "negative:neutral" || pair === "positive:neutral") {
     return 0.45;
   }
 
@@ -117,70 +189,130 @@ function getDirectionAgreementScore(
   return 0.35;
 }
 
-export function compareAnswers(a: string, b: string): ComparisonSignal {
-  const aWords = new Set(normalize(a));
-  const bWords = new Set(normalize(b));
+function getToneSimilarity(a: AnswerFeatures, b: AnswerFeatures): number {
+  const cautionGap = Math.abs(a.cautionScore - b.cautionScore);
+  const actionGap = Math.abs(a.actionScore - b.actionScore);
 
-  const overlapCount = [...aWords].filter((word) => bWords.has(word)).length;
-  const baseSize = Math.max(Math.min(aWords.size, bWords.size), 1);
-  const overlapRatio = overlapCount / baseSize;
+  const cautionSimilarity = 1 - clamp(cautionGap / 4);
+  const actionSimilarity = 1 - clamp(actionGap / 3);
+
+  return cautionSimilarity * 0.6 + actionSimilarity * 0.4;
+}
+
+function getRecommendationStrengthSimilarity(
+  a: AnswerFeatures,
+  b: AnswerFeatures
+): number {
+  const aStrength = Math.max(a.positiveScore, a.negativeScore);
+  const bStrength = Math.max(b.positiveScore, b.negativeScore);
+
+  const gap = Math.abs(aStrength - bStrength);
+  return 1 - clamp(gap / 4);
+}
+
+export function compareAnswers(a: string, b: string): ComparisonSignal {
+  const featuresA = extractFeatures(a);
+  const featuresB = extractFeatures(b);
+
+  const overlapRatio = getTokenOverlapRatio(
+    featuresA.normalizedWords,
+    featuresB.normalizedWords
+  );
+
+  const directionAgreement = getDirectionAgreementScore(
+    featuresA.direction,
+    featuresB.direction
+  );
+
+  const toneSimilarity = getToneSimilarity(featuresA, featuresB);
+  const recommendationStrengthSimilarity = getRecommendationStrengthSimilarity(
+    featuresA,
+    featuresB
+  );
 
   const lowerA = a.toLowerCase();
   const lowerB = b.toLowerCase();
 
-  const aDirection = detectDecisionDirection(lowerA);
-  const bDirection = detectDecisionDirection(lowerB);
-  const directionAgreement = getDirectionAgreementScore(aDirection, bDirection);
-
-  const conflictTerms = [
-    "however",
-    "instead",
-    "alternatively",
-    "on the other hand",
-    "tradeoff",
-    "trade-off",
-    "versus",
-    "vs",
+  const strongConflictPhrases = [
+    "do not",
+    "should not",
+    "don't",
+    "avoid",
+    "never",
+    "not recommended",
+    "bad idea",
+    "unwise",
   ];
 
-  const softConflictTerms = ["depends", "but", "if", "unless", "otherwise"];
+  const strongApprovalPhrases = [
+    "yes",
+    "recommended",
+    "good idea",
+    "worth it",
+    "go ahead",
+    "do it",
+    "advisable",
+  ];
 
-  const hardConflictSignal =
-    conflictTerms.some((term) => lowerA.includes(term)) ||
-    conflictTerms.some((term) => lowerB.includes(term));
+  const aStrongConflict = countMatches(lowerA, strongConflictPhrases);
+  const bStrongConflict = countMatches(lowerB, strongConflictPhrases);
 
-  const softConflictCount =
-    softConflictTerms.filter((term) => lowerA.includes(term)).length +
-    softConflictTerms.filter((term) => lowerB.includes(term)).length;
+  const aStrongApproval = countMatches(lowerA, strongApprovalPhrases);
+  const bStrongApproval = countMatches(lowerB, strongApprovalPhrases);
+
+  const directOpposition =
+    (aStrongConflict >= 1 && bStrongApproval >= 1) ||
+    (aStrongApproval >= 1 && bStrongConflict >= 1);
+
+  const heavyConditionality =
+    featuresA.conditionalScore >= 2 || featuresB.conditionalScore >= 2;
+
+  const cautionMismatch =
+    Math.abs(featuresA.cautionScore - featuresB.cautionScore) >= 3;
 
   const likelyConflict =
     directionAgreement === 0 ||
-    hardConflictSignal ||
-    (softConflictCount >= 3 && directionAgreement < 0.7);
+    directOpposition ||
+    (directionAgreement < 0.7 && cautionMismatch && overlapRatio < 0.35);
 
-  const combinedScore = overlapRatio * 0.45 + directionAgreement * 0.55;
+  const combinedScore =
+    overlapRatio * 0.28 +
+    directionAgreement * 0.4 +
+    toneSimilarity * 0.17 +
+    recommendationStrengthSimilarity * 0.15;
 
   let agreementLevel: AgreementLevel = "low";
 
-  if (combinedScore >= 0.72) {
+  if (combinedScore >= 0.74) {
     agreementLevel = "high";
-  } else if (combinedScore >= 0.48) {
+  } else if (combinedScore >= 0.5) {
     agreementLevel = "medium";
   }
 
-  if (directionAgreement === 0) {
+  if (directionAgreement === 0 || directOpposition) {
     agreementLevel = "low";
-  } else if (hardConflictSignal && agreementLevel === "high" && directionAgreement < 1) {
+  } else if (
+    agreementLevel === "high" &&
+    heavyConditionality &&
+    directionAgreement < 1
+  ) {
+    agreementLevel = "medium";
+  } else if (
+    agreementLevel === "high" &&
+    overlapRatio < 0.2 &&
+    toneSimilarity < 0.55
+  ) {
     agreementLevel = "medium";
   }
 
   let summary = "The two model outputs diverge meaningfully.";
 
   if (agreementLevel === "high") {
-    summary = "The two model outputs are broadly aligned on the main conclusion.";
+    summary =
+      "The two model outputs are broadly aligned on the main conclusion, with only minor framing differences.";
   } else if (agreementLevel === "medium") {
     summary =
-      "The two model outputs partially align on the main conclusion but differ in emphasis, caveats, or conditions.";
+      "The two model outputs partially align on the main conclusion but differ in caveats, framing, or conditions.";
   }
 
   return {
