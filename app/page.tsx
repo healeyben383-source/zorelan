@@ -10,6 +10,7 @@ type DisagreementType =
   | "none"
   | "additive_nuance"
   | "explanation_variation"
+  | "conditional_alignment"
   | "material_conflict";
 
 interface Intent {
@@ -210,7 +211,7 @@ function renderInline(text: string) {
   );
 }
 
-function getProviderLabel(provider: ProviderName): string {
+function getProviderLabel(provider: ProviderName) {
   switch (provider) {
     case "openai":
       return "GPT-4o mini";
@@ -253,10 +254,14 @@ function getTrustLabel(label: "high" | "moderate" | "low") {
   return "Needs Review";
 }
 
-function getDisagreementLabel(disagreementType?: DisagreementType, likelyConflict?: boolean) {
+function getDisagreementLabel(
+  disagreementType?: DisagreementType,
+  likelyConflict?: boolean
+) {
   if (disagreementType === "none") return "None";
-  if (disagreementType === "additive_nuance") return "None";
+  if (disagreementType === "additive_nuance") return "Minor";
   if (disagreementType === "explanation_variation") return "Minor";
+  if (disagreementType === "conditional_alignment") return "Conditional";
   if (disagreementType === "material_conflict") return "Present";
   return likelyConflict ? "Present" : "Limited";
 }
@@ -450,6 +455,7 @@ export default function Home() {
   const [history, setHistory] = useState<HistoryEntry[]>([]);
 
   const synthesisRef = useRef<HTMLDivElement>(null);
+  const resultsRef = useRef<HTMLDivElement>(null);
   const editableRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -634,6 +640,16 @@ export default function Home() {
 
       setAnswers(json.answers);
       setSelectedProviders((json.selectedProviders ?? []).slice(0, 2));
+      setComparison(json.comparison ?? null);
+      setDecisionVerification(json.decisionVerification ?? null);
+      setTrustScore(json.trustScore ?? null);
+
+      setTimeout(() => {
+        resultsRef.current?.scrollIntoView({
+          behavior: "smooth",
+          block: "start",
+        });
+      }, 100);
     } finally {
       setRunning(false);
     }
@@ -645,9 +661,6 @@ export default function Home() {
     setSynthesizing(true);
     setSynthesis(null);
     setStructuredSynthesis(null);
-    setComparison(null);
-    setDecisionVerification(null);
-    setTrustScore(null);
     setInsightCopied(false);
     setError(null);
 
@@ -806,12 +819,15 @@ export default function Home() {
       </>
     );
 
-  const displayedConfidenceLevel =
-    decisionVerification?.finalConclusionAligned
-      ? "high"
-      : decisionVerification?.consensus.level ??
-        comparison?.agreementLevel ??
-        "medium";
+  const displayedConfidenceLevel: "high" | "medium" | "low" =
+    decisionVerification?.consensus.level ??
+    comparison?.agreementLevel ??
+    "medium";
+
+  const displayedConsensusLevel: "high" | "medium" | "low" =
+    decisionVerification?.consensus.level ??
+    comparison?.agreementLevel ??
+    "medium";
 
   const displayedDisagreementLabel = getDisagreementLabel(
     decisionVerification?.disagreementType ?? comparison?.disagreementType,
@@ -1198,7 +1214,103 @@ export default function Home() {
         )}
 
         {answers && !running && (
-          <section className="space-y-4">
+          <section ref={resultsRef} className="space-y-4">
+            {(trustScore || decisionVerification) && (
+              <div className="rounded-2xl border border-black/10 p-5 dark:border-white/10 space-y-4 bg-black/[0.02] dark:bg-white/[0.02]">
+                <div className="flex items-center justify-between gap-3 flex-wrap">
+                  <div className="text-xs uppercase tracking-wide opacity-50">
+                    Analysis Summary
+                  </div>
+                  <div
+                    className={cx(
+                      "text-xs font-medium px-3 py-1 rounded-full",
+                      getConfidenceBadgeClasses(displayedConfidenceLevel)
+                    )}
+                  >
+                    {getConfidenceLabel(displayedConfidenceLevel)}
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                  <div className="rounded-xl border border-black/10 dark:border-white/10 p-4 space-y-1">
+                    <div className="text-xs uppercase tracking-wide opacity-50">
+                      Trust Score
+                    </div>
+                    <div className="text-2xl font-semibold leading-none">
+                      {trustScore?.score ?? "—"}
+                      <span className="text-sm font-normal opacity-40">/100</span>
+                    </div>
+                    {trustScore && (
+                      <div
+                        className={cx(
+                          "inline-flex rounded-full px-2.5 py-1 text-xs font-medium",
+                          getTrustBadgeClasses(trustScore.label)
+                        )}
+                      >
+                        {getTrustLabel(trustScore.label)}
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="rounded-xl border border-black/10 dark:border-white/10 p-4 space-y-1">
+                    <div className="text-xs uppercase tracking-wide opacity-50">
+                      Consensus
+                    </div>
+                    <div className="text-sm font-medium capitalize">
+                      {displayedConsensusLevel}
+                    </div>
+                    <div
+                      className={cx(
+                        "inline-flex rounded-full px-2.5 py-1 text-xs font-medium",
+                        getConfidenceBadgeClasses(displayedConsensusLevel)
+                      )}
+                    >
+                      {decisionVerification?.consensus.modelsAligned ?? 0}/2 aligned
+                    </div>
+                  </div>
+
+                  <div className="rounded-xl border border-black/10 dark:border-white/10 p-4 space-y-1">
+                    <div className="text-xs uppercase tracking-wide opacity-50">
+                      Risk
+                    </div>
+                    <div className="text-sm font-medium capitalize">
+                      {decisionVerification?.riskLevel ?? "—"}
+                    </div>
+                    {decisionVerification?.riskLevel && (
+                      <div
+                        className={cx(
+                          "inline-flex rounded-full px-2.5 py-1 text-xs font-medium capitalize",
+                          getRiskBadgeClasses(decisionVerification.riskLevel)
+                        )}
+                      >
+                        {decisionVerification.riskLevel}
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="rounded-xl border border-black/10 dark:border-white/10 p-4 space-y-1">
+                    <div className="text-xs uppercase tracking-wide opacity-50">
+                      Model Disagreement
+                    </div>
+                    <div className="text-sm font-medium">
+                      {displayedDisagreementLabel}
+                    </div>
+                  </div>
+                </div>
+
+                {trustScore?.reason && (
+                  <div className="rounded-xl border border-black/10 dark:border-white/10 p-4">
+                    <div className="text-xs uppercase tracking-wide opacity-50 mb-2">
+                      Why this score
+                    </div>
+                    <div className="text-sm leading-relaxed whitespace-pre-wrap break-words">
+                      {trustScore.reason}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
             <div className="text-xs uppercase tracking-wide opacity-50 text-center">
               AI Comparison
             </div>
@@ -1341,14 +1453,12 @@ export default function Home() {
                     </div>
                     <div className="flex items-center justify-between gap-2">
                       <div className="text-sm font-medium capitalize">
-                        {decisionVerification.consensus.level}
+                        {displayedConsensusLevel}
                       </div>
                       <div
                         className={cx(
                           "text-xs font-medium px-2.5 py-1 rounded-full",
-                          getConfidenceBadgeClasses(
-                            decisionVerification.consensus.level
-                          )
+                          getConfidenceBadgeClasses(displayedConsensusLevel)
                         )}
                       >
                         {decisionVerification.consensus.modelsAligned}/2 aligned

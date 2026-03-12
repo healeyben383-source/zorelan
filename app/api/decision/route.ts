@@ -58,6 +58,7 @@ type DisagreementType =
   | "none"
   | "additive_nuance"
   | "explanation_variation"
+  | "conditional_alignment"
   | "material_conflict";
 
 type ApiKeyRecord = {
@@ -232,24 +233,93 @@ function isDisagreementType(value: unknown): value is DisagreementType {
     value === "none" ||
     value === "additive_nuance" ||
     value === "explanation_variation" ||
+    value === "conditional_alignment" ||
     value === "material_conflict"
   );
 }
 
+function inferFallbackClassification(input: {
+  agreementLevel: AgreementLevel;
+  likelyConflict: boolean;
+}): {
+  finalConclusionAligned: boolean;
+  disagreementType: DisagreementType;
+} {
+  if (input.agreementLevel === "high") {
+    return {
+      finalConclusionAligned: true,
+      disagreementType: "none",
+    };
+  }
+
+  if (input.agreementLevel === "medium") {
+    if (input.likelyConflict) {
+      return {
+        finalConclusionAligned: false,
+        disagreementType: "conditional_alignment",
+      };
+    }
+
+    return {
+      finalConclusionAligned: true,
+      disagreementType: "additive_nuance",
+    };
+  }
+
+  return {
+    finalConclusionAligned: false,
+    disagreementType: "material_conflict",
+  };
+}
+
 function getModelsAligned(input: {
   totalProviders: number;
-  finalConclusionAligned: boolean;
   agreementLevel: AgreementLevel;
+  finalConclusionAligned: boolean;
+  disagreementType: DisagreementType;
 }): number {
-  if (input.finalConclusionAligned) {
+  if (input.totalProviders <= 1) {
     return input.totalProviders;
   }
 
-  if (input.agreementLevel === "low") {
-    return 1;
+  switch (input.disagreementType) {
+    case "none":
+    case "additive_nuance":
+    case "explanation_variation":
+      return input.totalProviders;
+
+    case "conditional_alignment":
+      return Math.max(1, input.totalProviders - 1);
+
+    case "material_conflict":
+      return 0;
+
+    default:
+      if (input.finalConclusionAligned) {
+        return input.totalProviders;
+      }
+
+      if (input.agreementLevel === "medium") {
+        return Math.max(1, input.totalProviders - 1);
+      }
+
+      return 0;
+  }
+}
+
+function getConsensusLevelFromAligned(
+  modelsAligned: number,
+  totalProviders: number
+): AgreementLevel {
+  if (modelsAligned >= totalProviders) {
+    return "high";
   }
 
-  return Math.max(1, input.totalProviders - 1);
+  if (modelsAligned > 0) {
+    return "medium";
+  }
+
+  return "low";
 }
 
 function getRiskLevel(input: {
@@ -261,20 +331,20 @@ function getRiskLevel(input: {
     return "high";
   }
 
-  if (!input.finalConclusionAligned) {
+  if (input.disagreementType === "conditional_alignment") {
+    return "moderate";
+  }
+
+  if (!input.finalConclusionAligned && input.agreementLevel === "low") {
     return "high";
+  }
+
+  if (!input.finalConclusionAligned) {
+    return "moderate";
   }
 
   if (input.agreementLevel === "low") {
-    return "high";
-  }
-
-  if (input.disagreementType === "explanation_variation") {
-    return "low";
-  }
-
-  if (input.disagreementType === "additive_nuance") {
-    return "low";
+    return "moderate";
   }
 
   return "low";
@@ -285,8 +355,12 @@ function getConfidenceReason(input: {
   disagreementType: DisagreementType;
   finalConclusionAligned: boolean;
 }): string {
-  if (!input.finalConclusionAligned) {
-    return "Models did not align on the main conclusion, so the answer should be reviewed carefully.";
+  if (input.disagreementType === "material_conflict") {
+    return "The models did not align on the main conclusion and materially conflicted, so the answer should be reviewed carefully.";
+  }
+
+  if (input.disagreementType === "conditional_alignment") {
+    return "A usable answer exists, but it depends on conditions or tradeoffs rather than clean model agreement.";
   }
 
   if (
@@ -301,6 +375,10 @@ function getConfidenceReason(input: {
     return "Models agreed on the core conclusion but differed in framing, emphasis, or supporting detail.";
   }
 
+  if (!input.finalConclusionAligned) {
+    return "The original answers did not cleanly support the same main conclusion, so caution is warranted.";
+  }
+
   return "Models broadly aligned, but there is still some nuance in how they approached the answer.";
 }
 
@@ -312,21 +390,20 @@ async function buildDecisionVerdict(params: {
   likelyConflict: boolean;
   verifiedAnswer: string;
 }): Promise<VerdictPayload> {
+  const fallback = inferFallbackClassification({
+    agreementLevel: params.agreementLevel,
+    likelyConflict: params.likelyConflict,
+  });
+
   const completion = await openai.chat.completions.create({
     model: "gpt-4o-mini",
-    max_tokens: 220,
+    max_tokens: 260,
     response_format: { type: "json_object" },
     messages: [
       {
         role: "system",
         content:
-          "You are a decision-verification engine. Return JSON only with this exact shape: " +
-          '{"verdict":"string","keyDisagreement":"string","recommendedAction":"string","finalConclusionAligned":boolean,"disagreementType":"none|additive_nuance|explanation_variation|material_conflict"}. ' +
-          "Keep each field concise, practical, and decision-oriented. " +
-          "finalConclusionAligned should be true when both responses support the same main conclusion, even if they differ in explanation or include extra detail. " +
-          "Use additive_nuance when one response mostly adds correct detail without changing the core conclusion. " +
-          "Use explanation_variation when both responses support the same conclusion but differ in framing, emphasis, or supporting reasoning. " +
-          "Use material_conflict only when the main recommendation, conclusion, or decision materially differs.",
+          'You are a decision-verification engine. Return JSON only with this exact shape: {"verdict":"string","keyDisagreement":"string","recommendedAction":"string","finalConclusionAligned":boolean,"disagreementType":"none|additive_nuance|explanation_variation|conditional_alignment|material_conflict"}. Judge alignment from the ORIGINAL model responses first. The verified synthesis can help summarize the situation, but it is not evidence that the original answers aligned. finalConclusionAligned should be true only when both responses support the same main conclusion. Use additive_nuance when one response mostly adds correct detail without changing the core conclusion. Use explanation_variation when both responses support the same conclusion but differ in framing, emphasis, or supporting reasoning. Use conditional_alignment when a usable combined takeaway exists only by adding conditions, context, or tradeoffs, but the original responses do not cleanly support the same main conclusion. Use material_conflict only when the main recommendation, conclusion, or decision materially differs.',
       },
       {
         role: "user",
@@ -342,7 +419,7 @@ async function buildDecisionVerdict(params: {
           "",
           `Verified synthesis: ${params.verifiedAnswer}`,
           "",
-          "Do not treat minor supporting detail or added context as material conflict.",
+          "Do not treat a coherent merged synthesis as proof that the original answers truly agreed.",
         ].join("\n"),
       },
     ],
@@ -350,24 +427,18 @@ async function buildDecisionVerdict(params: {
 
   try {
     const raw = completion.choices[0]?.message?.content ?? "{}";
-    const parsed = JSON.parse(raw);
-
-    const finalConclusionAligned =
-      typeof parsed.finalConclusionAligned === "boolean"
-        ? parsed.finalConclusionAligned
-        : params.agreementLevel !== "low";
+    const parsed = JSON.parse(stripCodeFences(raw));
 
     const disagreementType: DisagreementType = isDisagreementType(
       parsed.disagreementType
     )
       ? parsed.disagreementType
-      : params.agreementLevel === "high"
-      ? "none"
-      : params.agreementLevel === "medium"
-      ? params.likelyConflict
-        ? "explanation_variation"
-        : "additive_nuance"
-      : "material_conflict";
+      : fallback.disagreementType;
+
+    const finalConclusionAligned =
+      typeof parsed.finalConclusionAligned === "boolean"
+        ? parsed.finalConclusionAligned
+        : fallback.finalConclusionAligned;
 
     return {
       verdict:
@@ -379,35 +450,33 @@ async function buildDecisionVerdict(params: {
           ? parsed.keyDisagreement.trim()
           : disagreementType === "material_conflict"
           ? "The models differed on the main recommendation."
+          : disagreementType === "conditional_alignment"
+          ? "A usable answer depends on context, conditions, or tradeoffs."
           : "The models differed mainly in emphasis or supporting detail.",
       recommendedAction:
         typeof parsed.recommendedAction === "string" && parsed.recommendedAction.trim()
           ? parsed.recommendedAction.trim()
+          : disagreementType === "conditional_alignment"
+          ? "Choose based on the conditions or tradeoffs that matter most in your context."
           : "Use the verified synthesis as the base answer, then apply it to your context.",
       finalConclusionAligned,
       disagreementType,
     };
   } catch {
-    const finalConclusionAligned = params.agreementLevel !== "low";
-    const disagreementType: DisagreementType =
-      params.agreementLevel === "high"
-        ? "none"
-        : params.agreementLevel === "medium"
-        ? params.likelyConflict
-          ? "explanation_variation"
-          : "additive_nuance"
-        : "material_conflict";
-
     return {
       verdict: "Proceed based on the verified synthesis.",
       keyDisagreement:
-        disagreementType === "material_conflict"
+        fallback.disagreementType === "material_conflict"
           ? "The models diverged on the strongest recommendation."
+          : fallback.disagreementType === "conditional_alignment"
+          ? "A usable answer depends on context, conditions, or tradeoffs."
           : "The models differed mainly in emphasis and execution details.",
       recommendedAction:
-        "Use the verified synthesis as the base answer, then validate it in context.",
-      finalConclusionAligned,
-      disagreementType,
+        fallback.disagreementType === "conditional_alignment"
+          ? "Choose based on the conditions or tradeoffs that matter most in your context."
+          : "Use the verified synthesis as the base answer, then validate it in context.",
+      finalConclusionAligned: fallback.finalConclusionAligned,
+      disagreementType: fallback.disagreementType,
     };
   }
 }
@@ -600,7 +669,9 @@ export async function POST(req: NextRequest) {
         {
           role: "system",
           content:
-            "You are a synthesis engine. Combine the two AI responses into one superior final answer. Be concise and direct. Do not mention that you are combining two answers.",
+            "You are a synthesis engine. Combine the two AI responses into one superior final answer. " +
+            "Be concise and direct. Preserve important caveats and tradeoffs. " +
+            "Do not mention that you are combining two answers.",
         },
         {
           role: "user",
@@ -618,7 +689,7 @@ export async function POST(req: NextRequest) {
     const verifiedAnswer =
       stripCodeFences(synthesisCompletion.choices[0]?.message?.content ?? "");
 
-    const verdictPayload = await buildDecisionVerdict({
+    let verdictPayload = await buildDecisionVerdict({
       prompt,
       answerA,
       answerB,
@@ -626,6 +697,17 @@ export async function POST(req: NextRequest) {
       likelyConflict: comparison.likelyConflict,
       verifiedAnswer,
     });
+
+        if (comparison.agreementLevel === "high") {
+      verdictPayload.finalConclusionAligned = true;
+
+      if (
+        verdictPayload.disagreementType === "material_conflict" ||
+        verdictPayload.disagreementType === "conditional_alignment"
+      ) {
+        verdictPayload.disagreementType = "explanation_variation";
+      }
+    }
 
     const qualityCompletion = await openai.chat.completions.create({
       model: "gpt-4o-mini",
@@ -647,7 +729,7 @@ export async function POST(req: NextRequest) {
 
     try {
       const parsed = JSON.parse(
-        qualityCompletion.choices[0]?.message?.content ?? "{}"
+        stripCodeFences(qualityCompletion.choices[0]?.message?.content ?? "{}")
       );
       scoreA = parsed.scoreA ?? 7;
       scoreB = parsed.scoreB ?? 7;
@@ -670,17 +752,15 @@ export async function POST(req: NextRequest) {
 
     const modelsAligned = getModelsAligned({
       totalProviders: limitedProviders.length,
-      finalConclusionAligned: verdictPayload.finalConclusionAligned,
       agreementLevel: comparison.agreementLevel,
+      finalConclusionAligned: verdictPayload.finalConclusionAligned,
+      disagreementType: verdictPayload.disagreementType,
     });
 
-    let consensusLevel: AgreementLevel = "low";
-
-    if (modelsAligned === limitedProviders.length) {
-      consensusLevel = "high";
-    } else if (modelsAligned > 0) {
-      consensusLevel = "medium";
-    }
+    const consensusLevel = getConsensusLevelFromAligned(
+      modelsAligned,
+      limitedProviders.length
+    );
 
     const riskLevel = getRiskLevel({
       agreementLevel: comparison.agreementLevel,
@@ -690,20 +770,15 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({
       ok: true,
-
       verdict: verdictPayload.verdict,
-
       consensus: {
         level: consensusLevel,
         models_aligned: modelsAligned,
       },
-
       risk_level: riskLevel,
       key_disagreement: verdictPayload.keyDisagreement,
       recommended_action: verdictPayload.recommendedAction,
-
       analysis: verifiedAnswer,
-
       verified_answer: verifiedAnswer,
       confidence: consensusLevel,
       confidence_reason: getConfidenceReason({
@@ -711,14 +786,11 @@ export async function POST(req: NextRequest) {
         disagreementType: verdictPayload.disagreementType,
         finalConclusionAligned: verdictPayload.finalConclusionAligned,
       }),
-
       providers_used: limitedProviders,
-
       verification: {
         final_conclusion_aligned: verdictPayload.finalConclusionAligned,
         disagreement_type: verdictPayload.disagreementType,
       },
-
       model_diagnostics: {
         [providerA]: {
           quality_score: scoreA,
@@ -729,7 +801,6 @@ export async function POST(req: NextRequest) {
           duration_ms: resultB.durationMs,
         },
       },
-
       meta: {
         task_type: taskType,
         overlap_ratio: comparison.overlapRatio,
@@ -738,7 +809,6 @@ export async function POST(req: NextRequest) {
         likely_conflict: comparison.likelyConflict,
         disagreement_type: verdictPayload.disagreementType,
       },
-
       usage: customerKeyMeta ?? null,
     });
   } catch (err) {
