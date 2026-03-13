@@ -1,7 +1,7 @@
 import dotenv from "dotenv";
 dotenv.config({ path: ".env.local" });
 
-import { judgeSemanticAgreement } from "../lib/synthesis/semanticAgreement";
+import { judgeSemanticAgreement } from "../../lib/synthesis/semanticAgreement";
 
 const cases = [
   {
