@@ -64,12 +64,17 @@ export async function updateProviderScore(input: {
   entry.totalRuns += 1;
   entry.totalDurationMs += input.durationMs;
 
+  // Mutually exclusive run outcomes:
+  // - timedOut => timeout
+  // - usedFallback (without timeout) => fallback
+  // - otherwise => success
+  //
+  // We deliberately do NOT increment failures alongside timeout/fallback,
+  // because that caused double-penalization in ranking.
   if (input.timedOut) {
     entry.timeouts += 1;
-    entry.failures += 1;
   } else if (input.usedFallback) {
     entry.fallbacks += 1;
-    entry.failures += 1;
   } else {
     entry.successes += 1;
   }
@@ -99,10 +104,10 @@ function clamp(value: number, min = 0, max = 1) {
 export function calculateProviderRankScore(score: ProviderScore): number {
   const totalRuns = Math.max(score.totalRuns, 1);
 
-  const reliabilityScore =
-    1 - (score.failures + score.timeouts + score.fallbacks) / totalRuns;
+  const negativeOutcomes = score.failures + score.timeouts + score.fallbacks;
 
-  const successScore = score.successes / totalRuns;
+  const reliabilityScore = clamp(1 - negativeOutcomes / totalRuns);
+  const successScore = clamp(score.successes / totalRuns);
 
   const avgDurationMs = score.totalDurationMs / totalRuns;
   const speedScore = clamp((20000 - avgDurationMs) / 18000);
