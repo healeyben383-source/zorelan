@@ -242,6 +242,54 @@ function getTrustLabel(score: number): TrustLabel {
   return "low";
 }
 
+function isCleanHighAgreementCase(input: {
+  agreementLevel: AgreementLevel;
+  finalConclusionAligned: boolean;
+  disagreementType: DisagreementType;
+  riskLevel: RiskLevel;
+}): boolean {
+  return (
+    input.agreementLevel === "high" &&
+    input.finalConclusionAligned &&
+    input.riskLevel === "low" &&
+    (input.disagreementType === "none" ||
+      input.disagreementType === "additive_nuance" ||
+      input.disagreementType === "explanation_variation")
+  );
+}
+
+function getAgreementText(
+  agreementLevel: AgreementLevel,
+  finalConclusionAligned: boolean,
+  disagreementType: DisagreementType,
+  riskLevel: RiskLevel
+): string {
+  if (
+    isCleanHighAgreementCase({
+      agreementLevel,
+      finalConclusionAligned,
+      disagreementType,
+      riskLevel,
+    })
+  ) {
+    return "Models strongly agree on the core conclusion";
+  }
+
+  if (agreementLevel === "medium" && finalConclusionAligned) {
+    return "Models partially align on the core conclusion";
+  }
+
+  if (agreementLevel === "high" && !finalConclusionAligned) {
+    return "Models broadly align in wording, but the main conclusion still requires review";
+  }
+
+  if (agreementLevel === "medium" && !finalConclusionAligned) {
+    return "Models only partially align on the core conclusion";
+  }
+
+  return "Models diverge on the core conclusion";
+}
+
 function buildTrustReason(input: {
   agreementLevel: AgreementLevel;
   disagreementType: DisagreementType;
@@ -249,12 +297,12 @@ function buildTrustReason(input: {
   averageQuality: number;
   riskLevel: RiskLevel;
 }): string {
-  const agreementText =
-    input.agreementLevel === "high"
-      ? "Models strongly agree on the core conclusion"
-      : input.agreementLevel === "medium"
-      ? "Models partially align on the core conclusion"
-      : "Models diverge on the core conclusion";
+  const agreementText = getAgreementText(
+    input.agreementLevel,
+    input.finalConclusionAligned,
+    input.disagreementType,
+    input.riskLevel
+  );
 
   const qualityText =
     input.averageQuality >= 8
@@ -263,16 +311,22 @@ function buildTrustReason(input: {
       ? "provider output quality is solid"
       : "provider output quality is mixed";
 
-  const disagreementText =
-    input.disagreementType === "none"
-      ? "with no meaningful disagreement"
-      : input.disagreementType === "additive_nuance"
-      ? "with only additive nuance"
-      : input.disagreementType === "explanation_variation"
-      ? "with variation in explanation"
-      : input.disagreementType === "conditional_alignment"
-      ? "with context-dependent conditional alignment"
-      : "with material conflict between responses";
+  const disagreementText = isCleanHighAgreementCase({
+    agreementLevel: input.agreementLevel,
+    finalConclusionAligned: input.finalConclusionAligned,
+    disagreementType: input.disagreementType,
+    riskLevel: input.riskLevel,
+  })
+    ? "with no meaningful disagreement"
+    : input.disagreementType === "none"
+    ? "with no meaningful disagreement"
+    : input.disagreementType === "additive_nuance"
+    ? "with only additive nuance"
+    : input.disagreementType === "explanation_variation"
+    ? "with variation in explanation"
+    : input.disagreementType === "conditional_alignment"
+    ? "with context-dependent conditional alignment"
+    : "with material conflict between responses";
 
   const riskText =
     input.riskLevel === "low"
@@ -412,6 +466,16 @@ function buildStructuringUserPrompt(input: {
   providerA: ProviderName;
   providerB: ProviderName;
 }) {
+  const noMeaningfulDifferenceRule =
+    input.agreementLevel === "high"
+      ? '- If the responses are clearly aligned, set "keyDifference" to: "No meaningful difference in conclusion; differences are limited to phrasing or supporting detail." unless there is a clear direct contradiction.'
+      : '- keyDifference should state the most important difference in emphasis or recommendation.';
+
+  const directDecisionRule =
+    input.agreementLevel === "high"
+      ? '- If the responses are clearly aligned, set "decisionRule" to: "Use the shared conclusion as the answer." unless the question genuinely requires a context-dependent decision.'
+      : '- decisionRule should tell the user how to decide, or what context changes the answer.';
+
   return [
     `Question: ${input.prompt}`,
     "",
@@ -435,8 +499,8 @@ function buildStructuringUserPrompt(input: {
     "Rules:",
     "- finalAnswer should be the best concise direct answer to the question.",
     "- sharedConclusion should state what both model responses broadly agree on.",
-    "- keyDifference should state the most important difference in emphasis or recommendation.",
-    "- decisionRule should tell the user how to decide, or what context changes the answer.",
+    noMeaningfulDifferenceRule,
+    directDecisionRule,
     `- qualityScore${input.providerA} should rate Response A's quality from 1-10 based on accuracy, depth, and usefulness.`,
     `- qualityScore${input.providerB} should rate Response B's quality from 1-10 based on accuracy, depth, and usefulness.`,
     "- Keep each field useful and concise.",
@@ -463,6 +527,7 @@ function buildVerificationSystemPrompt() {
     "- Use explanation_variation when both responses support the same conclusion but differ in framing, emphasis, or supporting reasoning.",
     "- Use conditional_alignment when a usable combined takeaway exists only by adding conditions, context, or tradeoffs, but the original responses do not cleanly support the same main conclusion.",
     "- Use material_conflict only when the main recommendation, conclusion, or decision materially differs.",
+    "- When the comparison evidence already indicates high agreement, do not invent major disagreement. In those cases, disagreementType should normally be none or explanation_variation.",
     "- Keep all fields concise and useful.",
   ].join(" ");
 }
@@ -478,6 +543,18 @@ function buildVerificationUserPrompt(input: {
   agreementLevel: AgreementLevel;
   likelyConflict: boolean;
 }) {
+  const highAgreementGuardrail =
+    input.agreementLevel === "high"
+      ? [
+          "Important guardrail:",
+          "- The comparison layer already found high agreement between the original responses.",
+          "- Do not invent disagreement in the main conclusion.",
+          '- If there is any difference, treat it as "none" or "explanation_variation" unless there is a clear direct contradiction.',
+          '- For clearly aligned factual cases, recommendedAction should usually be "Use the shared conclusion as the answer."',
+          '- For clearly aligned factual cases, keyDisagreement should usually state that there is no meaningful difference in conclusion.',
+        ].join("\n")
+      : "";
+
   return [
     `Question: ${input.prompt}`,
     "",
@@ -508,9 +585,12 @@ function buildVerificationUserPrompt(input: {
     "Classify whether the two original model responses align on the main conclusion.",
     "Do not let a good merged synthesis upgrade disagreement into agreement.",
     "Do not treat minor supporting detail or added context as material conflict.",
+    highAgreementGuardrail,
     "",
     "Return JSON only.",
-  ].join("\n");
+  ]
+    .filter(Boolean)
+    .join("\n");
 }
 
 function isStructuredSynthesis(value: unknown): value is StructuredSynthesis {
@@ -578,20 +658,125 @@ function buildFallbackStructuredSynthesis(
     agreementLevel: AgreementLevel;
   }
 ): StructuredSynthesis {
+  const highAgreement = comparison.agreementLevel === "high";
+
   return {
     finalAnswer: stripCodeFences(synthesis),
     sharedConclusion: comparison.summary,
-    keyDifference:
-      comparison.agreementLevel === "high"
-        ? "The two responses were broadly aligned, with only minor differences in emphasis."
-        : comparison.agreementLevel === "medium"
-        ? "The two responses overlapped substantially but differed in emphasis, caveats, or framing."
-        : "The two responses diverged meaningfully in recommendation or framing.",
-    decisionRule:
-      comparison.agreementLevel === "low"
-        ? "Choose based on your context, constraints, and risk tolerance, because the strongest answer depends on which tradeoff matters most."
-        : "Use the shared conclusion as the base answer, then adjust based on your specific context and constraints.",
+    keyDifference: highAgreement
+      ? "No meaningful difference in conclusion; differences are limited to phrasing or supporting detail."
+      : comparison.agreementLevel === "medium"
+      ? "The two responses overlapped substantially but differed in emphasis, caveats, or framing."
+      : "The two responses diverged meaningfully in recommendation or framing.",
+    decisionRule: highAgreement
+      ? "Use the shared conclusion as the answer."
+      : comparison.agreementLevel === "low"
+      ? "Choose based on your context, constraints, and risk tolerance, because the strongest answer depends on which tradeoff matters most."
+      : "Use the shared conclusion as the base answer, then adjust based on your specific context and constraints.",
   };
+}
+
+function normalizeStructuredSynthesisForAgreement(
+  structuredSynthesis: StructuredSynthesis,
+  comparison: {
+    agreementLevel: AgreementLevel;
+    likelyConflict: boolean;
+  }
+): StructuredSynthesis {
+  if (comparison.agreementLevel !== "high") {
+    return structuredSynthesis;
+  }
+
+  const cleanedFinalAnswer = structuredSynthesis.finalAnswer.trim();
+  const sharedConclusion = structuredSynthesis.sharedConclusion.trim();
+  const keyDifference = structuredSynthesis.keyDifference.trim();
+  const decisionRule = structuredSynthesis.decisionRule.trim();
+
+  return {
+    ...structuredSynthesis,
+    finalAnswer: cleanedFinalAnswer || sharedConclusion,
+    sharedConclusion:
+      sharedConclusion ||
+      "Both responses support the same main conclusion.",
+    keyDifference:
+      keyDifference &&
+      !/diverge|conflict|oppos|disagree materially|one response emphasizes/i.test(
+        keyDifference
+      )
+        ? keyDifference
+        : "No meaningful difference in conclusion; differences are limited to phrasing or supporting detail.",
+    decisionRule:
+      decisionRule &&
+      !/choose based on|depends on your context|tradeoff|clarify the discussion|highlight both/i.test(
+        decisionRule
+      )
+        ? decisionRule
+        : "Use the shared conclusion as the answer.",
+  };
+}
+
+function buildCleanAlignedVerdict(
+  structuredSynthesis: StructuredSynthesis
+): string {
+  const candidate =
+    structuredSynthesis.finalAnswer.trim() ||
+    structuredSynthesis.sharedConclusion.trim();
+
+  if (!candidate) {
+    return "Use the shared conclusion as the answer.";
+  }
+
+  if (/^aligned$/i.test(candidate)) {
+    return structuredSynthesis.sharedConclusion.trim() || "Aligned";
+  }
+
+  return candidate;
+}
+
+function applyVerificationGuardrails(input: {
+  verification: DecisionVerification;
+  comparison: {
+    agreementLevel: AgreementLevel;
+    likelyConflict: boolean;
+  };
+  structuredSynthesis: StructuredSynthesis;
+  totalProviders: number;
+}): DecisionVerification {
+  const guarded = { ...input.verification };
+
+  if (input.comparison.agreementLevel === "high") {
+    guarded.finalConclusionAligned = true;
+
+    if (
+      guarded.disagreementType === "material_conflict" ||
+      guarded.disagreementType === "conditional_alignment"
+    ) {
+      guarded.disagreementType = "none";
+    }
+
+    if (
+      guarded.disagreementType === "additive_nuance" ||
+      guarded.disagreementType === "explanation_variation"
+    ) {
+      guarded.disagreementType = "none";
+    }
+
+    guarded.keyDisagreement =
+      "No meaningful difference in conclusion; differences are limited to phrasing or supporting detail.";
+
+    guarded.recommendedAction = "Use the shared conclusion as the answer.";
+
+    guarded.verdict = buildCleanAlignedVerdict(input.structuredSynthesis);
+
+    guarded.consensus = {
+      level: "high",
+      modelsAligned: input.totalProviders,
+    };
+
+    guarded.riskLevel = "low";
+  }
+
+  return guarded;
 }
 
 function buildFallbackDecisionVerification(input: {
@@ -618,7 +803,10 @@ function buildFallbackDecisionVerification(input: {
   );
 
   return {
-    verdict: input.structuredSynthesis.finalAnswer,
+    verdict:
+      input.agreementLevel === "high"
+        ? buildCleanAlignedVerdict(input.structuredSynthesis)
+        : input.structuredSynthesis.finalAnswer,
     consensus: {
       level: consensusLevel,
       modelsAligned,
@@ -629,15 +817,21 @@ function buildFallbackDecisionVerification(input: {
       finalConclusionAligned: fallback.finalConclusionAligned,
     }),
     keyDisagreement:
-      fallback.disagreementType === "conditional_alignment"
+      input.agreementLevel === "high"
+        ? "No meaningful difference in conclusion; differences are limited to phrasing or supporting detail."
+        : fallback.disagreementType === "conditional_alignment"
         ? "A usable answer depends on context, conditions, or tradeoffs."
         : input.structuredSynthesis.keyDifference,
     recommendedAction:
-      fallback.disagreementType === "conditional_alignment"
+      input.agreementLevel === "high"
+        ? "Use the shared conclusion as the answer."
+        : fallback.disagreementType === "conditional_alignment"
         ? "Choose based on the conditions or tradeoffs that matter most in your context."
         : input.structuredSynthesis.decisionRule,
-    finalConclusionAligned: fallback.finalConclusionAligned,
-    disagreementType: fallback.disagreementType,
+    finalConclusionAligned:
+      input.agreementLevel === "high" ? true : fallback.finalConclusionAligned,
+    disagreementType:
+      input.agreementLevel === "high" ? "none" : fallback.disagreementType,
   };
 }
 
@@ -689,7 +883,7 @@ async function buildDecisionVerification(input: {
         input.totalProviders
       );
 
-      return {
+      const initialVerification: DecisionVerification = {
         verdict: parsed.verdict || input.structuredSynthesis.finalAnswer,
         consensus: {
           level: consensusLevel,
@@ -713,15 +907,35 @@ async function buildDecisionVerification(input: {
         finalConclusionAligned: parsed.finalConclusionAligned,
         disagreementType: parsed.disagreementType,
       };
+
+      return applyVerificationGuardrails({
+        verification: initialVerification,
+        comparison: {
+          agreementLevel: input.agreementLevel,
+          likelyConflict: input.likelyConflict,
+        },
+        structuredSynthesis: input.structuredSynthesis,
+        totalProviders: input.totalProviders,
+      });
     }
   } catch (error) {
     console.error("[/api/synthesize] verification_error:", error);
   }
 
-  return buildFallbackDecisionVerification({
+  const fallbackVerification = buildFallbackDecisionVerification({
     structuredSynthesis: input.structuredSynthesis,
     agreementLevel: input.agreementLevel,
     likelyConflict: input.likelyConflict,
+    totalProviders: input.totalProviders,
+  });
+
+  return applyVerificationGuardrails({
+    verification: fallbackVerification,
+    comparison: {
+      agreementLevel: input.agreementLevel,
+      likelyConflict: input.likelyConflict,
+    },
+    structuredSynthesis: input.structuredSynthesis,
     totalProviders: input.totalProviders,
   });
 }
@@ -731,7 +945,9 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
 
     const prompt = body?.prompt;
-    const selectedProviders = body?.selectedProviders as ProviderName[] | undefined;
+    const selectedProviders = body?.selectedProviders as
+      | ProviderName[]
+      | undefined;
     const answers = body?.answers as AnswersPayload | undefined;
 
     if (
@@ -858,6 +1074,14 @@ export async function POST(req: NextRequest) {
         agreementLevel: comparison.agreementLevel,
       });
     }
+
+    structuredSynthesis = normalizeStructuredSynthesisForAgreement(
+      structuredSynthesis,
+      {
+        agreementLevel: comparison.agreementLevel,
+        likelyConflict: comparison.likelyConflict,
+      }
+    );
 
     const decisionVerification = await buildDecisionVerification({
       prompt,
