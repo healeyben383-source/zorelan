@@ -12,6 +12,8 @@ import type { SelectionMode } from "@/lib/routing/runDiagnostics";
 
 const MIN_SAMPLE_SIZE = 2;
 const SECOND_PROVIDER_EXPLORATION_RATE = 0.2;
+const LOW_SAMPLE_EXPLORATION_RATE = 0.15;
+const LOW_SAMPLE_THRESHOLD = 3;
 
 type RankedProvider = {
   provider: ProviderName;
@@ -23,11 +25,45 @@ function isProviderEligible(totalRuns: number): boolean {
   return totalRuns >= MIN_SAMPLE_SIZE;
 }
 
-function chooseSecondProvider(
-  rankedEligibleProviders: RankedProvider[]
-): ProviderName {
+function chooseLowestSampleUndertrainedProvider(input: {
+  rankedProviders: RankedProvider[];
+  firstProvider: ProviderName;
+}): RankedProvider | null {
+  const candidates = input.rankedProviders
+    .filter(
+      (entry) =>
+        entry.provider !== input.firstProvider &&
+        entry.totalRuns < LOW_SAMPLE_THRESHOLD
+    )
+    .sort((a, b) => {
+      if (a.totalRuns !== b.totalRuns) {
+        return a.totalRuns - b.totalRuns;
+      }
+
+      return b.score - a.score;
+    });
+
+  return candidates[0] ?? null;
+}
+
+function chooseSecondProvider(input: {
+  rankedEligibleProviders: RankedProvider[];
+  rankedProviders: RankedProvider[];
+  firstProvider: ProviderName;
+}): ProviderName {
+  const { rankedEligibleProviders, rankedProviders, firstProvider } = input;
+
   const second = rankedEligibleProviders[1];
   const third = rankedEligibleProviders[2];
+
+  const undertrainedProvider = chooseLowestSampleUndertrainedProvider({
+    rankedProviders,
+    firstProvider,
+  });
+
+  if (undertrainedProvider && Math.random() < LOW_SAMPLE_EXPLORATION_RATE) {
+    return undertrainedProvider.provider;
+  }
 
   if (!second) {
     return rankedEligibleProviders[0]!.provider;
@@ -75,7 +111,11 @@ export async function adaptiveSelectProviders(
     }
 
     const firstProvider = eligibleProviders[0]!.provider;
-    const secondProvider = chooseSecondProvider(eligibleProviders);
+    const secondProvider = chooseSecondProvider({
+      rankedEligibleProviders: eligibleProviders,
+      rankedProviders,
+      firstProvider,
+    });
 
     const selectedProviders =
       firstProvider === secondProvider
