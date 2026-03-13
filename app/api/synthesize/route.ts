@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import OpenAI from "openai";
 import { compareAnswers } from "@/lib/synthesis/compareAnswers";
+import { judgeSemanticAgreementOrFallback } from "@/lib/synthesis/semanticAgreement";
 import { updateProviderQualityScore } from "@/lib/routing/providerScores";
 import { detectTaskType } from "@/lib/routing/selectProviders";
 
@@ -974,7 +975,35 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const comparison = compareAnswers(answerA, answerB);
+    const heuristicComparison = compareAnswers(answerA, answerB);
+
+    const semantic = await judgeSemanticAgreementOrFallback(
+      {
+        question: prompt,
+        answerA,
+        answerB,
+      },
+      () => ({
+        agreementLevel: heuristicComparison.agreementLevel,
+        likelyConflict: heuristicComparison.likelyConflict,
+      })
+    );
+
+    const semanticSummary =
+  semantic.agreementLevel === "high"
+    ? "The two model outputs support the same main conclusion."
+    : semantic.agreementLevel === "medium"
+    ? "The two model outputs broadly align but differ in emphasis, caveats, or framing."
+    : semantic.likelyConflict
+    ? "The two model outputs materially conflict on the main conclusion."
+    : "The two model outputs show weak alignment on the main conclusion.";
+
+const comparison = {
+  ...heuristicComparison,
+  agreementLevel: semantic.agreementLevel,
+  likelyConflict: semantic.likelyConflict,
+  summary: semanticSummary,
+};
 
     console.log(
       "[SYNTHESIS_COMPARISON]",
@@ -982,8 +1011,12 @@ export async function POST(req: NextRequest) {
         selectedProviders,
         agreementLevel: comparison.agreementLevel,
         likelyConflict: comparison.likelyConflict,
-        overlapRatio: comparison.overlapRatio,
+        overlapRatio: heuristicComparison.overlapRatio,
         summary: comparison.summary,
+        semanticLabel: semantic.label,
+        semanticRationale: semantic.rationale,
+        semanticUsedFallback: semantic.usedFallback,
+        semanticJudgeModel: semantic.judgeModel,
       })
     );
 
@@ -1152,6 +1185,10 @@ export async function POST(req: NextRequest) {
         summary: comparison.summary,
         finalConclusionAligned: decisionVerification.finalConclusionAligned,
         disagreementType: decisionVerification.disagreementType,
+        semanticLabel: semantic.label,
+        semanticRationale: semantic.rationale,
+        semanticUsedFallback: semantic.usedFallback,
+        semanticJudgeModel: semantic.judgeModel,
       },
     });
   } catch (err: unknown) {
