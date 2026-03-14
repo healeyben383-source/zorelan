@@ -1,3 +1,4 @@
+
 import { NextRequest, NextResponse } from "next/server";
 import OpenAI from "openai";
 
@@ -19,6 +20,7 @@ import {
   getProviderScores,
 } from "@/lib/routing/providerScores";
 import { compareAnswers } from "@/lib/synthesis/compareAnswers";
+import { judgeSemanticAgreementOrFallback } from "@/lib/synthesis/semanticAgreement";
 
 export const runtime = "nodejs";
 
@@ -723,7 +725,50 @@ export async function POST(req: NextRequest) {
     const answerA = results[providerA];
     const answerB = results[providerB];
 
-    const comparison = compareAnswers(answerA, answerB);
+    const heuristicComparison = compareAnswers(answerA, answerB);
+
+    const semantic = await judgeSemanticAgreementOrFallback(
+      {
+        question: body.prompt,
+        answerA,
+        answerB,
+      },
+      () => ({
+        agreementLevel: heuristicComparison.agreementLevel,
+        likelyConflict: heuristicComparison.likelyConflict,
+      })
+    );
+
+    const semanticSummary =
+      semantic.agreementLevel === "high"
+        ? "The two model outputs support the same main conclusion."
+        : semantic.agreementLevel === "medium"
+        ? "The two model outputs broadly align but differ in emphasis, caveats, or framing."
+        : semantic.likelyConflict
+        ? "The two model outputs materially conflict on the main conclusion."
+        : "The two model outputs show weak alignment on the main conclusion.";
+
+    const comparison = {
+      ...heuristicComparison,
+      agreementLevel: semantic.agreementLevel,
+      likelyConflict: semantic.likelyConflict,
+      summary: semanticSummary,
+    };
+
+    console.log(
+      "[RUN_API_COMPARISON]",
+      JSON.stringify({
+        selectedProviders,
+        agreementLevel: comparison.agreementLevel,
+        likelyConflict: comparison.likelyConflict,
+        overlapRatio: heuristicComparison.overlapRatio,
+        summary: comparison.summary,
+        semanticLabel: semantic.label,
+        semanticRationale: semantic.rationale,
+        semanticUsedFallback: semantic.usedFallback,
+        semanticJudgeModel: semantic.judgeModel,
+      })
+    );
 
     const [decisionVerification, qualityScores] = await Promise.all([
       buildDecisionVerification({
@@ -750,6 +795,22 @@ export async function POST(req: NextRequest) {
       riskLevel: decisionVerification.riskLevel,
     });
 
+    console.log(
+  "[ZORELAN_RUN]",
+  JSON.stringify({
+    taskType,
+    selectedProviders,
+    agreementLevel: comparison.agreementLevel,
+    likelyConflict: comparison.likelyConflict,
+    disagreementType: decisionVerification.disagreementType,
+    trustScore: trustScore.score,
+    trustLabel: trustScore.label,
+    riskLevel: decisionVerification.riskLevel,
+    finalConclusionAligned: decisionVerification.finalConclusionAligned,
+    verdict: decisionVerification.verdict,
+  }, null, 2)
+);
+
     return NextResponse.json({
       ok: true,
       answers: results,
@@ -761,6 +822,10 @@ export async function POST(req: NextRequest) {
         summary: comparison.summary,
         finalConclusionAligned: decisionVerification.finalConclusionAligned,
         disagreementType: decisionVerification.disagreementType,
+        semanticLabel: semantic.label,
+        semanticRationale: semantic.rationale,
+        semanticUsedFallback: semantic.usedFallback,
+        semanticJudgeModel: semantic.judgeModel,
       },
       decisionVerification,
       trustScore,
