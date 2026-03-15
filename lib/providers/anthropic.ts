@@ -18,7 +18,7 @@ export async function runAnthropic(
 ): Promise<string> {
   const message = await client.messages.create(
     {
-      model: "claude-sonnet-4-5-20251001",
+      model: "claude-sonnet-4-5",
       max_tokens: MAX_OUTPUT_TOKENS,
       system: DEFAULT_SYSTEM,
       messages: [
