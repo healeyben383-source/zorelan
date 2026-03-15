@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import OpenAI from "openai";
 import Anthropic from "@anthropic-ai/sdk";
+import { z } from "zod";
 
 import { runOpenAI } from "@/lib/providers/openai";
 import { runAnthropic } from "@/lib/providers/anthropic";
@@ -83,6 +84,66 @@ type TrustScore = {
   label: TrustLabel;
   reason: string;
 };
+
+// ─── Zod output schemas ───────────────────────────────────────────────────────
+
+const AgreementLevelSchema = z.enum(["high", "medium", "low"]);
+const RiskLevelSchema = z.enum(["low", "moderate", "high"]);
+const TrustLabelSchema = z.enum(["high", "moderate", "low"]);
+const DisagreementTypeSchema = z.enum([
+  "none",
+  "additive_nuance",
+  "explanation_variation",
+  "conditional_alignment",
+  "material_conflict",
+]);
+
+const ComparisonSchema = z.object({
+  agreementLevel: AgreementLevelSchema,
+  likelyConflict: z.boolean(),
+  overlapRatio: z.number(),
+  summary: z.string(),
+  finalConclusionAligned: z.boolean(),
+  disagreementType: DisagreementTypeSchema,
+  semanticLabel: z.string(),
+  semanticRationale: z.string(),
+  semanticUsedFallback: z.boolean(),
+  semanticJudgeModel: z.string(),
+});
+
+const DecisionVerificationSchema = z.object({
+  verdict: z.string(),
+  consensus: z.object({
+    level: AgreementLevelSchema,
+    modelsAligned: z.number().int().min(0),
+  }),
+  riskLevel: RiskLevelSchema,
+  keyDisagreement: z.string(),
+  recommendedAction: z.string(),
+  finalConclusionAligned: z.boolean(),
+  disagreementType: DisagreementTypeSchema,
+});
+
+const TrustScoreSchema = z.object({
+  score: z.number().int().min(0).max(100),
+  label: TrustLabelSchema,
+  reason: z.string(),
+});
+
+const RunResponseSchema = z.object({
+  ok: z.literal(true),
+  answers: z.object({
+    openai: z.string(),
+    anthropic: z.string(),
+    perplexity: z.string(),
+  }),
+  selectedProviders: z.array(z.string()),
+  comparison: ComparisonSchema.nullable(),
+  decisionVerification: DecisionVerificationSchema.nullable(),
+  trustScore: TrustScoreSchema.nullable(),
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
 
 function withTimeout<T>(
   promise: Promise<T>,
@@ -370,35 +431,17 @@ function calculateTrustScore(input: {
   averageQuality: number;
   riskLevel: RiskLevel;
 }): TrustScore {
-  // Base score purely from agreement level — no arbitrary floor constants
   const agreementBase = getAgreementBaseScore(input.agreementLevel);
-
-  // Quality normalised to 0–100
   const qualityNormalized = input.averageQuality * 10;
-
-  // Weighted sum: agreement drives the score, quality adjusts it
   let score = agreementBase * 0.65 + qualityNormalized * 0.35;
 
-  // Disagreement type penalties
-  if (input.disagreementType === "explanation_variation") {
-    score -= 4;
-  } else if (input.disagreementType === "conditional_alignment") {
-    score -= 12;
-  } else if (input.disagreementType === "material_conflict") {
-    score -= 20;
-  }
+  if (input.disagreementType === "explanation_variation") score -= 4;
+  else if (input.disagreementType === "conditional_alignment") score -= 12;
+  else if (input.disagreementType === "material_conflict") score -= 20;
 
-  // Conclusion alignment penalty
-  if (!input.finalConclusionAligned) {
-    score -= 10;
-  }
-
-  // Risk penalty
-  if (input.riskLevel === "moderate") {
-    score -= 5;
-  } else if (input.riskLevel === "high") {
-    score -= 15;
-  }
+  if (!input.finalConclusionAligned) score -= 10;
+  if (input.riskLevel === "moderate") score -= 5;
+  else if (input.riskLevel === "high") score -= 15;
 
   const finalScore = Math.round(clamp(score, 0, 100));
 
@@ -409,8 +452,6 @@ function calculateTrustScore(input: {
   };
 }
 
-// Uses Anthropic (Claude) as a neutral judge to score OpenAI/Perplexity outputs.
-// This avoids the self-scoring bias where GPT-4o-mini rated its own responses.
 async function scoreAnswerQuality(input: {
   answerA: string;
   answerB: string;
@@ -777,7 +818,6 @@ export async function POST(req: NextRequest) {
 
     const heuristicComparison = compareAnswers(answerA, answerB);
 
-    // Use a neutral judge: pick whichever model family was NOT used as a provider
     const judgeProvider = selectJudgeForProviders(providerA, providerB);
 
     const semantic = await judgeSemanticAgreementOrFallback(
@@ -830,7 +870,6 @@ export async function POST(req: NextRequest) {
         likelyConflict: comparison.likelyConflict,
         totalProviders: selectedProviders.length,
       }),
-      // Neutral cross-model quality scoring — Anthropic judges all outputs
       scoreAnswerQuality({
         answerA,
         answerB,
@@ -901,8 +940,9 @@ export async function POST(req: NextRequest) {
       )
     );
 
-    return NextResponse.json({
-      ok: true,
+    // Build the response payload
+    const responsePayload = {
+      ok: true as const,
       answers: results,
       selectedProviders,
       comparison: {
@@ -919,7 +959,32 @@ export async function POST(req: NextRequest) {
       },
       decisionVerification,
       trustScore,
-    });
+    };
+
+    // Validate response shape before sending — catches any malformed
+    // internal state before it reaches the client
+    const validation = RunResponseSchema.safeParse(responsePayload);
+
+    if (!validation.success) {
+      console.error(
+        "[RUN_API] response_validation_failed:",
+        JSON.stringify(validation.error.issues)
+      );
+      return NextResponse.json(
+        {
+          ok: false,
+          error: "response_validation_failed",
+          answers: { openai: "", anthropic: "", perplexity: "" },
+          selectedProviders: [] as ProviderName[],
+          comparison: null,
+          decisionVerification: null,
+          trustScore: null,
+        },
+        { status: 500 }
+      );
+    }
+
+    return NextResponse.json(validation.data);
   } catch (error) {
     console.error("RUN API ERROR:", error);
     return NextResponse.json(
