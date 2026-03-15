@@ -15,6 +15,8 @@ const SECOND_PROVIDER_EXPLORATION_RATE = 0.2;
 const LOW_SAMPLE_EXPLORATION_RATE = 0.15;
 const LOW_SAMPLE_THRESHOLD = 3;
 
+const ALL_PROVIDERS: ProviderName[] = ["openai", "anthropic", "perplexity"];
+
 type RankedProvider = {
   provider: ProviderName;
   score: number;
@@ -23,6 +25,21 @@ type RankedProvider = {
 
 function isProviderEligible(totalRuns: number): boolean {
   return totalRuns >= MIN_SAMPLE_SIZE;
+}
+
+function dedupeProviders(providers: ProviderName[]): ProviderName[] {
+  return [...new Set(providers)];
+}
+
+function buildFallbackRankedProviders(
+  fallbackProviders: ProviderName[]
+): ProviderName[] {
+  const ordered = dedupeProviders([
+    ...fallbackProviders,
+    ...ALL_PROVIDERS.filter((provider) => !fallbackProviders.includes(provider)),
+  ]);
+
+  return ordered;
 }
 
 function chooseLowestSampleUndertrainedProvider(input: {
@@ -83,9 +100,11 @@ export async function adaptiveSelectProviders(
   taskType: TaskType
 ): Promise<{
   selectedProviders: ProviderName[];
+  rankedProviders: ProviderName[];
   selectionMode: SelectionMode;
 }> {
   const fallbackProviders = selectProvidersFromPrompt(prompt);
+  const fallbackRankedProviders = buildFallbackRankedProviders(fallbackProviders);
 
   try {
     const taskScores = await getProviderScores(taskType);
@@ -99,7 +118,11 @@ export async function adaptiveSelectProviders(
       .sort((a, b) => b.score - a.score);
 
     if (rankedProviders.length < 2) {
-      return { selectedProviders: fallbackProviders, selectionMode: "fallback" };
+      return {
+        selectedProviders: fallbackProviders,
+        rankedProviders: fallbackRankedProviders,
+        selectionMode: "fallback",
+      };
     }
 
     const eligibleProviders = rankedProviders.filter((entry) =>
@@ -107,7 +130,11 @@ export async function adaptiveSelectProviders(
     );
 
     if (eligibleProviders.length < 2) {
-      return { selectedProviders: fallbackProviders, selectionMode: "fallback" };
+      return {
+        selectedProviders: fallbackProviders,
+        rankedProviders: fallbackRankedProviders,
+        selectionMode: "fallback",
+      };
     }
 
     const firstProvider = eligibleProviders[0]!.provider;
@@ -122,8 +149,21 @@ export async function adaptiveSelectProviders(
         ? eligibleProviders.slice(0, 2).map((entry) => entry.provider)
         : [firstProvider, secondProvider];
 
-    return { selectedProviders, selectionMode: "adaptive" };
+    const rankedProviderNames = dedupeProviders([
+      ...rankedProviders.map((entry) => entry.provider),
+      ...ALL_PROVIDERS,
+    ]);
+
+    return {
+      selectedProviders,
+      rankedProviders: rankedProviderNames,
+      selectionMode: "adaptive",
+    };
   } catch {
-    return { selectedProviders: fallbackProviders, selectionMode: "fallback" };
+    return {
+      selectedProviders: fallbackProviders,
+      rankedProviders: fallbackRankedProviders,
+      selectionMode: "fallback",
+    };
   }
 }

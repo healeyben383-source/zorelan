@@ -1,4 +1,5 @@
 import OpenAI from "openai";
+import Anthropic from "@anthropic-ai/sdk";
 
 export type SemanticAgreementLevel = "high" | "medium" | "low";
 export type SemanticAgreementLabel =
@@ -6,6 +7,8 @@ export type SemanticAgreementLabel =
   | "MEDIUM_AGREEMENT"
   | "LOW_AGREEMENT"
   | "CONFLICT";
+
+export type JudgeProvider = "openai" | "anthropic";
 
 export interface SemanticAgreementResult {
   label: SemanticAgreementLabel;
@@ -22,6 +25,7 @@ export interface SemanticAgreementInput {
 }
 
 export interface SemanticAgreementOptions {
+  judgeProvider?: JudgeProvider;
   model?: string;
   apiKey?: string;
   timeoutMs?: number;
@@ -33,21 +37,50 @@ export interface HeuristicFallbackResult {
   likelyConflict: boolean;
 }
 
-const DEFAULT_MODEL = process.env.OPENAI_SEMANTIC_JUDGE_MODEL || "gpt-4o-mini";
+const DEFAULT_OPENAI_JUDGE_MODEL =
+  process.env.OPENAI_SEMANTIC_JUDGE_MODEL || "gpt-4o-mini";
+const DEFAULT_ANTHROPIC_JUDGE_MODEL =
+  process.env.ANTHROPIC_SEMANTIC_JUDGE_MODEL || "claude-haiku-4-5-20251001";
 const DEFAULT_TIMEOUT_MS = 12_000;
-const DEFAULT_MAX_OUTPUT_TOKENS = 120;
+const DEFAULT_MAX_OUTPUT_TOKENS = 300;
 
-const semanticAgreementSchema = {
+/**
+ * Pick a neutral judge that did NOT produce either answer.
+ * If both providers are OpenAI-family, use Anthropic and vice versa.
+ * Falls back to anthropic by default since ANTHROPIC_API_KEY is available.
+ */
+export function selectJudgeForProviders(
+  providerA: string,
+  providerB: string
+): JudgeProvider {
+  const openaiProviders = ["openai"];
+  const anthropicProviders = ["anthropic"];
+
+  const aIsOpenAI = openaiProviders.includes(providerA);
+  const bIsOpenAI = openaiProviders.includes(providerB);
+  const aIsAnthropic = anthropicProviders.includes(providerA);
+  const bIsAnthropic = anthropicProviders.includes(providerB);
+
+  // If either provider is OpenAI, use Anthropic as judge
+  if (aIsOpenAI || bIsOpenAI) {
+    return "anthropic";
+  }
+
+  // If either provider is Anthropic, use OpenAI as judge
+  if (aIsAnthropic || bIsAnthropic) {
+    return "openai";
+  }
+
+  // Default: use Anthropic
+  return "anthropic";
+}
+
+const semanticSchema = {
   type: "object",
   properties: {
     label: {
       type: "string",
-      enum: [
-        "HIGH_AGREEMENT",
-        "MEDIUM_AGREEMENT",
-        "LOW_AGREEMENT",
-        "CONFLICT",
-      ],
+      enum: ["HIGH_AGREEMENT", "MEDIUM_AGREEMENT", "LOW_AGREEMENT", "CONFLICT"],
     },
     rationale: {
       type: "string",
@@ -143,16 +176,14 @@ function withTimeout<T>(
   });
 }
 
-export async function judgeSemanticAgreement(
+async function judgeWithOpenAI(
   input: SemanticAgreementInput,
-  options: SemanticAgreementOptions = {}
+  options: SemanticAgreementOptions
 ): Promise<SemanticAgreementResult> {
   const apiKey = options.apiKey || process.env.OPENAI_API_KEY;
-  if (!apiKey) {
-    throw new Error("OPENAI_API_KEY is required for semantic agreement judging");
-  }
+  if (!apiKey) throw new Error("OPENAI_API_KEY is required");
 
-  const model = options.model || DEFAULT_MODEL;
+  const model = options.model || DEFAULT_OPENAI_JUDGE_MODEL;
   const timeoutMs = options.timeoutMs || DEFAULT_TIMEOUT_MS;
   const maxOutputTokens = options.maxOutputTokens || DEFAULT_MAX_OUTPUT_TOKENS;
 
@@ -178,38 +209,96 @@ export async function judgeSemanticAgreement(
           type: "json_schema",
           name: "semantic_agreement",
           strict: true,
-          schema: semanticAgreementSchema,
+          schema: semanticSchema,
         },
       },
     }),
     timeoutMs,
-    "semantic agreement judge"
+    "openai semantic judge"
   );
 
   const raw = response.output_text?.trim();
-  if (!raw) {
-    throw new Error("Semantic agreement judge returned empty output");
-  }
+  if (!raw) throw new Error("OpenAI semantic judge returned empty output");
 
-  let parsed: { label: SemanticAgreementLabel; rationale: string };
-  try {
-    parsed = JSON.parse(raw);
-  } catch (error) {
-    throw new Error(
-      `Semantic agreement judge returned invalid JSON: ${
-        error instanceof Error ? error.message : String(error)
-      }`
-    );
-  }
+  const parsed: { label: SemanticAgreementLabel; rationale: string } =
+    JSON.parse(raw);
+  const mapped = mapLabel(parsed.label);
+
+  return {
+    label: parsed.label,
+    rationale: parsed.rationale,
+    judgeModel: `openai/${model}`,
+    ...mapped,
+  };
+}
+
+async function judgeWithAnthropic(
+  input: SemanticAgreementInput,
+  options: SemanticAgreementOptions
+): Promise<SemanticAgreementResult> {
+  const apiKey = options.apiKey || process.env.ANTHROPIC_API_KEY;
+  if (!apiKey) throw new Error("ANTHROPIC_API_KEY is required");
+
+  const model = options.model || DEFAULT_ANTHROPIC_JUDGE_MODEL;
+  const timeoutMs = options.timeoutMs || DEFAULT_TIMEOUT_MS;
+  const maxOutputTokens = options.maxOutputTokens || DEFAULT_MAX_OUTPUT_TOKENS;
+
+  const client = new Anthropic({ apiKey });
+
+  const systemPrompt =
+    "Return only valid JSON matching this exact shape: " +
+    '{"label":"HIGH_AGREEMENT"|"MEDIUM_AGREEMENT"|"LOW_AGREEMENT"|"CONFLICT","rationale":"string"}. ' +
+    "Be strict about contradiction detection, careful about caveat and certainty mismatches, " +
+    "and do not penalize extra correct detail when the main conclusion is the same. No other text.";
+
+  const response = await withTimeout(
+    client.messages.create({
+      model,
+      max_tokens: maxOutputTokens,
+      system: systemPrompt,
+      messages: [
+        {
+          role: "user",
+          content: buildPrompt(input),
+        },
+      ],
+    }),
+    timeoutMs,
+    "anthropic semantic judge"
+  );
+
+  const raw =
+    response.content[0]?.type === "text"
+      ? response.content[0].text.trim()
+      : "";
+  if (!raw) throw new Error("Anthropic semantic judge returned empty output");
+
+  // Strip any accidental markdown fences
+  const cleaned = raw.replace(/```json\s*/gi, "").replace(/```\s*/g, "").trim();
+  const parsed: { label: SemanticAgreementLabel; rationale: string } =
+    JSON.parse(cleaned);
 
   const mapped = mapLabel(parsed.label);
 
   return {
     label: parsed.label,
     rationale: parsed.rationale,
-    judgeModel: model,
+    judgeModel: `anthropic/${model}`,
     ...mapped,
   };
+}
+
+export async function judgeSemanticAgreement(
+  input: SemanticAgreementInput,
+  options: SemanticAgreementOptions = {}
+): Promise<SemanticAgreementResult> {
+  const provider = options.judgeProvider ?? "anthropic";
+
+  if (provider === "anthropic") {
+    return judgeWithAnthropic(input, options);
+  }
+
+  return judgeWithOpenAI(input, options);
 }
 
 export async function judgeSemanticAgreementOrFallback(
@@ -219,11 +308,9 @@ export async function judgeSemanticAgreementOrFallback(
 ): Promise<SemanticAgreementResult & { usedFallback: boolean }> {
   try {
     const judged = await judgeSemanticAgreement(input, options);
-    return {
-      ...judged,
-      usedFallback: false,
-    };
-  } catch {
+    return { ...judged, usedFallback: false };
+  } catch (err) {
+    console.error("[semanticAgreement] judge failed, using fallback:", err);
     const fallbackResult = await fallback();
 
     return {
@@ -235,7 +322,7 @@ export async function judgeSemanticAgreementOrFallback(
         ? "MEDIUM_AGREEMENT"
         : "LOW_AGREEMENT",
       rationale: "Fell back to heuristic comparison.",
-      judgeModel: options.model || DEFAULT_MODEL,
+      judgeModel: "heuristic",
       agreementLevel: fallbackResult.agreementLevel,
       likelyConflict: fallbackResult.likelyConflict,
       usedFallback: true,

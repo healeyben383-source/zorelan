@@ -1,6 +1,6 @@
-
 import { NextRequest, NextResponse } from "next/server";
 import OpenAI from "openai";
+import Anthropic from "@anthropic-ai/sdk";
 
 import { runOpenAI } from "@/lib/providers/openai";
 import { runAnthropic } from "@/lib/providers/anthropic";
@@ -20,15 +20,21 @@ import {
   getProviderScores,
 } from "@/lib/routing/providerScores";
 import { compareAnswers } from "@/lib/synthesis/compareAnswers";
-import { judgeSemanticAgreementOrFallback } from "@/lib/synthesis/semanticAgreement";
+import {
+  judgeSemanticAgreementOrFallback,
+  selectJudgeForProviders,
+} from "@/lib/synthesis/semanticAgreement";
 
 export const runtime = "nodejs";
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
 const PROVIDER_TIMEOUT_MS = 30_000;
 const VERIFICATION_TIMEOUT_MS = 20_000;
 const MAX_PROVIDERS = 2;
+
+const QUALITY_JUDGE_MODEL = "claude-haiku-4-5-20251001";
 
 type AgreementLevel = "high" | "medium" | "low";
 type RiskLevel = "low" | "moderate" | "high";
@@ -148,10 +154,7 @@ function inferFallbackClassification(input: {
   disagreementType: DisagreementType;
 } {
   if (input.agreementLevel === "high") {
-    return {
-      finalConclusionAligned: true,
-      disagreementType: "none",
-    };
+    return { finalConclusionAligned: true, disagreementType: "none" };
   }
 
   if (input.agreementLevel === "medium") {
@@ -161,7 +164,6 @@ function inferFallbackClassification(input: {
         disagreementType: "conditional_alignment",
       };
     }
-
     return {
       finalConclusionAligned: true,
       disagreementType: "additive_nuance",
@@ -174,37 +176,104 @@ function inferFallbackClassification(input: {
   };
 }
 
+function normalizeDecisionVerificationWithSemantic(input: {
+  semanticAgreementLevel: AgreementLevel;
+  semanticLikelyConflict: boolean;
+  decisionVerification: DecisionVerification;
+}): DecisionVerification {
+  const normalized: DecisionVerification = {
+    ...input.decisionVerification,
+    consensus: { ...input.decisionVerification.consensus },
+  };
+
+  if (input.semanticAgreementLevel === "high") {
+    normalized.finalConclusionAligned = true;
+
+    if (normalized.disagreementType === "material_conflict") {
+      normalized.disagreementType = "explanation_variation";
+      normalized.verdict =
+        "The responses support the same core conclusion but differ in emphasis, timing, or supporting rationale.";
+      normalized.keyDisagreement =
+        "The models aligned on the main conclusion but differed in emphasis, framing, or supporting detail.";
+      normalized.recommendedAction =
+        "Use the shared conclusion as your base answer, then account for the different timing, caveats, or framing details.";
+    } else if (normalized.disagreementType === "conditional_alignment") {
+      normalized.disagreementType = "explanation_variation";
+      normalized.verdict =
+        "The responses support the same core conclusion but differ in emphasis, timing, or supporting rationale.";
+      normalized.keyDisagreement =
+        "The models aligned on the main conclusion but differed in emphasis, framing, or supporting detail.";
+      normalized.recommendedAction =
+        "Use the shared conclusion as your base answer, then account for the different timing, caveats, or framing details.";
+    } else if (normalized.disagreementType === "none") {
+      normalized.verdict = "The responses support the same main conclusion.";
+      normalized.keyDisagreement =
+        "There is no meaningful disagreement in the main conclusion.";
+      normalized.recommendedAction =
+        "Use the overlapping conclusion as the base answer.";
+    }
+
+    if (normalized.consensus.level !== "high") {
+      normalized.consensus.level = "high";
+    }
+  }
+
+  if (
+    input.semanticAgreementLevel === "low" &&
+    normalized.disagreementType === "none"
+  ) {
+    normalized.finalConclusionAligned = false;
+    normalized.disagreementType = input.semanticLikelyConflict
+      ? "material_conflict"
+      : "conditional_alignment";
+
+    if (normalized.disagreementType === "material_conflict") {
+      normalized.verdict =
+        "The responses materially conflict on the main conclusion.";
+      normalized.keyDisagreement =
+        "The models differed on the main recommendation or conclusion.";
+      normalized.recommendedAction =
+        "Treat the answer as unresolved and review the disagreement carefully.";
+    } else {
+      normalized.verdict =
+        "The responses do not cleanly align and require contextual tradeoff judgment.";
+      normalized.keyDisagreement =
+        "A usable answer depends on conditions, context, or tradeoffs.";
+      normalized.recommendedAction =
+        "Choose based on the conditions or tradeoffs that matter most in your context.";
+    }
+  }
+
+  normalized.riskLevel = getRiskLevel({
+    agreementLevel: input.semanticAgreementLevel,
+    disagreementType: normalized.disagreementType,
+    finalConclusionAligned: normalized.finalConclusionAligned,
+  });
+
+  return normalized;
+}
+
 function getModelsAligned(input: {
   totalProviders: number;
   agreementLevel: AgreementLevel;
   finalConclusionAligned: boolean;
   disagreementType: DisagreementType;
 }): number {
-  if (input.totalProviders <= 1) {
-    return input.totalProviders;
-  }
+  if (input.totalProviders <= 1) return input.totalProviders;
 
   switch (input.disagreementType) {
     case "none":
     case "additive_nuance":
     case "explanation_variation":
       return input.totalProviders;
-
     case "conditional_alignment":
       return Math.max(1, input.totalProviders - 1);
-
     case "material_conflict":
       return 0;
-
     default:
-      if (input.finalConclusionAligned) {
-        return input.totalProviders;
-      }
-
-      if (input.agreementLevel === "medium") {
+      if (input.finalConclusionAligned) return input.totalProviders;
+      if (input.agreementLevel === "medium")
         return Math.max(1, input.totalProviders - 1);
-      }
-
       return 0;
   }
 }
@@ -213,14 +282,8 @@ function getConsensusLevelFromAligned(
   modelsAligned: number,
   totalProviders: number
 ): AgreementLevel {
-  if (modelsAligned >= totalProviders) {
-    return "high";
-  }
-
-  if (modelsAligned > 0) {
-    return "medium";
-  }
-
+  if (modelsAligned >= totalProviders) return "high";
+  if (modelsAligned > 0) return "medium";
   return "low";
 }
 
@@ -229,26 +292,12 @@ function getRiskLevel(input: {
   disagreementType: DisagreementType;
   finalConclusionAligned: boolean;
 }): RiskLevel {
-  if (input.disagreementType === "material_conflict") {
+  if (input.disagreementType === "material_conflict") return "high";
+  if (input.disagreementType === "conditional_alignment") return "moderate";
+  if (!input.finalConclusionAligned && input.agreementLevel === "low")
     return "high";
-  }
-
-  if (input.disagreementType === "conditional_alignment") {
-    return "moderate";
-  }
-
-  if (!input.finalConclusionAligned && input.agreementLevel === "low") {
-    return "high";
-  }
-
-  if (!input.finalConclusionAligned) {
-    return "moderate";
-  }
-
-  if (input.agreementLevel === "low") {
-    return "moderate";
-  }
-
+  if (!input.finalConclusionAligned) return "moderate";
+  if (input.agreementLevel === "low") return "moderate";
   return "low";
 }
 
@@ -257,14 +306,14 @@ function clamp(value: number, min: number, max: number): number {
 }
 
 function getAgreementBaseScore(agreementLevel: AgreementLevel): number {
-  if (agreementLevel === "high") return 90;
-  if (agreementLevel === "medium") return 74;
-  return 42;
+  if (agreementLevel === "high") return 85;
+  if (agreementLevel === "medium") return 65;
+  return 35;
 }
 
 function getTrustLabel(score: number): TrustLabel {
-  if (score >= 80) return "high";
-  if (score >= 60) return "moderate";
+  if (score >= 75) return "high";
+  if (score >= 55) return "moderate";
   return "low";
 }
 
@@ -321,40 +370,34 @@ function calculateTrustScore(input: {
   averageQuality: number;
   riskLevel: RiskLevel;
 }): TrustScore {
+  // Base score purely from agreement level — no arbitrary floor constants
   const agreementBase = getAgreementBaseScore(input.agreementLevel);
+
+  // Quality normalised to 0–100
   const qualityNormalized = input.averageQuality * 10;
 
-  let score = agreementBase * 0.55 + qualityNormalized * 0.3 + 100 * 0.15;
+  // Weighted sum: agreement drives the score, quality adjusts it
+  let score = agreementBase * 0.65 + qualityNormalized * 0.35;
 
-  if (!input.finalConclusionAligned) {
-    score -= 12;
-  }
-
+  // Disagreement type penalties
   if (input.disagreementType === "explanation_variation") {
     score -= 4;
   } else if (input.disagreementType === "conditional_alignment") {
-    score -= 10;
-  } else if (input.disagreementType === "material_conflict") {
-    score -= 18;
-  }
-
-  if (input.riskLevel === "moderate") {
-    score -= 4;
-  } else if (input.riskLevel === "high") {
     score -= 12;
+  } else if (input.disagreementType === "material_conflict") {
+    score -= 20;
   }
 
-  const isStrongAlignedCase =
-    input.finalConclusionAligned &&
-    input.agreementLevel === "high" &&
-    input.riskLevel === "low" &&
-    input.averageQuality >= 7 &&
-    (input.disagreementType === "none" ||
-      input.disagreementType === "additive_nuance" ||
-      input.disagreementType === "explanation_variation");
+  // Conclusion alignment penalty
+  if (!input.finalConclusionAligned) {
+    score -= 10;
+  }
 
-  if (isStrongAlignedCase) {
-    score = Math.max(score, 84);
+  // Risk penalty
+  if (input.riskLevel === "moderate") {
+    score -= 5;
+  } else if (input.riskLevel === "high") {
+    score -= 15;
   }
 
   const finalScore = Math.round(clamp(score, 0, 100));
@@ -364,6 +407,51 @@ function calculateTrustScore(input: {
     label: getTrustLabel(finalScore),
     reason: buildTrustReason(input),
   };
+}
+
+// Uses Anthropic (Claude) as a neutral judge to score OpenAI/Perplexity outputs.
+// This avoids the self-scoring bias where GPT-4o-mini rated its own responses.
+async function scoreAnswerQuality(input: {
+  answerA: string;
+  answerB: string;
+  providerA: ProviderName;
+  providerB: ProviderName;
+}): Promise<{ scoreA: number; scoreB: number }> {
+  try {
+    const prompt =
+      `Rate these two AI responses from 1-10 for quality, accuracy, and usefulness. ` +
+      `Return JSON only with no other text: {"scoreA": number, "scoreB": number}\n\n` +
+      `Response A: ${input.answerA}\n\nResponse B: ${input.answerB}`;
+
+    const response = await Promise.race([
+      anthropic.messages.create({
+        model: QUALITY_JUDGE_MODEL,
+        max_tokens: 60,
+        messages: [{ role: "user", content: prompt }],
+      }),
+      new Promise<never>((_, reject) =>
+        setTimeout(
+          () => reject(new Error("quality_timeout")),
+          VERIFICATION_TIMEOUT_MS
+        )
+      ),
+    ]);
+
+    const raw =
+      response.content[0]?.type === "text" ? response.content[0].text : "";
+    const cleaned = stripCodeFences(raw);
+    const parsed = JSON.parse(cleaned);
+
+    return {
+      scoreA:
+        typeof parsed.scoreA === "number" ? clamp(parsed.scoreA, 1, 10) : 7,
+      scoreB:
+        typeof parsed.scoreB === "number" ? clamp(parsed.scoreB, 1, 10) : 7,
+    };
+  } catch (error) {
+    console.error("[RUN_API] quality_error:", error);
+    return { scoreA: 7, scoreB: 7 };
+  }
 }
 
 async function routeProviders(
@@ -504,7 +592,10 @@ async function buildDecisionVerification(input: {
         ],
       }),
       new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error("verification_timeout")), VERIFICATION_TIMEOUT_MS)
+        setTimeout(
+          () => reject(new Error("verification_timeout")),
+          VERIFICATION_TIMEOUT_MS
+        )
       ),
     ]);
 
@@ -539,17 +630,15 @@ async function buildDecisionVerification(input: {
         typeof parsed.verdict === "string" && parsed.verdict.trim()
           ? parsed.verdict.trim()
           : "Use the overlapping conclusion as the base answer.",
-      consensus: {
-        level: consensusLevel,
-        modelsAligned,
-      },
+      consensus: { level: consensusLevel, modelsAligned },
       riskLevel: getRiskLevel({
         agreementLevel: input.agreementLevel,
         disagreementType,
         finalConclusionAligned,
       }),
       keyDisagreement:
-        typeof parsed.keyDisagreement === "string" && parsed.keyDisagreement.trim()
+        typeof parsed.keyDisagreement === "string" &&
+        parsed.keyDisagreement.trim()
           ? parsed.keyDisagreement.trim()
           : disagreementType === "material_conflict"
           ? "The models differed on the main recommendation."
@@ -557,7 +646,8 @@ async function buildDecisionVerification(input: {
           ? "A usable answer depends on context, conditions, or tradeoffs."
           : "The models differed mainly in emphasis or supporting detail.",
       recommendedAction:
-        typeof parsed.recommendedAction === "string" && parsed.recommendedAction.trim()
+        typeof parsed.recommendedAction === "string" &&
+        parsed.recommendedAction.trim()
           ? parsed.recommendedAction.trim()
           : disagreementType === "conditional_alignment"
           ? "Choose based on the conditions or tradeoffs that matter most in your context."
@@ -582,10 +672,7 @@ async function buildDecisionVerification(input: {
 
     return {
       verdict: "Use the overlapping conclusion as the base answer.",
-      consensus: {
-        level: consensusLevel,
-        modelsAligned,
-      },
+      consensus: { level: consensusLevel, modelsAligned },
       riskLevel: getRiskLevel({
         agreementLevel: input.agreementLevel,
         disagreementType: fallback.disagreementType,
@@ -604,46 +691,6 @@ async function buildDecisionVerification(input: {
       finalConclusionAligned: fallback.finalConclusionAligned,
       disagreementType: fallback.disagreementType,
     };
-  }
-}
-
-async function scoreAnswerQuality(input: {
-  answerA: string;
-  answerB: string;
-}): Promise<{ scoreA: number; scoreB: number }> {
-  try {
-    const completion = await Promise.race([
-      openai.chat.completions.create({
-        model: "gpt-4o-mini",
-        max_tokens: 100,
-        response_format: { type: "json_object" },
-        messages: [
-          {
-            role: "user",
-            content:
-              `Rate these two AI responses from 1-10 for quality, accuracy and usefulness. ` +
-              `Return JSON only: {"scoreA": number, "scoreB": number}\n\n` +
-              `Response A: ${input.answerA}\n\nResponse B: ${input.answerB}`,
-          },
-        ],
-      }),
-      new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error("quality_timeout")), VERIFICATION_TIMEOUT_MS)
-      ),
-    ]);
-
-    const raw = completion.choices[0]?.message?.content ?? "{}";
-    const parsed = JSON.parse(stripCodeFences(raw));
-
-    return {
-      scoreA:
-        typeof parsed.scoreA === "number" ? clamp(parsed.scoreA, 1, 10) : 7,
-      scoreB:
-        typeof parsed.scoreB === "number" ? clamp(parsed.scoreB, 1, 10) : 7,
-    };
-  } catch (error) {
-    console.error("[RUN_API] quality_error:", error);
-    return { scoreA: 7, scoreB: 7 };
   }
 }
 
@@ -672,7 +719,10 @@ export async function POST(req: NextRequest) {
       selectedProviders = body.providers.slice(0, MAX_PROVIDERS);
       selectionMode = "manual";
     } else {
-      const adaptiveSelection = await adaptiveSelectProviders(body.prompt, taskType);
+      const adaptiveSelection = await adaptiveSelectProviders(
+        body.prompt,
+        taskType
+      );
       selectedProviders = adaptiveSelection.selectedProviders.slice(
         0,
         MAX_PROVIDERS
@@ -727,16 +777,16 @@ export async function POST(req: NextRequest) {
 
     const heuristicComparison = compareAnswers(answerA, answerB);
 
+    // Use a neutral judge: pick whichever model family was NOT used as a provider
+    const judgeProvider = selectJudgeForProviders(providerA, providerB);
+
     const semantic = await judgeSemanticAgreementOrFallback(
-      {
-        question: body.prompt,
-        answerA,
-        answerB,
-      },
+      { question: body.prompt, answerA, answerB },
       () => ({
         agreementLevel: heuristicComparison.agreementLevel,
         likelyConflict: heuristicComparison.likelyConflict,
-      })
+      }),
+      { judgeProvider }
     );
 
     const semanticSummary =
@@ -759,6 +809,7 @@ export async function POST(req: NextRequest) {
       "[RUN_API_COMPARISON]",
       JSON.stringify({
         selectedProviders,
+        judgeProvider,
         agreementLevel: comparison.agreementLevel,
         likelyConflict: comparison.likelyConflict,
         overlapRatio: heuristicComparison.overlapRatio,
@@ -770,7 +821,7 @@ export async function POST(req: NextRequest) {
       })
     );
 
-    const [decisionVerification, qualityScores] = await Promise.all([
+    let [decisionVerification, qualityScores] = await Promise.all([
       buildDecisionVerification({
         prompt: body.prompt,
         answerA,
@@ -779,11 +830,45 @@ export async function POST(req: NextRequest) {
         likelyConflict: comparison.likelyConflict,
         totalProviders: selectedProviders.length,
       }),
+      // Neutral cross-model quality scoring — Anthropic judges all outputs
       scoreAnswerQuality({
         answerA,
         answerB,
+        providerA,
+        providerB,
       }),
     ]);
+
+    decisionVerification = normalizeDecisionVerificationWithSemantic({
+      semanticAgreementLevel: comparison.agreementLevel,
+      semanticLikelyConflict: comparison.likelyConflict,
+      decisionVerification,
+    });
+
+    const normalizedModelsAligned = getModelsAligned({
+      totalProviders: selectedProviders.length,
+      agreementLevel: comparison.agreementLevel,
+      finalConclusionAligned: decisionVerification.finalConclusionAligned,
+      disagreementType: decisionVerification.disagreementType,
+    });
+
+    const normalizedConsensusLevel = getConsensusLevelFromAligned(
+      normalizedModelsAligned,
+      selectedProviders.length
+    );
+
+    decisionVerification = {
+      ...decisionVerification,
+      consensus: {
+        level: normalizedConsensusLevel,
+        modelsAligned: normalizedModelsAligned,
+      },
+      riskLevel: getRiskLevel({
+        agreementLevel: comparison.agreementLevel,
+        disagreementType: decisionVerification.disagreementType,
+        finalConclusionAligned: decisionVerification.finalConclusionAligned,
+      }),
+    };
 
     const averageQuality = (qualityScores.scoreA + qualityScores.scoreB) / 2;
 
@@ -796,20 +881,25 @@ export async function POST(req: NextRequest) {
     });
 
     console.log(
-  "[ZORELAN_RUN]",
-  JSON.stringify({
-    taskType,
-    selectedProviders,
-    agreementLevel: comparison.agreementLevel,
-    likelyConflict: comparison.likelyConflict,
-    disagreementType: decisionVerification.disagreementType,
-    trustScore: trustScore.score,
-    trustLabel: trustScore.label,
-    riskLevel: decisionVerification.riskLevel,
-    finalConclusionAligned: decisionVerification.finalConclusionAligned,
-    verdict: decisionVerification.verdict,
-  }, null, 2)
-);
+      "[ZORELAN_RUN]",
+      JSON.stringify(
+        {
+          taskType,
+          selectedProviders,
+          judgeProvider,
+          agreementLevel: comparison.agreementLevel,
+          likelyConflict: comparison.likelyConflict,
+          disagreementType: decisionVerification.disagreementType,
+          trustScore: trustScore.score,
+          trustLabel: trustScore.label,
+          riskLevel: decisionVerification.riskLevel,
+          finalConclusionAligned: decisionVerification.finalConclusionAligned,
+          verdict: decisionVerification.verdict,
+        },
+        null,
+        2
+      )
+    );
 
     return NextResponse.json({
       ok: true,
