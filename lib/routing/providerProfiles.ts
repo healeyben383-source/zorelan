@@ -13,7 +13,7 @@ export type ProviderProfile = {
 export const PROVIDER_PROFILES: ProviderProfile[] = [
   {
     name: "anthropic",
-    label: "Anthropic Claude Haiku",
+    label: "Anthropic Claude Sonnet",
     strengths: ["strategy", "creative", "general"],
     speedTier: "fast",
     costTier: "low",

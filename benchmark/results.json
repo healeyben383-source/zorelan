@@ -1,0 +1,2302 @@
+[
+  {
+    "id": 1,
+    "prompt": "What is the capital of Australia?",
+    "category": "factual",
+    "expectedAgreement": "high",
+    "status": "ok",
+    "durationMs": 8458,
+    "result": {
+      "agreementLevel": "high",
+      "disagreementType": "additive_nuance",
+      "trustScore": 83,
+      "trustLabel": "high",
+      "riskLevel": "low",
+      "finalConclusionAligned": true,
+      "verdict": "aligned",
+      "semanticJudgeModel": "openai/gpt-4o-mini",
+      "selectedProviders": [
+        "anthropic",
+        "perplexity"
+      ]
+    },
+    "agreementMatch": true
+  },
+  {
+    "id": 2,
+    "prompt": "How many planets are in the solar system?",
+    "category": "factual",
+    "expectedAgreement": "high",
+    "status": "ok",
+    "durationMs": 7683,
+    "result": {
+      "agreementLevel": "high",
+      "disagreementType": "none",
+      "trustScore": 85,
+      "trustLabel": "high",
+      "riskLevel": "low",
+      "finalConclusionAligned": true,
+      "verdict": "The responses support the same main conclusion.",
+      "semanticJudgeModel": "openai/gpt-4o-mini",
+      "selectedProviders": [
+        "anthropic",
+        "perplexity"
+      ]
+    },
+    "agreementMatch": true
+  },
+  {
+    "id": 3,
+    "prompt": "What year did World War II end?",
+    "category": "factual",
+    "expectedAgreement": "high",
+    "status": "ok",
+    "durationMs": 8411,
+    "result": {
+      "agreementLevel": "high",
+      "disagreementType": "explanation_variation",
+      "trustScore": 79,
+      "trustLabel": "high",
+      "riskLevel": "low",
+      "finalConclusionAligned": true,
+      "verdict": "The responses support the same core conclusion but differ in emphasis, timing, or supporting rationale.",
+      "semanticJudgeModel": "openai/gpt-4o-mini",
+      "selectedProviders": [
+        "anthropic",
+        "perplexity"
+      ]
+    },
+    "agreementMatch": true
+  },
+  {
+    "id": 4,
+    "prompt": "What is the speed of light?",
+    "category": "factual",
+    "expectedAgreement": "high",
+    "status": "ok",
+    "durationMs": 6875,
+    "result": {
+      "agreementLevel": "high",
+      "disagreementType": "none",
+      "trustScore": 85,
+      "trustLabel": "high",
+      "riskLevel": "low",
+      "finalConclusionAligned": true,
+      "verdict": "The responses support the same main conclusion.",
+      "semanticJudgeModel": "openai/gpt-4o-mini",
+      "selectedProviders": [
+        "anthropic",
+        "perplexity"
+      ]
+    },
+    "agreementMatch": true
+  },
+  {
+    "id": 5,
+    "prompt": "What is the chemical formula for water?",
+    "category": "factual",
+    "expectedAgreement": "high",
+    "status": "ok",
+    "durationMs": 6352,
+    "result": {
+      "agreementLevel": "high",
+      "disagreementType": "none",
+      "trustScore": 85,
+      "trustLabel": "high",
+      "riskLevel": "low",
+      "finalConclusionAligned": true,
+      "verdict": "The responses support the same main conclusion.",
+      "semanticJudgeModel": "openai/gpt-4o-mini",
+      "selectedProviders": [
+        "anthropic",
+        "perplexity"
+      ]
+    },
+    "agreementMatch": true
+  },
+  {
+    "id": 6,
+    "prompt": "Who wrote Romeo and Juliet?",
+    "category": "factual",
+    "expectedAgreement": "high",
+    "status": "ok",
+    "durationMs": 7066,
+    "result": {
+      "agreementLevel": "high",
+      "disagreementType": "additive_nuance",
+      "trustScore": 82,
+      "trustLabel": "high",
+      "riskLevel": "low",
+      "finalConclusionAligned": true,
+      "verdict": "agree",
+      "semanticJudgeModel": "openai/gpt-4o-mini",
+      "selectedProviders": [
+        "anthropic",
+        "perplexity"
+      ]
+    },
+    "agreementMatch": true
+  },
+  {
+    "id": 7,
+    "prompt": "What is the largest ocean on Earth?",
+    "category": "factual",
+    "expectedAgreement": "high",
+    "status": "ok",
+    "durationMs": 7369,
+    "result": {
+      "agreementLevel": "high",
+      "disagreementType": "none",
+      "trustScore": 83,
+      "trustLabel": "high",
+      "riskLevel": "low",
+      "finalConclusionAligned": true,
+      "verdict": "The responses support the same main conclusion.",
+      "semanticJudgeModel": "openai/gpt-4o-mini",
+      "selectedProviders": [
+        "anthropic",
+        "perplexity"
+      ]
+    },
+    "agreementMatch": true
+  },
+  {
+    "id": 8,
+    "prompt": "What language is most spoken in Brazil?",
+    "category": "factual",
+    "expectedAgreement": "high",
+    "status": "ok",
+    "durationMs": 10129,
+    "result": {
+      "agreementLevel": "high",
+      "disagreementType": "none",
+      "trustScore": 82,
+      "trustLabel": "high",
+      "riskLevel": "low",
+      "finalConclusionAligned": true,
+      "verdict": "The responses support the same main conclusion.",
+      "semanticJudgeModel": "openai/gpt-4o-mini",
+      "selectedProviders": [
+        "anthropic",
+        "perplexity"
+      ]
+    },
+    "agreementMatch": true
+  },
+  {
+    "id": 9,
+    "prompt": "What is the boiling point of water at sea level?",
+    "category": "factual",
+    "expectedAgreement": "high",
+    "status": "ok",
+    "durationMs": 6856,
+    "result": {
+      "agreementLevel": "high",
+      "disagreementType": "none",
+      "trustScore": 82,
+      "trustLabel": "high",
+      "riskLevel": "low",
+      "finalConclusionAligned": true,
+      "verdict": "The responses support the same main conclusion.",
+      "semanticJudgeModel": "openai/gpt-4o-mini",
+      "selectedProviders": [
+        "anthropic",
+        "perplexity"
+      ]
+    },
+    "agreementMatch": true
+  },
+  {
+    "id": 10,
+    "prompt": "What is the powerhouse of the cell?",
+    "category": "factual",
+    "expectedAgreement": "high",
+    "status": "ok",
+    "durationMs": 6508,
+    "result": {
+      "agreementLevel": "high",
+      "disagreementType": "none",
+      "trustScore": 86,
+      "trustLabel": "high",
+      "riskLevel": "low",
+      "finalConclusionAligned": true,
+      "verdict": "The responses support the same main conclusion.",
+      "semanticJudgeModel": "openai/gpt-4o-mini",
+      "selectedProviders": [
+        "anthropic",
+        "perplexity"
+      ]
+    },
+    "agreementMatch": true
+  },
+  {
+    "id": 11,
+    "prompt": "How many sides does a hexagon have?",
+    "category": "factual",
+    "expectedAgreement": "high",
+    "status": "ok",
+    "durationMs": 7118,
+    "result": {
+      "agreementLevel": "high",
+      "disagreementType": "none",
+      "trustScore": 83,
+      "trustLabel": "high",
+      "riskLevel": "low",
+      "finalConclusionAligned": true,
+      "verdict": "The responses support the same main conclusion.",
+      "semanticJudgeModel": "anthropic/claude-haiku-4-5-20251001",
+      "selectedProviders": [
+        "anthropic",
+        "openai"
+      ]
+    },
+    "agreementMatch": true
+  },
+  {
+    "id": 12,
+    "prompt": "What is the square root of 144?",
+    "category": "factual",
+    "expectedAgreement": "high",
+    "status": "ok",
+    "durationMs": 5412,
+    "result": {
+      "agreementLevel": "high",
+      "disagreementType": "none",
+      "trustScore": 85,
+      "trustLabel": "high",
+      "riskLevel": "low",
+      "finalConclusionAligned": true,
+      "verdict": "The responses support the same main conclusion.",
+      "semanticJudgeModel": "anthropic/claude-haiku-4-5-20251001",
+      "selectedProviders": [
+        "anthropic",
+        "openai"
+      ]
+    },
+    "agreementMatch": true
+  },
+  {
+    "id": 13,
+    "prompt": "What continent is Egypt in?",
+    "category": "factual",
+    "expectedAgreement": "high",
+    "status": "ok",
+    "durationMs": 6409,
+    "result": {
+      "agreementLevel": "high",
+      "disagreementType": "none",
+      "trustScore": 85,
+      "trustLabel": "high",
+      "riskLevel": "low",
+      "finalConclusionAligned": true,
+      "verdict": "The responses support the same main conclusion.",
+      "semanticJudgeModel": "anthropic/claude-haiku-4-5-20251001",
+      "selectedProviders": [
+        "anthropic",
+        "openai"
+      ]
+    },
+    "agreementMatch": true
+  },
+  {
+    "id": 14,
+    "prompt": "What gas do plants absorb during photosynthesis?",
+    "category": "factual",
+    "expectedAgreement": "high",
+    "status": "ok",
+    "durationMs": 7642,
+    "result": {
+      "agreementLevel": "high",
+      "disagreementType": "none",
+      "trustScore": 85,
+      "trustLabel": "high",
+      "riskLevel": "low",
+      "finalConclusionAligned": true,
+      "verdict": "The responses support the same main conclusion.",
+      "semanticJudgeModel": "openai/gpt-4o-mini",
+      "selectedProviders": [
+        "anthropic",
+        "perplexity"
+      ]
+    },
+    "agreementMatch": true
+  },
+  {
+    "id": 15,
+    "prompt": "What is the currency of Japan?",
+    "category": "factual",
+    "expectedAgreement": "high",
+    "status": "ok",
+    "durationMs": 5832,
+    "result": {
+      "agreementLevel": "high",
+      "disagreementType": "none",
+      "trustScore": 83,
+      "trustLabel": "high",
+      "riskLevel": "low",
+      "finalConclusionAligned": true,
+      "verdict": "The responses support the same main conclusion.",
+      "semanticJudgeModel": "openai/gpt-4o-mini",
+      "selectedProviders": [
+        "anthropic",
+        "perplexity"
+      ]
+    },
+    "agreementMatch": true
+  },
+  {
+    "id": 16,
+    "prompt": "How many bones are in the adult human body?",
+    "category": "factual",
+    "expectedAgreement": "high",
+    "status": "ok",
+    "durationMs": 5989,
+    "result": {
+      "agreementLevel": "high",
+      "disagreementType": "none",
+      "trustScore": 83,
+      "trustLabel": "high",
+      "riskLevel": "low",
+      "finalConclusionAligned": true,
+      "verdict": "The responses support the same main conclusion.",
+      "semanticJudgeModel": "openai/gpt-4o-mini",
+      "selectedProviders": [
+        "anthropic",
+        "perplexity"
+      ]
+    },
+    "agreementMatch": true
+  },
+  {
+    "id": 17,
+    "prompt": "What is the tallest mountain in the world?",
+    "category": "factual",
+    "expectedAgreement": "high",
+    "status": "ok",
+    "durationMs": 9169,
+    "result": {
+      "agreementLevel": "high",
+      "disagreementType": "none",
+      "trustScore": 82,
+      "trustLabel": "high",
+      "riskLevel": "low",
+      "finalConclusionAligned": true,
+      "verdict": "The responses support the same main conclusion.",
+      "semanticJudgeModel": "anthropic/claude-haiku-4-5-20251001",
+      "selectedProviders": [
+        "anthropic",
+        "openai"
+      ]
+    },
+    "agreementMatch": true
+  },
+  {
+    "id": 18,
+    "prompt": "What programming language was created by Guido van Rossum?",
+    "category": "factual",
+    "expectedAgreement": "high",
+    "status": "ok",
+    "durationMs": 9092,
+    "result": {
+      "agreementLevel": "high",
+      "disagreementType": "none",
+      "trustScore": 82,
+      "trustLabel": "high",
+      "riskLevel": "low",
+      "finalConclusionAligned": true,
+      "verdict": "The responses support the same main conclusion.",
+      "semanticJudgeModel": "anthropic/claude-haiku-4-5-20251001",
+      "selectedProviders": [
+        "perplexity",
+        "openai"
+      ]
+    },
+    "agreementMatch": true
+  },
+  {
+    "id": 19,
+    "prompt": "What is the atomic number of carbon?",
+    "category": "factual",
+    "expectedAgreement": "high",
+    "status": "ok",
+    "durationMs": 5823,
+    "result": {
+      "agreementLevel": "high",
+      "disagreementType": "none",
+      "trustScore": 83,
+      "trustLabel": "high",
+      "riskLevel": "low",
+      "finalConclusionAligned": true,
+      "verdict": "The responses support the same main conclusion.",
+      "semanticJudgeModel": "anthropic/claude-haiku-4-5-20251001",
+      "selectedProviders": [
+        "anthropic",
+        "openai"
+      ]
+    },
+    "agreementMatch": true
+  },
+  {
+    "id": 20,
+    "prompt": "What year was the first iPhone released?",
+    "category": "factual",
+    "expectedAgreement": "high",
+    "status": "ok",
+    "durationMs": 5278,
+    "result": {
+      "agreementLevel": "high",
+      "disagreementType": "none",
+      "trustScore": 82,
+      "trustLabel": "high",
+      "riskLevel": "low",
+      "finalConclusionAligned": true,
+      "verdict": "The responses support the same main conclusion.",
+      "semanticJudgeModel": "openai/gpt-4o-mini",
+      "selectedProviders": [
+        "anthropic",
+        "perplexity"
+      ]
+    },
+    "agreementMatch": true
+  },
+  {
+    "id": 21,
+    "prompt": "Should a startup focus on growth or profitability in its first year?",
+    "category": "strategy",
+    "expectedAgreement": "medium",
+    "status": "ok",
+    "durationMs": 9413,
+    "result": {
+      "agreementLevel": "high",
+      "disagreementType": "none",
+      "trustScore": 83,
+      "trustLabel": "high",
+      "riskLevel": "low",
+      "finalConclusionAligned": true,
+      "verdict": "The responses support the same main conclusion.",
+      "semanticJudgeModel": "openai/gpt-4o-mini",
+      "selectedProviders": [
+        "anthropic",
+        "perplexity"
+      ]
+    },
+    "agreementMatch": false
+  },
+  {
+    "id": 22,
+    "prompt": "Is it better to build a product for a niche market or a broad market?",
+    "category": "strategy",
+    "expectedAgreement": "medium",
+    "status": "ok",
+    "durationMs": 11947,
+    "result": {
+      "agreementLevel": "medium",
+      "disagreementType": "material_conflict",
+      "trustScore": 22,
+      "trustLabel": "low",
+      "riskLevel": "high",
+      "finalConclusionAligned": false,
+      "verdict": "material_conflict",
+      "semanticJudgeModel": "anthropic/claude-haiku-4-5-20251001",
+      "selectedProviders": [
+        "anthropic",
+        "openai"
+      ]
+    },
+    "agreementMatch": true
+  },
+  {
+    "id": 23,
+    "prompt": "Should founders take a salary in the early stages of a startup?",
+    "category": "strategy",
+    "expectedAgreement": "medium",
+    "status": "ok",
+    "durationMs": 9487,
+    "result": {
+      "agreementLevel": "medium",
+      "disagreementType": "material_conflict",
+      "trustScore": 21,
+      "trustLabel": "low",
+      "riskLevel": "high",
+      "finalConclusionAligned": false,
+      "verdict": "material_conflict",
+      "semanticJudgeModel": "openai/gpt-4o-mini",
+      "selectedProviders": [
+        "anthropic",
+        "perplexity"
+      ]
+    },
+    "agreementMatch": true
+  },
+  {
+    "id": 24,
+    "prompt": "What is the best way to validate a startup idea before building?",
+    "category": "strategy",
+    "expectedAgreement": "medium",
+    "status": "ok",
+    "durationMs": 8071,
+    "result": {
+      "agreementLevel": "high",
+      "disagreementType": "explanation_variation",
+      "trustScore": 78,
+      "trustLabel": "high",
+      "riskLevel": "low",
+      "finalConclusionAligned": true,
+      "verdict": "align",
+      "semanticJudgeModel": "openai/gpt-4o-mini",
+      "selectedProviders": [
+        "anthropic",
+        "perplexity"
+      ]
+    },
+    "agreementMatch": false
+  },
+  {
+    "id": 25,
+    "prompt": "Should a new business prioritise customer acquisition or customer retention?",
+    "category": "strategy",
+    "expectedAgreement": "medium",
+    "status": "ok",
+    "durationMs": 10781,
+    "result": {
+      "agreementLevel": "high",
+      "disagreementType": "explanation_variation",
+      "trustScore": 79,
+      "trustLabel": "high",
+      "riskLevel": "low",
+      "finalConclusionAligned": true,
+      "verdict": "The responses support the same core conclusion but differ in emphasis, timing, or supporting rationale.",
+      "semanticJudgeModel": "openai/gpt-4o-mini",
+      "selectedProviders": [
+        "perplexity",
+        "anthropic"
+      ]
+    },
+    "agreementMatch": false
+  },
+  {
+    "id": 26,
+    "prompt": "Is it better to launch a product early with fewer features or wait until it is polished?",
+    "category": "strategy",
+    "expectedAgreement": "medium",
+    "status": "ok",
+    "durationMs": 10119,
+    "result": {
+      "agreementLevel": "medium",
+      "disagreementType": "material_conflict",
+      "trustScore": 24,
+      "trustLabel": "low",
+      "riskLevel": "high",
+      "finalConclusionAligned": false,
+      "verdict": "material_conflict",
+      "semanticJudgeModel": "openai/gpt-4o-mini",
+      "selectedProviders": [
+        "anthropic",
+        "perplexity"
+      ]
+    },
+    "agreementMatch": true
+  },
+  {
+    "id": 27,
+    "prompt": "Should a software company charge monthly or annually for subscriptions?",
+    "category": "strategy",
+    "expectedAgreement": "medium",
+    "status": "ok",
+    "durationMs": 12553,
+    "result": {
+      "agreementLevel": "high",
+      "disagreementType": "none",
+      "trustScore": 80,
+      "trustLabel": "high",
+      "riskLevel": "low",
+      "finalConclusionAligned": true,
+      "verdict": "The responses support the same main conclusion.",
+      "semanticJudgeModel": "anthropic/claude-haiku-4-5-20251001",
+      "selectedProviders": [
+        "anthropic",
+        "openai"
+      ]
+    },
+    "agreementMatch": false
+  },
+  {
+    "id": 28,
+    "prompt": "When should a startup hire its first sales person?",
+    "category": "strategy",
+    "expectedAgreement": "medium",
+    "status": "ok",
+    "durationMs": 9787,
+    "result": {
+      "agreementLevel": "high",
+      "disagreementType": "explanation_variation",
+      "trustScore": 78,
+      "trustLabel": "high",
+      "riskLevel": "low",
+      "finalConclusionAligned": true,
+      "verdict": "The responses support the same core conclusion but differ in emphasis, timing, or supporting rationale.",
+      "semanticJudgeModel": "openai/gpt-4o-mini",
+      "selectedProviders": [
+        "anthropic",
+        "perplexity"
+      ]
+    },
+    "agreementMatch": false
+  },
+  {
+    "id": 29,
+    "prompt": "Is it better to raise venture capital early or bootstrap as long as possible?",
+    "category": "strategy",
+    "expectedAgreement": "medium",
+    "status": "ok",
+    "durationMs": 10933,
+    "result": {
+      "agreementLevel": "high",
+      "disagreementType": "none",
+      "trustScore": 82,
+      "trustLabel": "high",
+      "riskLevel": "low",
+      "finalConclusionAligned": true,
+      "verdict": "The responses support the same main conclusion.",
+      "semanticJudgeModel": "openai/gpt-4o-mini",
+      "selectedProviders": [
+        "anthropic",
+        "perplexity"
+      ]
+    },
+    "agreementMatch": false
+  },
+  {
+    "id": 30,
+    "prompt": "Should a founder be a generalist or hire specialists early?",
+    "category": "strategy",
+    "expectedAgreement": "medium",
+    "status": "ok",
+    "durationMs": 9137,
+    "result": {
+      "agreementLevel": "high",
+      "disagreementType": "none",
+      "trustScore": 82,
+      "trustLabel": "high",
+      "riskLevel": "low",
+      "finalConclusionAligned": true,
+      "verdict": "The responses support the same main conclusion.",
+      "semanticJudgeModel": "openai/gpt-4o-mini",
+      "selectedProviders": [
+        "anthropic",
+        "perplexity"
+      ]
+    },
+    "agreementMatch": false
+  },
+  {
+    "id": 31,
+    "prompt": "What is the difference between REST and GraphQL?",
+    "category": "technical",
+    "expectedAgreement": "high",
+    "status": "ok",
+    "durationMs": 10910,
+    "result": {
+      "agreementLevel": "high",
+      "disagreementType": "none",
+      "trustScore": 82,
+      "trustLabel": "high",
+      "riskLevel": "low",
+      "finalConclusionAligned": true,
+      "verdict": "The responses support the same main conclusion.",
+      "semanticJudgeModel": "anthropic/claude-haiku-4-5-20251001",
+      "selectedProviders": [
+        "anthropic",
+        "openai"
+      ]
+    },
+    "agreementMatch": true
+  },
+  {
+    "id": 32,
+    "prompt": "When should you use a SQL database versus a NoSQL database?",
+    "category": "technical",
+    "expectedAgreement": "medium",
+    "status": "ok",
+    "durationMs": 11591,
+    "result": {
+      "agreementLevel": "high",
+      "disagreementType": "none",
+      "trustScore": 82,
+      "trustLabel": "high",
+      "riskLevel": "low",
+      "finalConclusionAligned": true,
+      "verdict": "The responses support the same main conclusion.",
+      "semanticJudgeModel": "anthropic/claude-haiku-4-5-20251001",
+      "selectedProviders": [
+        "perplexity",
+        "openai"
+      ]
+    },
+    "agreementMatch": false
+  },
+  {
+    "id": 33,
+    "prompt": "What is the purpose of a Docker container?",
+    "category": "technical",
+    "expectedAgreement": "high",
+    "status": "ok",
+    "durationMs": 10332,
+    "result": {
+      "agreementLevel": "high",
+      "disagreementType": "none",
+      "trustScore": 84,
+      "trustLabel": "high",
+      "riskLevel": "low",
+      "finalConclusionAligned": true,
+      "verdict": "The responses support the same main conclusion.",
+      "semanticJudgeModel": "anthropic/claude-haiku-4-5-20251001",
+      "selectedProviders": [
+        "anthropic",
+        "openai"
+      ]
+    },
+    "agreementMatch": true
+  },
+  {
+    "id": 34,
+    "prompt": "What is the difference between authentication and authorisation?",
+    "category": "technical",
+    "expectedAgreement": "high",
+    "status": "ok",
+    "durationMs": 6889,
+    "result": {
+      "agreementLevel": "high",
+      "disagreementType": "none",
+      "trustScore": 84,
+      "trustLabel": "high",
+      "riskLevel": "low",
+      "finalConclusionAligned": true,
+      "verdict": "The responses support the same main conclusion.",
+      "semanticJudgeModel": "openai/gpt-4o-mini",
+      "selectedProviders": [
+        "anthropic",
+        "perplexity"
+      ]
+    },
+    "agreementMatch": true
+  },
+  {
+    "id": 35,
+    "prompt": "What is a race condition in software development?",
+    "category": "technical",
+    "expectedAgreement": "high",
+    "status": "ok",
+    "durationMs": 7328,
+    "result": {
+      "agreementLevel": "high",
+      "disagreementType": "none",
+      "trustScore": 83,
+      "trustLabel": "high",
+      "riskLevel": "low",
+      "finalConclusionAligned": true,
+      "verdict": "The responses support the same main conclusion.",
+      "semanticJudgeModel": "openai/gpt-4o-mini",
+      "selectedProviders": [
+        "anthropic",
+        "perplexity"
+      ]
+    },
+    "agreementMatch": true
+  },
+  {
+    "id": 36,
+    "prompt": "When should you use TypeScript instead of JavaScript?",
+    "category": "technical",
+    "expectedAgreement": "medium",
+    "status": "ok",
+    "durationMs": 11415,
+    "result": {
+      "agreementLevel": "high",
+      "disagreementType": "none",
+      "trustScore": 82,
+      "trustLabel": "high",
+      "riskLevel": "low",
+      "finalConclusionAligned": true,
+      "verdict": "The responses support the same main conclusion.",
+      "semanticJudgeModel": "anthropic/claude-haiku-4-5-20251001",
+      "selectedProviders": [
+        "perplexity",
+        "openai"
+      ]
+    },
+    "agreementMatch": false
+  },
+  {
+    "id": 37,
+    "prompt": "What is the CAP theorem?",
+    "category": "technical",
+    "expectedAgreement": "high",
+    "status": "ok",
+    "durationMs": 8452,
+    "result": {
+      "agreementLevel": "high",
+      "disagreementType": "explanation_variation",
+      "trustScore": 80,
+      "trustLabel": "high",
+      "riskLevel": "low",
+      "finalConclusionAligned": true,
+      "verdict": "The responses both discuss the CAP theorem and its implications for distributed systems.",
+      "semanticJudgeModel": "openai/gpt-4o-mini",
+      "selectedProviders": [
+        "anthropic",
+        "perplexity"
+      ]
+    },
+    "agreementMatch": true
+  },
+  {
+    "id": 38,
+    "prompt": "What is the difference between a process and a thread?",
+    "category": "technical",
+    "expectedAgreement": "high",
+    "status": "ok",
+    "durationMs": 7106,
+    "result": {
+      "agreementLevel": "high",
+      "disagreementType": "none",
+      "trustScore": 83,
+      "trustLabel": "high",
+      "riskLevel": "low",
+      "finalConclusionAligned": true,
+      "verdict": "The responses support the same main conclusion.",
+      "semanticJudgeModel": "openai/gpt-4o-mini",
+      "selectedProviders": [
+        "anthropic",
+        "perplexity"
+      ]
+    },
+    "agreementMatch": true
+  },
+  {
+    "id": 39,
+    "prompt": "What is a webhook and how does it differ from polling?",
+    "category": "technical",
+    "expectedAgreement": "high",
+    "status": "ok",
+    "durationMs": 14241,
+    "result": {
+      "agreementLevel": "high",
+      "disagreementType": "none",
+      "trustScore": 83,
+      "trustLabel": "high",
+      "riskLevel": "low",
+      "finalConclusionAligned": true,
+      "verdict": "The responses support the same main conclusion.",
+      "semanticJudgeModel": "anthropic/claude-haiku-4-5-20251001",
+      "selectedProviders": [
+        "perplexity",
+        "openai"
+      ]
+    },
+    "agreementMatch": true
+  },
+  {
+    "id": 40,
+    "prompt": "Should you use server side rendering or client side rendering for a web app?",
+    "category": "technical",
+    "expectedAgreement": "medium",
+    "status": "ok",
+    "durationMs": 12391,
+    "result": {
+      "agreementLevel": "high",
+      "disagreementType": "additive_nuance",
+      "trustScore": 82,
+      "trustLabel": "high",
+      "riskLevel": "low",
+      "finalConclusionAligned": true,
+      "verdict": "agree",
+      "semanticJudgeModel": "anthropic/claude-haiku-4-5-20251001",
+      "selectedProviders": [
+        "perplexity",
+        "openai"
+      ]
+    },
+    "agreementMatch": false
+  },
+  {
+    "id": 41,
+    "prompt": "What is the purpose of an index in a database?",
+    "category": "technical",
+    "expectedAgreement": "high",
+    "status": "ok",
+    "durationMs": 12024,
+    "result": {
+      "agreementLevel": "high",
+      "disagreementType": "none",
+      "trustScore": 82,
+      "trustLabel": "high",
+      "riskLevel": "low",
+      "finalConclusionAligned": true,
+      "verdict": "The responses support the same main conclusion.",
+      "semanticJudgeModel": "anthropic/claude-haiku-4-5-20251001",
+      "selectedProviders": [
+        "perplexity",
+        "openai"
+      ]
+    },
+    "agreementMatch": true
+  },
+  {
+    "id": 42,
+    "prompt": "What is the difference between TCP and UDP?",
+    "category": "technical",
+    "expectedAgreement": "high",
+    "status": "ok",
+    "durationMs": 7285,
+    "result": {
+      "agreementLevel": "high",
+      "disagreementType": "none",
+      "trustScore": 82,
+      "trustLabel": "high",
+      "riskLevel": "low",
+      "finalConclusionAligned": true,
+      "verdict": "The responses support the same main conclusion.",
+      "semanticJudgeModel": "openai/gpt-4o-mini",
+      "selectedProviders": [
+        "anthropic",
+        "perplexity"
+      ]
+    },
+    "agreementMatch": true
+  },
+  {
+    "id": 43,
+    "prompt": "What is a memory leak and how do you prevent it?",
+    "category": "technical",
+    "expectedAgreement": "high",
+    "status": "ok",
+    "durationMs": 9365,
+    "result": {
+      "agreementLevel": "high",
+      "disagreementType": "explanation_variation",
+      "trustScore": 78,
+      "trustLabel": "high",
+      "riskLevel": "low",
+      "finalConclusionAligned": true,
+      "verdict": "no",
+      "semanticJudgeModel": "openai/gpt-4o-mini",
+      "selectedProviders": [
+        "anthropic",
+        "perplexity"
+      ]
+    },
+    "agreementMatch": true
+  },
+  {
+    "id": 44,
+    "prompt": "What is the difference between horizontal and vertical scaling?",
+    "category": "technical",
+    "expectedAgreement": "high",
+    "status": "ok",
+    "durationMs": 7299,
+    "result": {
+      "agreementLevel": "high",
+      "disagreementType": "none",
+      "trustScore": 84,
+      "trustLabel": "high",
+      "riskLevel": "low",
+      "finalConclusionAligned": true,
+      "verdict": "The responses support the same main conclusion.",
+      "semanticJudgeModel": "openai/gpt-4o-mini",
+      "selectedProviders": [
+        "anthropic",
+        "perplexity"
+      ]
+    },
+    "agreementMatch": true
+  },
+  {
+    "id": 45,
+    "prompt": "When should you use caching in an application?",
+    "category": "technical",
+    "expectedAgreement": "medium",
+    "status": "ok",
+    "durationMs": 10121,
+    "result": {
+      "agreementLevel": "high",
+      "disagreementType": "none",
+      "trustScore": 83,
+      "trustLabel": "high",
+      "riskLevel": "low",
+      "finalConclusionAligned": true,
+      "verdict": "The responses support the same main conclusion.",
+      "semanticJudgeModel": "openai/gpt-4o-mini",
+      "selectedProviders": [
+        "anthropic",
+        "perplexity"
+      ]
+    },
+    "agreementMatch": false
+  },
+  {
+    "id": 46,
+    "prompt": "Is working from home better than working from an office?",
+    "category": "nuanced",
+    "expectedAgreement": "medium",
+    "status": "ok",
+    "durationMs": 10213,
+    "result": {
+      "agreementLevel": "high",
+      "disagreementType": "none",
+      "trustScore": 82,
+      "trustLabel": "high",
+      "riskLevel": "low",
+      "finalConclusionAligned": true,
+      "verdict": "The responses support the same main conclusion.",
+      "semanticJudgeModel": "anthropic/claude-haiku-4-5-20251001",
+      "selectedProviders": [
+        "anthropic",
+        "openai"
+      ]
+    },
+    "agreementMatch": false
+  },
+  {
+    "id": 47,
+    "prompt": "Should companies prioritise diversity hiring?",
+    "category": "nuanced",
+    "expectedAgreement": "medium",
+    "status": "ok",
+    "durationMs": 11210,
+    "result": {
+      "agreementLevel": "medium",
+      "disagreementType": "material_conflict",
+      "trustScore": 18,
+      "trustLabel": "low",
+      "riskLevel": "high",
+      "finalConclusionAligned": false,
+      "verdict": "disagreement",
+      "semanticJudgeModel": "openai/gpt-4o-mini",
+      "selectedProviders": [
+        "anthropic",
+        "perplexity"
+      ]
+    },
+    "agreementMatch": true
+  },
+  {
+    "id": 48,
+    "prompt": "Is a university degree worth it in 2025?",
+    "category": "nuanced",
+    "expectedAgreement": "medium",
+    "status": "ok",
+    "durationMs": 9745,
+    "result": {
+      "agreementLevel": "medium",
+      "disagreementType": "explanation_variation",
+      "trustScore": 50,
+      "trustLabel": "low",
+      "riskLevel": "moderate",
+      "finalConclusionAligned": false,
+      "verdict": "both responses acknowledge that the value of a university degree in 2025 is contingent upon individual circumstances, field of study, and financial considerations. However, they differ in their emphasis and framing.",
+      "semanticJudgeModel": "openai/gpt-4o-mini",
+      "selectedProviders": [
+        "anthropic",
+        "perplexity"
+      ]
+    },
+    "agreementMatch": true
+  },
+  {
+    "id": 49,
+    "prompt": "Should social media platforms moderate political content?",
+    "category": "nuanced",
+    "expectedAgreement": "low",
+    "status": "ok",
+    "durationMs": 9097,
+    "result": {
+      "agreementLevel": "medium",
+      "disagreementType": "material_conflict",
+      "trustScore": 22,
+      "trustLabel": "low",
+      "riskLevel": "high",
+      "finalConclusionAligned": false,
+      "verdict": "disagreement",
+      "semanticJudgeModel": "openai/gpt-4o-mini",
+      "selectedProviders": [
+        "anthropic",
+        "perplexity"
+      ]
+    },
+    "agreementMatch": false
+  },
+  {
+    "id": 50,
+    "prompt": "Is it ethical for companies to use AI to screen job applicants?",
+    "category": "nuanced",
+    "expectedAgreement": "medium",
+    "status": "ok",
+    "durationMs": 7839,
+    "result": {
+      "agreementLevel": "high",
+      "disagreementType": "explanation_variation",
+      "trustScore": 78,
+      "trustLabel": "high",
+      "riskLevel": "low",
+      "finalConclusionAligned": true,
+      "verdict": "agree",
+      "semanticJudgeModel": "openai/gpt-4o-mini",
+      "selectedProviders": [
+        "anthropic",
+        "perplexity"
+      ]
+    },
+    "agreementMatch": false
+  },
+  {
+    "id": 51,
+    "prompt": "Should governments regulate cryptocurrency?",
+    "category": "nuanced",
+    "expectedAgreement": "medium",
+    "status": "ok",
+    "durationMs": 11820,
+    "result": {
+      "agreementLevel": "high",
+      "disagreementType": "none",
+      "trustScore": 80,
+      "trustLabel": "high",
+      "riskLevel": "low",
+      "finalConclusionAligned": true,
+      "verdict": "The responses support the same main conclusion.",
+      "semanticJudgeModel": "anthropic/claude-haiku-4-5-20251001",
+      "selectedProviders": [
+        "anthropic",
+        "openai"
+      ]
+    },
+    "agreementMatch": false
+  },
+  {
+    "id": 52,
+    "prompt": "Is it better to rent or buy a home?",
+    "category": "nuanced",
+    "expectedAgreement": "medium",
+    "status": "ok",
+    "durationMs": 8146,
+    "result": {
+      "agreementLevel": "high",
+      "disagreementType": "additive_nuance",
+      "trustScore": 84,
+      "trustLabel": "high",
+      "riskLevel": "low",
+      "finalConclusionAligned": true,
+      "verdict": "The choice to rent or buy a home depends on individual circumstances.",
+      "semanticJudgeModel": "openai/gpt-4o-mini",
+      "selectedProviders": [
+        "anthropic",
+        "perplexity"
+      ]
+    },
+    "agreementMatch": false
+  },
+  {
+    "id": 53,
+    "prompt": "Should AI generated content be labelled?",
+    "category": "nuanced",
+    "expectedAgreement": "medium",
+    "status": "ok",
+    "durationMs": 8985,
+    "result": {
+      "agreementLevel": "high",
+      "disagreementType": "explanation_variation",
+      "trustScore": 78,
+      "trustLabel": "high",
+      "riskLevel": "low",
+      "finalConclusionAligned": true,
+      "verdict": "The responses support the same core conclusion but differ in emphasis, timing, or supporting rationale.",
+      "semanticJudgeModel": "openai/gpt-4o-mini",
+      "selectedProviders": [
+        "anthropic",
+        "perplexity"
+      ]
+    },
+    "agreementMatch": false
+  },
+  {
+    "id": 54,
+    "prompt": "Is it ethical to use animals in medical research?",
+    "category": "nuanced",
+    "expectedAgreement": "medium",
+    "status": "ok",
+    "durationMs": 10346,
+    "result": {
+      "agreementLevel": "medium",
+      "disagreementType": "material_conflict",
+      "trustScore": 24,
+      "trustLabel": "low",
+      "riskLevel": "high",
+      "finalConclusionAligned": false,
+      "verdict": "material_conflict",
+      "semanticJudgeModel": "openai/gpt-4o-mini",
+      "selectedProviders": [
+        "anthropic",
+        "perplexity"
+      ]
+    },
+    "agreementMatch": true
+  },
+  {
+    "id": 55,
+    "prompt": "Should remote workers be paid differently based on where they live?",
+    "category": "nuanced",
+    "expectedAgreement": "medium",
+    "status": "ok",
+    "durationMs": 9744,
+    "result": {
+      "agreementLevel": "medium",
+      "disagreementType": "material_conflict",
+      "trustScore": 25,
+      "trustLabel": "low",
+      "riskLevel": "high",
+      "finalConclusionAligned": false,
+      "verdict": "disagreement",
+      "semanticJudgeModel": "openai/gpt-4o-mini",
+      "selectedProviders": [
+        "anthropic",
+        "perplexity"
+      ]
+    },
+    "agreementMatch": true
+  },
+  {
+    "id": 56,
+    "prompt": "Is capitalism the best economic system?",
+    "category": "controversial",
+    "expectedAgreement": "low",
+    "status": "ok",
+    "durationMs": 8957,
+    "result": {
+      "agreementLevel": "high",
+      "disagreementType": "none",
+      "trustScore": 82,
+      "trustLabel": "high",
+      "riskLevel": "low",
+      "finalConclusionAligned": true,
+      "verdict": "The responses support the same main conclusion.",
+      "semanticJudgeModel": "openai/gpt-4o-mini",
+      "selectedProviders": [
+        "anthropic",
+        "perplexity"
+      ]
+    },
+    "agreementMatch": false
+  },
+  {
+    "id": 57,
+    "prompt": "Should the death penalty be abolished?",
+    "category": "controversial",
+    "expectedAgreement": "low",
+    "status": "ok",
+    "durationMs": 11012,
+    "result": {
+      "agreementLevel": "high",
+      "disagreementType": "explanation_variation",
+      "trustScore": 76,
+      "trustLabel": "high",
+      "riskLevel": "low",
+      "finalConclusionAligned": true,
+      "verdict": "The responses support the same core conclusion but differ in emphasis, timing, or supporting rationale.",
+      "semanticJudgeModel": "openai/gpt-4o-mini",
+      "selectedProviders": [
+        "anthropic",
+        "perplexity"
+      ]
+    },
+    "agreementMatch": false
+  },
+  {
+    "id": 58,
+    "prompt": "Is nuclear energy safe?",
+    "category": "controversial",
+    "expectedAgreement": "medium",
+    "status": "ok",
+    "durationMs": 9215,
+    "result": {
+      "agreementLevel": "high",
+      "disagreementType": "explanation_variation",
+      "trustScore": 79,
+      "trustLabel": "high",
+      "riskLevel": "low",
+      "finalConclusionAligned": true,
+      "verdict": "The responses support the same core conclusion but differ in emphasis, timing, or supporting rationale.",
+      "semanticJudgeModel": "openai/gpt-4o-mini",
+      "selectedProviders": [
+        "anthropic",
+        "perplexity"
+      ]
+    },
+    "agreementMatch": false
+  },
+  {
+    "id": 59,
+    "prompt": "Should the voting age be lowered to 16?",
+    "category": "controversial",
+    "expectedAgreement": "low",
+    "status": "ok",
+    "durationMs": 9199,
+    "result": {
+      "agreementLevel": "high",
+      "disagreementType": "explanation_variation",
+      "trustScore": 75,
+      "trustLabel": "high",
+      "riskLevel": "low",
+      "finalConclusionAligned": true,
+      "verdict": "The responses support the same core conclusion but differ in emphasis, timing, or supporting rationale.",
+      "semanticJudgeModel": "openai/gpt-4o-mini",
+      "selectedProviders": [
+        "anthropic",
+        "perplexity"
+      ]
+    },
+    "agreementMatch": false
+  },
+  {
+    "id": 60,
+    "prompt": "Is social media doing more harm than good to society?",
+    "category": "controversial",
+    "expectedAgreement": "medium",
+    "status": "ok",
+    "durationMs": 11454,
+    "result": {
+      "agreementLevel": "high",
+      "disagreementType": "explanation_variation",
+      "trustScore": 78,
+      "trustLabel": "high",
+      "riskLevel": "low",
+      "finalConclusionAligned": true,
+      "verdict": "The responses acknowledge both the positive and negative impacts of social media on society, indicating that it is complex and contextual.",
+      "semanticJudgeModel": "anthropic/claude-haiku-4-5-20251001",
+      "selectedProviders": [
+        "anthropic",
+        "openai"
+      ]
+    },
+    "agreementMatch": false
+  },
+  {
+    "id": 61,
+    "prompt": "What is the best way to handle errors in a Node.js API?",
+    "category": "developer",
+    "expectedAgreement": "high",
+    "status": "ok",
+    "durationMs": 12514,
+    "result": {
+      "agreementLevel": "high",
+      "disagreementType": "none",
+      "trustScore": 82,
+      "trustLabel": "high",
+      "riskLevel": "low",
+      "finalConclusionAligned": true,
+      "verdict": "The responses support the same main conclusion.",
+      "semanticJudgeModel": "anthropic/claude-haiku-4-5-20251001",
+      "selectedProviders": [
+        "perplexity",
+        "openai"
+      ]
+    },
+    "agreementMatch": true
+  },
+  {
+    "id": 62,
+    "prompt": "Should you write unit tests or integration tests first?",
+    "category": "developer",
+    "expectedAgreement": "medium",
+    "status": "ok",
+    "durationMs": 10608,
+    "result": {
+      "agreementLevel": "high",
+      "disagreementType": "none",
+      "trustScore": 82,
+      "trustLabel": "high",
+      "riskLevel": "low",
+      "finalConclusionAligned": true,
+      "verdict": "The responses support the same main conclusion.",
+      "semanticJudgeModel": "openai/gpt-4o-mini",
+      "selectedProviders": [
+        "anthropic",
+        "perplexity"
+      ]
+    },
+    "agreementMatch": false
+  },
+  {
+    "id": 63,
+    "prompt": "What is the best way to store passwords in a database?",
+    "category": "developer",
+    "expectedAgreement": "high",
+    "status": "ok",
+    "durationMs": 12199,
+    "result": {
+      "agreementLevel": "high",
+      "disagreementType": "none",
+      "trustScore": 82,
+      "trustLabel": "high",
+      "riskLevel": "low",
+      "finalConclusionAligned": true,
+      "verdict": "The responses support the same main conclusion.",
+      "semanticJudgeModel": "anthropic/claude-haiku-4-5-20251001",
+      "selectedProviders": [
+        "perplexity",
+        "openai"
+      ]
+    },
+    "agreementMatch": true
+  },
+  {
+    "id": 64,
+    "prompt": "When should you use a microservices architecture?",
+    "category": "developer",
+    "expectedAgreement": "medium",
+    "status": "ok",
+    "durationMs": 10677,
+    "result": {
+      "agreementLevel": "high",
+      "disagreementType": "none",
+      "trustScore": 82,
+      "trustLabel": "high",
+      "riskLevel": "low",
+      "finalConclusionAligned": true,
+      "verdict": "The responses support the same main conclusion.",
+      "semanticJudgeModel": "openai/gpt-4o-mini",
+      "selectedProviders": [
+        "anthropic",
+        "perplexity"
+      ]
+    },
+    "agreementMatch": false
+  },
+  {
+    "id": 65,
+    "prompt": "What is the best way to handle API rate limiting?",
+    "category": "developer",
+    "expectedAgreement": "high",
+    "status": "ok",
+    "durationMs": 10971,
+    "result": {
+      "agreementLevel": "high",
+      "disagreementType": "additive_nuance",
+      "trustScore": 82,
+      "trustLabel": "high",
+      "riskLevel": "low",
+      "finalConclusionAligned": true,
+      "verdict": "aligned",
+      "semanticJudgeModel": "anthropic/claude-haiku-4-5-20251001",
+      "selectedProviders": [
+        "perplexity",
+        "openai"
+      ]
+    },
+    "agreementMatch": true
+  },
+  {
+    "id": 66,
+    "prompt": "Should you use an ORM or write raw SQL queries?",
+    "category": "developer",
+    "expectedAgreement": "medium",
+    "status": "ok",
+    "durationMs": 11623,
+    "result": {
+      "agreementLevel": "high",
+      "disagreementType": "none",
+      "trustScore": 82,
+      "trustLabel": "high",
+      "riskLevel": "low",
+      "finalConclusionAligned": true,
+      "verdict": "The responses support the same main conclusion.",
+      "semanticJudgeModel": "anthropic/claude-haiku-4-5-20251001",
+      "selectedProviders": [
+        "anthropic",
+        "openai"
+      ]
+    },
+    "agreementMatch": false
+  },
+  {
+    "id": 67,
+    "prompt": "What is the best way to structure a React application?",
+    "category": "developer",
+    "expectedAgreement": "medium",
+    "status": "ok",
+    "durationMs": 15535,
+    "result": {
+      "agreementLevel": "high",
+      "disagreementType": "explanation_variation",
+      "trustScore": 76,
+      "trustLabel": "high",
+      "riskLevel": "low",
+      "finalConclusionAligned": true,
+      "verdict": "The responses support the same core conclusion but differ in emphasis, timing, or supporting rationale.",
+      "semanticJudgeModel": "heuristic",
+      "selectedProviders": [
+        "perplexity",
+        "openai"
+      ]
+    },
+    "agreementMatch": false
+  },
+  {
+    "id": 68,
+    "prompt": "When should you use Redis versus a relational database?",
+    "category": "developer",
+    "expectedAgreement": "medium",
+    "status": "ok",
+    "durationMs": 12943,
+    "result": {
+      "agreementLevel": "high",
+      "disagreementType": "explanation_variation",
+      "trustScore": 78,
+      "trustLabel": "high",
+      "riskLevel": "low",
+      "finalConclusionAligned": true,
+      "verdict": "Agree on general use cases but differ in depth of explanation.",
+      "semanticJudgeModel": "anthropic/claude-haiku-4-5-20251001",
+      "selectedProviders": [
+        "perplexity",
+        "openai"
+      ]
+    },
+    "agreementMatch": false
+  },
+  {
+    "id": 69,
+    "prompt": "What is the best way to implement authentication in a web app?",
+    "category": "developer",
+    "expectedAgreement": "medium",
+    "status": "ok",
+    "durationMs": 8328,
+    "result": {
+      "agreementLevel": "high",
+      "disagreementType": "none",
+      "trustScore": 84,
+      "trustLabel": "high",
+      "riskLevel": "low",
+      "finalConclusionAligned": true,
+      "verdict": "The responses support the same main conclusion.",
+      "semanticJudgeModel": "openai/gpt-4o-mini",
+      "selectedProviders": [
+        "anthropic",
+        "perplexity"
+      ]
+    },
+    "agreementMatch": false
+  },
+  {
+    "id": 70,
+    "prompt": "Should you use a monorepo or separate repositories for microservices?",
+    "category": "developer",
+    "expectedAgreement": "medium",
+    "status": "ok",
+    "durationMs": 8522,
+    "result": {
+      "agreementLevel": "high",
+      "disagreementType": "none",
+      "trustScore": 82,
+      "trustLabel": "high",
+      "riskLevel": "low",
+      "finalConclusionAligned": true,
+      "verdict": "The responses support the same main conclusion.",
+      "semanticJudgeModel": "openai/gpt-4o-mini",
+      "selectedProviders": [
+        "anthropic",
+        "perplexity"
+      ]
+    },
+    "agreementMatch": false
+  },
+  {
+    "id": 71,
+    "prompt": "What is the best way to handle database migrations?",
+    "category": "developer",
+    "expectedAgreement": "medium",
+    "status": "ok",
+    "durationMs": 12647,
+    "result": {
+      "agreementLevel": "high",
+      "disagreementType": "none",
+      "trustScore": 82,
+      "trustLabel": "high",
+      "riskLevel": "low",
+      "finalConclusionAligned": true,
+      "verdict": "The responses support the same main conclusion.",
+      "semanticJudgeModel": "anthropic/claude-haiku-4-5-20251001",
+      "selectedProviders": [
+        "perplexity",
+        "openai"
+      ]
+    },
+    "agreementMatch": false
+  },
+  {
+    "id": 72,
+    "prompt": "When should you use a message queue?",
+    "category": "developer",
+    "expectedAgreement": "medium",
+    "status": "ok",
+    "durationMs": 11286,
+    "result": {
+      "agreementLevel": "high",
+      "disagreementType": "none",
+      "trustScore": 82,
+      "trustLabel": "high",
+      "riskLevel": "low",
+      "finalConclusionAligned": true,
+      "verdict": "The responses support the same main conclusion.",
+      "semanticJudgeModel": "anthropic/claude-haiku-4-5-20251001",
+      "selectedProviders": [
+        "anthropic",
+        "openai"
+      ]
+    },
+    "agreementMatch": false
+  },
+  {
+    "id": 73,
+    "prompt": "What is the best way to implement logging in a production application?",
+    "category": "developer",
+    "expectedAgreement": "high",
+    "status": "ok",
+    "durationMs": 11661,
+    "result": {
+      "agreementLevel": "high",
+      "disagreementType": "additive_nuance",
+      "trustScore": 83,
+      "trustLabel": "high",
+      "riskLevel": "low",
+      "finalConclusionAligned": true,
+      "verdict": "aligned",
+      "semanticJudgeModel": "openai/gpt-4o-mini",
+      "selectedProviders": [
+        "anthropic",
+        "perplexity"
+      ]
+    },
+    "agreementMatch": true
+  },
+  {
+    "id": 74,
+    "prompt": "Should you use server side sessions or JWTs for authentication?",
+    "category": "developer",
+    "expectedAgreement": "medium",
+    "status": "ok",
+    "durationMs": 13453,
+    "result": {
+      "agreementLevel": "high",
+      "disagreementType": "explanation_variation",
+      "trustScore": 78,
+      "trustLabel": "high",
+      "riskLevel": "low",
+      "finalConclusionAligned": true,
+      "verdict": "The responses support the same core conclusion but differ in emphasis, timing, or supporting rationale.",
+      "semanticJudgeModel": "anthropic/claude-haiku-4-5-20251001",
+      "selectedProviders": [
+        "perplexity",
+        "openai"
+      ]
+    },
+    "agreementMatch": false
+  },
+  {
+    "id": 75,
+    "prompt": "What is the best way to optimise a slow database query?",
+    "category": "developer",
+    "expectedAgreement": "high",
+    "status": "ok",
+    "durationMs": 13295,
+    "result": {
+      "agreementLevel": "high",
+      "disagreementType": "explanation_variation",
+      "trustScore": 78,
+      "trustLabel": "high",
+      "riskLevel": "low",
+      "finalConclusionAligned": true,
+      "verdict": "The responses support the same core conclusion but differ in emphasis, timing, or supporting rationale.",
+      "semanticJudgeModel": "anthropic/claude-haiku-4-5-20251001",
+      "selectedProviders": [
+        "perplexity",
+        "openai"
+      ]
+    },
+    "agreementMatch": true
+  },
+  {
+    "id": 76,
+    "prompt": "When should you use WebSockets versus HTTP?",
+    "category": "developer",
+    "expectedAgreement": "high",
+    "status": "ok",
+    "durationMs": 13637,
+    "result": {
+      "agreementLevel": "high",
+      "disagreementType": "none",
+      "trustScore": 82,
+      "trustLabel": "high",
+      "riskLevel": "low",
+      "finalConclusionAligned": true,
+      "verdict": "The responses support the same main conclusion.",
+      "semanticJudgeModel": "anthropic/claude-haiku-4-5-20251001",
+      "selectedProviders": [
+        "anthropic",
+        "openai"
+      ]
+    },
+    "agreementMatch": true
+  },
+  {
+    "id": 77,
+    "prompt": "What is the best way to handle file uploads in a web application?",
+    "category": "developer",
+    "expectedAgreement": "high",
+    "status": "ok",
+    "durationMs": 10518,
+    "result": {
+      "agreementLevel": "high",
+      "disagreementType": "none",
+      "trustScore": 83,
+      "trustLabel": "high",
+      "riskLevel": "low",
+      "finalConclusionAligned": true,
+      "verdict": "The responses support the same main conclusion.",
+      "semanticJudgeModel": "openai/gpt-4o-mini",
+      "selectedProviders": [
+        "anthropic",
+        "perplexity"
+      ]
+    },
+    "agreementMatch": true
+  },
+  {
+    "id": 78,
+    "prompt": "Should you use Kubernetes for a small startup?",
+    "category": "developer",
+    "expectedAgreement": "medium",
+    "status": "ok",
+    "durationMs": 8873,
+    "result": {
+      "agreementLevel": "high",
+      "disagreementType": "explanation_variation",
+      "trustScore": 80,
+      "trustLabel": "high",
+      "riskLevel": "low",
+      "finalConclusionAligned": true,
+      "verdict": "The responses support the same core conclusion but differ in emphasis, timing, or supporting rationale.",
+      "semanticJudgeModel": "openai/gpt-4o-mini",
+      "selectedProviders": [
+        "anthropic",
+        "perplexity"
+      ]
+    },
+    "agreementMatch": false
+  },
+  {
+    "id": 79,
+    "prompt": "What is the best way to implement search in a web application?",
+    "category": "developer",
+    "expectedAgreement": "medium",
+    "status": "ok",
+    "durationMs": 8982,
+    "result": {
+      "agreementLevel": "medium",
+      "disagreementType": "material_conflict",
+      "trustScore": 22,
+      "trustLabel": "low",
+      "riskLevel": "high",
+      "finalConclusionAligned": false,
+      "verdict": "material_conflict",
+      "semanticJudgeModel": "openai/gpt-4o-mini",
+      "selectedProviders": [
+        "anthropic",
+        "perplexity"
+      ]
+    },
+    "agreementMatch": true
+  },
+  {
+    "id": 80,
+    "prompt": "When should you use a CDN?",
+    "category": "developer",
+    "expectedAgreement": "high",
+    "status": "ok",
+    "durationMs": 12200,
+    "result": {
+      "agreementLevel": "high",
+      "disagreementType": "none",
+      "trustScore": 82,
+      "trustLabel": "high",
+      "riskLevel": "low",
+      "finalConclusionAligned": true,
+      "verdict": "The responses support the same main conclusion.",
+      "semanticJudgeModel": "anthropic/claude-haiku-4-5-20251001",
+      "selectedProviders": [
+        "anthropic",
+        "openai"
+      ]
+    },
+    "agreementMatch": true
+  },
+  {
+    "id": 81,
+    "prompt": "Is intermittent fasting effective for weight loss?",
+    "category": "health",
+    "expectedAgreement": "medium",
+    "status": "ok",
+    "durationMs": 9807,
+    "result": {
+      "agreementLevel": "high",
+      "disagreementType": "additive_nuance",
+      "trustScore": 83,
+      "trustLabel": "high",
+      "riskLevel": "low",
+      "finalConclusionAligned": true,
+      "verdict": "yes",
+      "semanticJudgeModel": "openai/gpt-4o-mini",
+      "selectedProviders": [
+        "anthropic",
+        "perplexity"
+      ]
+    },
+    "agreementMatch": false
+  },
+  {
+    "id": 82,
+    "prompt": "What are the health risks of smoking?",
+    "category": "health",
+    "expectedAgreement": "high",
+    "status": "ok",
+    "durationMs": 11349,
+    "result": {
+      "agreementLevel": "high",
+      "disagreementType": "none",
+      "trustScore": 85,
+      "trustLabel": "high",
+      "riskLevel": "low",
+      "finalConclusionAligned": true,
+      "verdict": "The responses support the same main conclusion.",
+      "semanticJudgeModel": "anthropic/claude-haiku-4-5-20251001",
+      "selectedProviders": [
+        "anthropic",
+        "openai"
+      ]
+    },
+    "agreementMatch": true
+  },
+  {
+    "id": 83,
+    "prompt": "Is exercise effective for treating mild depression?",
+    "category": "health",
+    "expectedAgreement": "high",
+    "status": "ok",
+    "durationMs": 8769,
+    "result": {
+      "agreementLevel": "high",
+      "disagreementType": "explanation_variation",
+      "trustScore": 81,
+      "trustLabel": "high",
+      "riskLevel": "low",
+      "finalConclusionAligned": true,
+      "verdict": "yes",
+      "semanticJudgeModel": "openai/gpt-4o-mini",
+      "selectedProviders": [
+        "anthropic",
+        "perplexity"
+      ]
+    },
+    "agreementMatch": true
+  },
+  {
+    "id": 84,
+    "prompt": "What is the recommended amount of sleep for adults?",
+    "category": "health",
+    "expectedAgreement": "high",
+    "status": "ok",
+    "durationMs": 7846,
+    "result": {
+      "agreementLevel": "high",
+      "disagreementType": "none",
+      "trustScore": 83,
+      "trustLabel": "high",
+      "riskLevel": "low",
+      "finalConclusionAligned": true,
+      "verdict": "The responses support the same main conclusion.",
+      "semanticJudgeModel": "openai/gpt-4o-mini",
+      "selectedProviders": [
+        "anthropic",
+        "perplexity"
+      ]
+    },
+    "agreementMatch": true
+  },
+  {
+    "id": 85,
+    "prompt": "Are vaccines safe?",
+    "category": "health",
+    "expectedAgreement": "high",
+    "status": "ok",
+    "durationMs": 8439,
+    "result": {
+      "agreementLevel": "high",
+      "disagreementType": "explanation_variation",
+      "trustScore": 81,
+      "trustLabel": "high",
+      "riskLevel": "low",
+      "finalConclusionAligned": true,
+      "verdict": "vaccines are safe",
+      "semanticJudgeModel": "openai/gpt-4o-mini",
+      "selectedProviders": [
+        "anthropic",
+        "perplexity"
+      ]
+    },
+    "agreementMatch": true
+  },
+  {
+    "id": 86,
+    "prompt": "Should you pay off debt or invest first?",
+    "category": "finance",
+    "expectedAgreement": "medium",
+    "status": "ok",
+    "durationMs": 13875,
+    "result": {
+      "agreementLevel": "high",
+      "disagreementType": "explanation_variation",
+      "trustScore": 79,
+      "trustLabel": "high",
+      "riskLevel": "low",
+      "finalConclusionAligned": true,
+      "verdict": "The advice to prioritize high-interest debt repayment before investing aligns between the two responses.",
+      "semanticJudgeModel": "anthropic/claude-haiku-4-5-20251001",
+      "selectedProviders": [
+        "anthropic",
+        "openai"
+      ]
+    },
+    "agreementMatch": false
+  },
+  {
+    "id": 87,
+    "prompt": "Is index fund investing better than stock picking?",
+    "category": "finance",
+    "expectedAgreement": "medium",
+    "status": "ok",
+    "durationMs": 7802,
+    "result": {
+      "agreementLevel": "high",
+      "disagreementType": "none",
+      "trustScore": 83,
+      "trustLabel": "high",
+      "riskLevel": "low",
+      "finalConclusionAligned": true,
+      "verdict": "The responses support the same main conclusion.",
+      "semanticJudgeModel": "openai/gpt-4o-mini",
+      "selectedProviders": [
+        "anthropic",
+        "perplexity"
+      ]
+    },
+    "agreementMatch": false
+  },
+  {
+    "id": 88,
+    "prompt": "What is the best age to start saving for retirement?",
+    "category": "finance",
+    "expectedAgreement": "high",
+    "status": "ok",
+    "durationMs": 10446,
+    "result": {
+      "agreementLevel": "high",
+      "disagreementType": "none",
+      "trustScore": 84,
+      "trustLabel": "high",
+      "riskLevel": "low",
+      "finalConclusionAligned": true,
+      "verdict": "The responses support the same main conclusion.",
+      "semanticJudgeModel": "openai/gpt-4o-mini",
+      "selectedProviders": [
+        "anthropic",
+        "perplexity"
+      ]
+    },
+    "agreementMatch": true
+  },
+  {
+    "id": 89,
+    "prompt": "Should you have an emergency fund before investing?",
+    "category": "finance",
+    "expectedAgreement": "high",
+    "status": "ok",
+    "durationMs": 11299,
+    "result": {
+      "agreementLevel": "high",
+      "disagreementType": "explanation_variation",
+      "trustScore": 80,
+      "trustLabel": "high",
+      "riskLevel": "low",
+      "finalConclusionAligned": true,
+      "verdict": "agree",
+      "semanticJudgeModel": "anthropic/claude-haiku-4-5-20251001",
+      "selectedProviders": [
+        "anthropic",
+        "openai"
+      ]
+    },
+    "agreementMatch": true
+  },
+  {
+    "id": 90,
+    "prompt": "Is Bitcoin a good long term investment?",
+    "category": "finance",
+    "expectedAgreement": "low",
+    "status": "ok",
+    "durationMs": 12178,
+    "result": {
+      "agreementLevel": "high",
+      "disagreementType": "explanation_variation",
+      "trustScore": 79,
+      "trustLabel": "high",
+      "riskLevel": "low",
+      "finalConclusionAligned": true,
+      "verdict": "Bitcoin is a high-risk, high-reward long-term investment option, particularly suitable for risk-tolerant individuals.",
+      "semanticJudgeModel": "anthropic/claude-haiku-4-5-20251001",
+      "selectedProviders": [
+        "anthropic",
+        "openai"
+      ]
+    },
+    "agreementMatch": false
+  },
+  {
+    "id": 91,
+    "prompt": "What is the meaning of life?",
+    "category": "edge",
+    "expectedAgreement": "low",
+    "status": "ok",
+    "durationMs": 8176,
+    "result": {
+      "agreementLevel": "high",
+      "disagreementType": "none",
+      "trustScore": 83,
+      "trustLabel": "high",
+      "riskLevel": "low",
+      "finalConclusionAligned": true,
+      "verdict": "The responses support the same main conclusion.",
+      "semanticJudgeModel": "openai/gpt-4o-mini",
+      "selectedProviders": [
+        "anthropic",
+        "perplexity"
+      ]
+    },
+    "agreementMatch": false
+  },
+  {
+    "id": 92,
+    "prompt": "Is time travel theoretically possible?",
+    "category": "edge",
+    "expectedAgreement": "medium",
+    "status": "ok",
+    "durationMs": 11386,
+    "result": {
+      "agreementLevel": "high",
+      "disagreementType": "none",
+      "trustScore": 84,
+      "trustLabel": "high",
+      "riskLevel": "low",
+      "finalConclusionAligned": true,
+      "verdict": "The responses support the same main conclusion.",
+      "semanticJudgeModel": "openai/gpt-4o-mini",
+      "selectedProviders": [
+        "anthropic",
+        "perplexity"
+      ]
+    },
+    "agreementMatch": false
+  },
+  {
+    "id": 93,
+    "prompt": "Will artificial intelligence replace most jobs in the next 20 years?",
+    "category": "edge",
+    "expectedAgreement": "medium",
+    "status": "ok",
+    "durationMs": 8878,
+    "result": {
+      "agreementLevel": "high",
+      "disagreementType": "none",
+      "trustScore": 80,
+      "trustLabel": "high",
+      "riskLevel": "low",
+      "finalConclusionAligned": true,
+      "verdict": "The responses support the same main conclusion.",
+      "semanticJudgeModel": "openai/gpt-4o-mini",
+      "selectedProviders": [
+        "anthropic",
+        "perplexity"
+      ]
+    },
+    "agreementMatch": false
+  },
+  {
+    "id": 94,
+    "prompt": "Is consciousness purely a product of the brain?",
+    "category": "edge",
+    "expectedAgreement": "low",
+    "status": "ok",
+    "durationMs": 9360,
+    "result": {
+      "agreementLevel": "medium",
+      "disagreementType": "material_conflict",
+      "trustScore": 22,
+      "trustLabel": "low",
+      "riskLevel": "high",
+      "finalConclusionAligned": false,
+      "verdict": "disagreement",
+      "semanticJudgeModel": "openai/gpt-4o-mini",
+      "selectedProviders": [
+        "anthropic",
+        "perplexity"
+      ]
+    },
+    "agreementMatch": false
+  },
+  {
+    "id": 95,
+    "prompt": "What is the best programming language to learn first?",
+    "category": "edge",
+    "expectedAgreement": "medium",
+    "status": "ok",
+    "durationMs": 11779,
+    "result": {
+      "agreementLevel": "high",
+      "disagreementType": "none",
+      "trustScore": 80,
+      "trustLabel": "high",
+      "riskLevel": "low",
+      "finalConclusionAligned": true,
+      "verdict": "The responses support the same main conclusion.",
+      "semanticJudgeModel": "anthropic/claude-haiku-4-5-20251001",
+      "selectedProviders": [
+        "perplexity",
+        "openai"
+      ]
+    },
+    "agreementMatch": false
+  },
+  {
+    "id": 96,
+    "prompt": "Should you follow your passion or follow the money when choosing a career?",
+    "category": "edge",
+    "expectedAgreement": "medium",
+    "status": "ok",
+    "durationMs": 10810,
+    "result": {
+      "agreementLevel": "medium",
+      "disagreementType": "conditional_alignment",
+      "trustScore": 42,
+      "trustLabel": "low",
+      "riskLevel": "moderate",
+      "finalConclusionAligned": false,
+      "verdict": "disagreement",
+      "semanticJudgeModel": "openai/gpt-4o-mini",
+      "selectedProviders": [
+        "anthropic",
+        "perplexity"
+      ]
+    },
+    "agreementMatch": true
+  },
+  {
+    "id": 97,
+    "prompt": "Is it possible to have a healthy diet as a vegan?",
+    "category": "edge",
+    "expectedAgreement": "high",
+    "status": "ok",
+    "durationMs": 8463,
+    "result": {
+      "agreementLevel": "high",
+      "disagreementType": "additive_nuance",
+      "trustScore": 83,
+      "trustLabel": "high",
+      "riskLevel": "low",
+      "finalConclusionAligned": true,
+      "verdict": "yes",
+      "semanticJudgeModel": "openai/gpt-4o-mini",
+      "selectedProviders": [
+        "anthropic",
+        "perplexity"
+      ]
+    },
+    "agreementMatch": true
+  },
+  {
+    "id": 98,
+    "prompt": "Does money buy happiness?",
+    "category": "edge",
+    "expectedAgreement": "medium",
+    "status": "ok",
+    "durationMs": 8743,
+    "result": {
+      "agreementLevel": "medium",
+      "disagreementType": "material_conflict",
+      "trustScore": 22,
+      "trustLabel": "low",
+      "riskLevel": "high",
+      "finalConclusionAligned": false,
+      "verdict": "material_conflict",
+      "semanticJudgeModel": "openai/gpt-4o-mini",
+      "selectedProviders": [
+        "anthropic",
+        "perplexity"
+      ]
+    },
+    "agreementMatch": true
+  },
+  {
+    "id": 99,
+    "prompt": "Is multitasking effective?",
+    "category": "edge",
+    "expectedAgreement": "high",
+    "status": "ok",
+    "durationMs": 7675,
+    "result": {
+      "agreementLevel": "high",
+      "disagreementType": "none",
+      "trustScore": 84,
+      "trustLabel": "high",
+      "riskLevel": "low",
+      "finalConclusionAligned": true,
+      "verdict": "The responses support the same main conclusion.",
+      "semanticJudgeModel": "openai/gpt-4o-mini",
+      "selectedProviders": [
+        "anthropic",
+        "perplexity"
+      ]
+    },
+    "agreementMatch": true
+  },
+  {
+    "id": 100,
+    "prompt": "Should you learn to code even if you are not a software developer?",
+    "category": "edge",
+    "expectedAgreement": "medium",
+    "status": "ok",
+    "durationMs": 10271,
+    "result": {
+      "agreementLevel": "high",
+      "disagreementType": "none",
+      "trustScore": 82,
+      "trustLabel": "high",
+      "riskLevel": "low",
+      "finalConclusionAligned": true,
+      "verdict": "The responses support the same main conclusion.",
+      "semanticJudgeModel": "anthropic/claude-haiku-4-5-20251001",
+      "selectedProviders": [
+        "perplexity",
+        "openai"
+      ]
+    },
+    "agreementMatch": false
+  }
+]

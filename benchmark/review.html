@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Zorelan Benchmark Review</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: system-ui, sans-serif; background: #0a0a0a; color: #e0e0e0; padding: 24px; }
+  h1 { font-size: 20px; font-weight: 500; margin-bottom: 8px; }
+  .subtitle { color: #888; font-size: 14px; margin-bottom: 24px; }
+  .progress-bar { background: #1a1a1a; border-radius: 4px; height: 6px; margin-bottom: 24px; overflow: hidden; }
+  .progress-fill { height: 100%; background: #22c55e; transition: width 0.3s; }
+  .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 24px; }
+  .stat { background: #111; border: 1px solid #222; border-radius: 8px; padding: 12px 16px; }
+  .stat-label { font-size: 11px; color: #666; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 4px; }
+  .stat-value { font-size: 24px; font-weight: 500; }
+  .card { background: #111; border: 1px solid #222; border-radius: 12px; padding: 20px; margin-bottom: 16px; }
+  .card-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 16px; }
+  .question-num { font-size: 12px; color: #666; }
+  .category-badge { font-size: 11px; padding: 2px 8px; border-radius: 4px; background: #1a1a2e; color: #818cf8; }
+  .question { font-size: 16px; font-weight: 500; margin-bottom: 16px; line-height: 1.5; }
+  .metrics { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 16px; }
+  .metric { background: #0a0a0a; border-radius: 6px; padding: 10px 12px; }
+  .metric-label { font-size: 11px; color: #666; margin-bottom: 2px; }
+  .metric-value { font-size: 14px; font-weight: 500; }
+  .expected { font-size: 13px; color: #666; margin-bottom: 16px; }
+  .expected span { color: #a0a0a0; font-weight: 500; }
+  .verdict-text { font-size: 13px; color: #888; background: #0a0a0a; border-radius: 6px; padding: 10px 12px; margin-bottom: 16px; line-height: 1.5; }
+  .buttons { display: flex; gap: 10px; }
+  .btn { flex: 1; padding: 10px; border-radius: 8px; border: none; font-size: 14px; font-weight: 500; cursor: pointer; transition: opacity 0.15s; }
+  .btn:hover { opacity: 0.85; }
+  .btn-correct { background: #166534; color: #86efac; }
+  .btn-wrong { background: #7f1d1d; color: #fca5a5; }
+  .btn-skip { background: #1a1a1a; color: #666; }
+  .complete { text-align: center; padding: 48px; }
+  .complete h2 { font-size: 24px; margin-bottom: 16px; }
+  .complete p { color: #888; margin-bottom: 24px; }
+  .download-btn { background: #166534; color: #86efac; border: none; padding: 12px 24px; border-radius: 8px; font-size: 14px; font-weight: 500; cursor: pointer; }
+  .high { color: #22c55e; }
+  .medium { color: #eab308; }
+  .low { color: #ef4444; }
+  .error-card { opacity: 0.5; }
+  #load-area { text-align: center; padding: 48px; }
+  #load-area input { display: none; }
+  .load-btn { background: #1a1a2e; color: #818cf8; border: 1px solid #312e81; padding: 12px 24px; border-radius: 8px; font-size: 14px; cursor: pointer; }
+</style>
+</head>
+<body>
+
+<div id="load-area">
+  <h1 style="margin-bottom: 16px;">Zorelan Benchmark Review</h1>
+  <p style="color: #888; margin-bottom: 24px;">Load your benchmark/results.json file to begin labelling</p>
+  <input type="file" id="file-input" accept=".json">
+  <button class="load-btn" onclick="document.getElementById('file-input').click()">Load results.json</button>
+</div>
+
+<div id="app" style="display:none; max-width: 720px; margin: 0 auto;">
+  <h1>Zorelan Benchmark Review</h1>
+  <p class="subtitle">Label each result: did Zorelan correctly assess the agreement level?</p>
+
+  <div class="progress-bar">
+    <div class="progress-fill" id="progress-fill" style="width: 0%"></div>
+  </div>
+
+  <div class="stats">
+    <div class="stat">
+      <div class="stat-label">Progress</div>
+      <div class="stat-value" id="stat-progress">0/0</div>
+    </div>
+    <div class="stat">
+      <div class="stat-label">Correct</div>
+      <div class="stat-value high" id="stat-correct">0</div>
+    </div>
+    <div class="stat">
+      <div class="stat-label">Wrong</div>
+      <div class="stat-value low" id="stat-wrong">0</div>
+    </div>
+    <div class="stat">
+      <div class="stat-label">Accuracy</div>
+      <div class="stat-value" id="stat-accuracy">—</div>
+    </div>
+  </div>
+
+  <div id="card-container"></div>
+</div>
+
+<script>
+let results = [];
+let labels = {};
+let current = 0;
+
+document.getElementById("file-input").addEventListener("change", (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = (ev) => {
+    try {
+      results = JSON.parse(ev.target.result).filter(r => r.status === "ok");
+      document.getElementById("load-area").style.display = "none";
+      document.getElementById("app").style.display = "block";
+      renderCard();
+    } catch {
+      alert("Invalid JSON file");
+    }
+  };
+  reader.readAsText(file);
+});
+
+function renderCard() {
+  updateStats();
+
+  if (current >= results.length) {
+    showComplete();
+    return;
+  }
+
+  const r = results[current];
+  const container = document.getElementById("card-container");
+
+  const agreementColor = r.result.agreementLevel === "high" ? "high" :
+    r.result.agreementLevel === "medium" ? "medium" : "low";
+
+  container.innerHTML = `
+    <div class="card">
+      <div class="card-header">
+        <span class="question-num">Question ${current + 1} of ${results.length}</span>
+        <span class="category-badge">${r.category}</span>
+      </div>
+      <div class="question">${r.prompt}</div>
+      <div class="metrics">
+        <div class="metric">
+          <div class="metric-label">Agreement level</div>
+          <div class="metric-value ${agreementColor}">${r.result.agreementLevel || "—"}</div>
+        </div>
+        <div class="metric">
+          <div class="metric-label">Trust score</div>
+          <div class="metric-value">${r.result.trustScore ?? "—"}/100</div>
+        </div>
+        <div class="metric">
+          <div class="metric-label">Risk level</div>
+          <div class="metric-value">${r.result.riskLevel || "—"}</div>
+        </div>
+        <div class="metric">
+          <div class="metric-label">Disagreement type</div>
+          <div class="metric-value" style="font-size:12px">${r.result.disagreementType || "—"}</div>
+        </div>
+        <div class="metric">
+          <div class="metric-label">Providers</div>
+          <div class="metric-value" style="font-size:12px">${(r.result.selectedProviders || []).join(", ")}</div>
+        </div>
+        <div class="metric">
+          <div class="metric-label">Duration</div>
+          <div class="metric-value">${(r.durationMs / 1000).toFixed(1)}s</div>
+        </div>
+      </div>
+      <div class="expected">Expected agreement: <span>${r.expectedAgreement}</span></div>
+      <div class="verdict-text">${r.result.verdict || "No verdict"}</div>
+      <div class="buttons">
+        <button class="btn btn-correct" onclick="label('correct')">✓ Correct assessment</button>
+        <button class="btn btn-wrong" onclick="label('wrong')">✗ Wrong assessment</button>
+        <button class="btn btn-skip" onclick="label('skip')">Skip</button>
+      </div>
+    </div>
+  `;
+}
+
+function label(value) {
+  labels[results[current].id] = value;
+  current++;
+  renderCard();
+}
+
+function updateStats() {
+  const labelled = Object.values(labels);
+  const correct = labelled.filter(l => l === "correct").length;
+  const wrong = labelled.filter(l => l === "wrong").length;
+  const total = labelled.filter(l => l !== "skip").length;
+  const accuracy = total > 0 ? Math.round((correct / total) * 100) : null;
+
+  document.getElementById("stat-progress").textContent = `${current}/${results.length}`;
+  document.getElementById("stat-correct").textContent = correct;
+  document.getElementById("stat-wrong").textContent = wrong;
+  document.getElementById("stat-accuracy").textContent = accuracy !== null ? `${accuracy}%` : "—";
+  document.getElementById("progress-fill").style.width = `${(current / results.length) * 100}%`;
+}
+
+function showComplete() {
+  const labelled = Object.values(labels);
+  const correct = labelled.filter(l => l === "correct").length;
+  const wrong = labelled.filter(l => l === "wrong").length;
+  const total = labelled.filter(l => l !== "skip").length;
+  const accuracy = Math.round((correct / total) * 100);
+
+  document.getElementById("card-container").innerHTML = `
+    <div class="complete">
+      <h2>Review complete</h2>
+      <p>Zorelan correctly assessed <strong>${correct} out of ${total}</strong> questions</p>
+      <p style="font-size: 32px; font-weight: 600; color: #22c55e; margin: 16px 0;">${accuracy}% accuracy</p>
+      <p style="margin-bottom: 24px;">This is your publishable benchmark number.</p>
+      <button class="download-btn" onclick="downloadResults()">Download labelled results</button>
+    </div>
+  `;
+}
+
+function downloadResults() {
+  const labelled = results.map(r => ({
+    ...r,
+    humanLabel: labels[r.id] || "unlabelled",
+  }));
+
+  const blob = new Blob([JSON.stringify(labelled, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "benchmark-labelled.json";
+  a.click();
+}
+</script>
+</body>
+</html>
