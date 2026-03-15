@@ -216,7 +216,7 @@ function getProviderLabel(provider: ProviderName) {
     case "openai":
       return "GPT-4o mini";
     case "anthropic":
-      return "Claude Haiku";
+      return "Claude Sonnet";
     case "perplexity":
       return "Perplexity Sonar";
     default:
