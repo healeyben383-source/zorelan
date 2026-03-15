@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import OpenAI from "openai";
 import Anthropic from "@anthropic-ai/sdk";
+import { z } from "zod";
 import { compareAnswers } from "@/lib/synthesis/compareAnswers";
 import {
   judgeSemanticAgreementOrFallback,
@@ -61,6 +62,60 @@ type TrustScore = {
   label: TrustLabel;
   reason: string;
 };
+
+// ─── Zod output schemas ───────────────────────────────────────────────────────
+
+const AgreementLevelSchema = z.enum(["high", "medium", "low"]);
+const RiskLevelSchema = z.enum(["low", "moderate", "high"]);
+const DisagreementTypeSchema = z.enum([
+  "none",
+  "additive_nuance",
+  "explanation_variation",
+  "conditional_alignment",
+  "material_conflict",
+]);
+
+const SynthesizeResponseSchema = z.object({
+  ok: z.literal(true),
+  synthesis: z.string(),
+  structuredSynthesis: z.object({
+    finalAnswer: z.string(),
+    sharedConclusion: z.string(),
+    keyDifference: z.string(),
+    decisionRule: z.string(),
+  }),
+  decisionVerification: z.object({
+    verdict: z.string(),
+    consensus: z.object({
+      level: AgreementLevelSchema,
+      modelsAligned: z.number().int().min(0),
+    }),
+    riskLevel: RiskLevelSchema,
+    keyDisagreement: z.string(),
+    recommendedAction: z.string(),
+    finalConclusionAligned: z.boolean(),
+    disagreementType: DisagreementTypeSchema,
+  }),
+  trustScore: z.object({
+    score: z.number().int().min(0).max(100),
+    label: z.enum(["high", "moderate", "low"]),
+    reason: z.string(),
+  }),
+  comparison: z.object({
+    selectedProviders: z.array(z.string()),
+    agreementLevel: AgreementLevelSchema,
+    likelyConflict: z.boolean(),
+    summary: z.string(),
+    finalConclusionAligned: z.boolean(),
+    disagreementType: DisagreementTypeSchema,
+    semanticLabel: z.string(),
+    semanticRationale: z.string(),
+    semanticUsedFallback: z.boolean(),
+    semanticJudgeModel: z.string(),
+  }),
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
 
 function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
   return Promise.race([
@@ -321,35 +376,17 @@ function calculateTrustScore(input: {
   averageQuality: number;
   riskLevel: RiskLevel;
 }): TrustScore {
-  // Base score from agreement — no arbitrary floor constants
   const agreementBase = getAgreementBaseScore(input.agreementLevel);
-
-  // Quality normalised to 0-100
   const qualityNormalized = input.averageQuality * 10;
-
-  // Weighted sum: agreement drives the score, quality adjusts it
   let score = agreementBase * 0.65 + qualityNormalized * 0.35;
 
-  // Disagreement type penalties
-  if (input.disagreementType === "explanation_variation") {
-    score -= 4;
-  } else if (input.disagreementType === "conditional_alignment") {
-    score -= 12;
-  } else if (input.disagreementType === "material_conflict") {
-    score -= 20;
-  }
+  if (input.disagreementType === "explanation_variation") score -= 4;
+  else if (input.disagreementType === "conditional_alignment") score -= 12;
+  else if (input.disagreementType === "material_conflict") score -= 20;
 
-  // Conclusion alignment penalty
-  if (!input.finalConclusionAligned) {
-    score -= 10;
-  }
-
-  // Risk penalty
-  if (input.riskLevel === "moderate") {
-    score -= 5;
-  } else if (input.riskLevel === "high") {
-    score -= 15;
-  }
+  if (!input.finalConclusionAligned) score -= 10;
+  if (input.riskLevel === "moderate") score -= 5;
+  else if (input.riskLevel === "high") score -= 15;
 
   const finalScore = Math.round(clamp(score, 0, 100));
 
@@ -366,9 +403,6 @@ function calculateTrustScore(input: {
   };
 }
 
-// Neutral cross-model quality scoring.
-// Uses Anthropic (Claude) to rate all provider outputs — avoids
-// self-rating bias where GPT-4o-mini would inflate its own responses.
 async function scoreQualityWithNeutralJudge(input: {
   answerA: string;
   answerB: string;
@@ -409,7 +443,9 @@ async function scoreQualityWithNeutralJudge(input: {
   }
 }
 
-function buildSynthesisSystemPrompt(input: { agreementLevel: AgreementLevel }) {
+function buildSynthesisSystemPrompt(input: {
+  agreementLevel: AgreementLevel;
+}) {
   if (input.agreementLevel === "high") {
     return [
       "You are a synthesis engine.",
@@ -935,7 +971,6 @@ export async function POST(req: NextRequest) {
 
     const heuristicComparison = compareAnswers(answerA, answerB);
 
-    // Use a neutral judge: pick whichever model family was NOT a provider
     const judgeProvider = selectJudgeForProviders(providerA, providerB);
 
     const semantic = await judgeSemanticAgreementOrFallback(
@@ -1022,7 +1057,6 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Run structuring and quality scoring in parallel — they are independent
     let structuredSynthesis: StructuredSynthesis | null = null;
 
     const [structuringResult, qualityScores] = await Promise.all([
@@ -1096,7 +1130,6 @@ export async function POST(req: NextRequest) {
 
     const taskType = detectTaskType(prompt);
 
-    // Store neutral quality scores from Claude judge
     await Promise.all([
       updateProviderQualityScore({
         taskType,
@@ -1129,10 +1162,16 @@ export async function POST(req: NextRequest) {
       riskLevel: decisionVerification.riskLevel,
     });
 
-    return NextResponse.json({
-      ok: true,
+    // Build response payload
+    const responsePayload = {
+      ok: true as const,
       synthesis,
-      structuredSynthesis,
+      structuredSynthesis: {
+        finalAnswer: structuredSynthesis.finalAnswer,
+        sharedConclusion: structuredSynthesis.sharedConclusion,
+        keyDifference: structuredSynthesis.keyDifference,
+        decisionRule: structuredSynthesis.decisionRule,
+      },
       decisionVerification: {
         verdict: decisionVerification.verdict,
         consensus: {
@@ -1162,7 +1201,23 @@ export async function POST(req: NextRequest) {
         semanticUsedFallback: semantic.usedFallback,
         semanticJudgeModel: semantic.judgeModel,
       },
-    });
+    };
+
+    // Validate response shape before sending
+    const validation = SynthesizeResponseSchema.safeParse(responsePayload);
+
+    if (!validation.success) {
+      console.error(
+        "[/api/synthesize] response_validation_failed:",
+        JSON.stringify(validation.error.issues)
+      );
+      return NextResponse.json(
+        { ok: false, error: "response_validation_failed" },
+        { status: 500 }
+      );
+    }
+
+    return NextResponse.json(validation.data);
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "unknown_error";
     console.error("[/api/synthesize] error:", message);

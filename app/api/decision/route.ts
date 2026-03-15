@@ -4,6 +4,7 @@ import OpenAI from "openai";
 import Anthropic from "@anthropic-ai/sdk";
 import { Redis } from "@upstash/redis";
 import { Ratelimit } from "@upstash/ratelimit";
+import { z } from "zod";
 
 import { runOpenAI } from "@/lib/providers/openai";
 import { runAnthropic } from "@/lib/providers/anthropic";
@@ -39,8 +40,6 @@ const VERIFICATION_TIMEOUT_MS = 20_000;
 const MAX_PROMPT_CHARS = 10_000;
 const MAX_PROVIDERS = 2;
 
-// Neutral cross-model judge for quality scoring.
-// Anthropic judges all outputs including OpenAI — avoids self-rating bias.
 const QUALITY_JUDGE_MODEL = "claude-haiku-4-5-20251001";
 
 const ENABLE_API_RATE_LIMIT = process.env.ENABLE_API_RATE_LIMIT === "true";
@@ -116,6 +115,89 @@ type PairEvaluation = {
   comparison: ReturnType<typeof compareAnswers>;
   semantic: Awaited<ReturnType<typeof judgeSemanticAgreementOrFallback>>;
 };
+
+// ─── Zod output schemas ───────────────────────────────────────────────────────
+
+const AgreementLevelSchema = z.enum(["high", "medium", "low"]);
+const RiskLevelSchema = z.enum(["low", "moderate", "high"]);
+const DisagreementTypeSchema = z.enum([
+  "none",
+  "additive_nuance",
+  "explanation_variation",
+  "conditional_alignment",
+  "material_conflict",
+]);
+
+const DecisionResponseSchema = z.object({
+  ok: z.literal(true),
+  verdict: z.string(),
+  consensus: z.object({
+    level: AgreementLevelSchema,
+    models_aligned: z.number().int().min(0),
+  }),
+  risk_level: RiskLevelSchema,
+  key_disagreement: z.string(),
+  recommended_action: z.string(),
+  analysis: z.string(),
+  verified_answer: z.string(),
+  confidence: AgreementLevelSchema,
+  confidence_reason: z.string(),
+  trust_score: z.object({
+    score: z.number().int().min(0).max(100),
+    label: z.enum(["high", "moderate", "low"]),
+    reason: z.string(),
+  }),
+  providers_used: z.array(z.string()),
+  verification: z.object({
+    final_conclusion_aligned: z.boolean(),
+    disagreement_type: DisagreementTypeSchema,
+    semantic_label: z.string(),
+    semantic_rationale: z.string(),
+    semantic_judge_model: z.string(),
+    semantic_used_fallback: z.boolean(),
+  }),
+  arbitration: z.object({
+    used: z.boolean(),
+    provider: z.string().nullable(),
+    winning_pair: z.array(z.string()),
+    pair_strengths: z
+      .object({
+        initial: z.number(),
+        withAThird: z.number().nullable(),
+        withBThird: z.number().nullable(),
+      })
+      .nullable(),
+  }),
+  model_diagnostics: z.record(
+    z.string(),
+    z.object({
+      quality_score: z.number().nullable(),
+      duration_ms: z.number(),
+      timed_out: z.boolean(),
+      used_fallback: z.boolean(),
+    })
+  ),
+  meta: z.object({
+    task_type: z.string(),
+    overlap_ratio: z.number(),
+    agreement_summary: z.string(),
+    prompt_chars: z.number(),
+    likely_conflict: z.boolean(),
+    disagreement_type: DisagreementTypeSchema,
+    initial_pair: z.array(z.string()),
+  }),
+  usage: z
+    .object({
+      plan: z.string(),
+      callsLimit: z.number(),
+      callsUsed: z.number(),
+      callsRemaining: z.number(),
+      status: z.enum(["active", "inactive"]),
+    })
+    .nullable(),
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
 
 function withTimeout<T>(
   promiseFactory: (signal: AbortSignal) => Promise<T>,
@@ -219,7 +301,10 @@ function badRequest(error: string) {
 }
 
 function unauthorized() {
-  return NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401 });
+  return NextResponse.json(
+    { ok: false, error: "unauthorized" },
+    { status: 401 }
+  );
 }
 
 function stripCodeFences(text: string): string {
@@ -394,35 +479,17 @@ function calculateTrustScore(input: {
   averageQuality: number;
   riskLevel: RiskLevel;
 }): { score: number; label: "high" | "moderate" | "low"; reason: string } {
-  // Base score from agreement — no arbitrary floor constants
   const agreementBase = getAgreementBaseScore(input.agreementLevel);
-
-  // Quality normalised to 0–100
   const qualityNormalized = input.averageQuality * 10;
-
-  // Weighted sum: agreement drives the score, quality adjusts it
   let score = agreementBase * 0.65 + qualityNormalized * 0.35;
 
-  // Disagreement type penalties
-  if (input.disagreementType === "explanation_variation") {
-    score -= 4;
-  } else if (input.disagreementType === "conditional_alignment") {
-    score -= 12;
-  } else if (input.disagreementType === "material_conflict") {
-    score -= 20;
-  }
+  if (input.disagreementType === "explanation_variation") score -= 4;
+  else if (input.disagreementType === "conditional_alignment") score -= 12;
+  else if (input.disagreementType === "material_conflict") score -= 20;
 
-  // Conclusion alignment penalty
-  if (!input.finalConclusionAligned) {
-    score -= 10;
-  }
-
-  // Risk penalty
-  if (input.riskLevel === "moderate") {
-    score -= 5;
-  } else if (input.riskLevel === "high") {
-    score -= 15;
-  }
+  if (!input.finalConclusionAligned) score -= 10;
+  if (input.riskLevel === "moderate") score -= 5;
+  else if (input.riskLevel === "high") score -= 15;
 
   const finalScore = Math.round(clamp(score, 0, 100));
 
@@ -486,7 +553,8 @@ function getPairStrength(
   semantic: Awaited<ReturnType<typeof judgeSemanticAgreementOrFallback>>
 ): number {
   if (semantic.agreementLevel === "high") return 3;
-  if (semantic.agreementLevel === "medium" && !semantic.likelyConflict) return 2;
+  if (semantic.agreementLevel === "medium" && !semantic.likelyConflict)
+    return 2;
   if (semantic.agreementLevel === "medium" && semantic.likelyConflict) return 1;
   return 0;
 }
@@ -499,9 +567,10 @@ async function evaluatePair(input: {
   answerB: string;
 }): Promise<PairEvaluation> {
   const comparison = compareAnswers(input.answerA, input.answerB);
-
-  // Always use a neutral judge for pair evaluation
-  const judgeProvider = selectJudgeForProviders(input.providerA, input.providerB);
+  const judgeProvider = selectJudgeForProviders(
+    input.providerA,
+    input.providerB
+  );
 
   const semantic = await judgeSemanticAgreementOrFallback(
     { answerA: input.answerA, answerB: input.answerB, question: input.prompt },
@@ -522,9 +591,6 @@ async function evaluatePair(input: {
   };
 }
 
-// Neutral cross-model quality scoring.
-// Uses Anthropic (Claude) to judge all outputs — avoids self-rating bias
-// where GPT-4o-mini would rate its own responses inflated.
 async function scoreAnswerQuality(input: {
   answerA: string;
   answerB: string;
@@ -745,7 +811,8 @@ export async function POST(req: NextRequest) {
     const body = await req.json().catch(() => null);
     const prompt = body?.prompt;
 
-    if (!prompt || typeof prompt !== "string") return badRequest("missing_prompt");
+    if (!prompt || typeof prompt !== "string")
+      return badRequest("missing_prompt");
     if (prompt.length > MAX_PROMPT_CHARS) return badRequest("prompt_too_large");
 
     if (!isMasterKey && parsedKeyRecord) {
@@ -925,7 +992,10 @@ export async function POST(req: NextRequest) {
         withBThird: bThirdStrength,
       };
 
-      if (aThirdStrength > initialStrength || bThirdStrength > initialStrength) {
+      if (
+        aThirdStrength > initialStrength ||
+        bThirdStrength > initialStrength
+      ) {
         arbitrationUsed = true;
         arbitrationProvider = thirdProvider;
 
@@ -970,7 +1040,6 @@ export async function POST(req: NextRequest) {
       synthesisCompletion.choices[0]?.message?.content ?? ""
     );
 
-    // Run verdict and quality scoring in parallel — they are independent
     const [verdictPayloadRaw, qualityScores] = await Promise.all([
       buildDecisionVerdict({
         prompt,
@@ -1030,8 +1099,7 @@ export async function POST(req: NextRequest) {
       finalConclusionAligned: verdictPayload.finalConclusionAligned,
     });
 
-    const averageQuality =
-      (qualityScores.scoreA + qualityScores.scoreB) / 2;
+    const averageQuality = (qualityScores.scoreA + qualityScores.scoreB) / 2;
 
     const trustScore = calculateTrustScore({
       agreementLevel: activePair.semantic.agreementLevel,
@@ -1041,8 +1109,9 @@ export async function POST(req: NextRequest) {
       riskLevel,
     });
 
-    return NextResponse.json({
-      ok: true,
+    // Build response payload
+    const responsePayload = {
+      ok: true as const,
       verdict: verdictPayload.verdict,
       consensus: { level: consensusLevel, models_aligned: modelsAligned },
       risk_level: riskLevel,
@@ -1102,7 +1171,23 @@ export async function POST(req: NextRequest) {
         initial_pair: [initialPair.providerA, initialPair.providerB],
       },
       usage: customerKeyMeta ?? null,
-    });
+    };
+
+    // Validate response shape before sending
+    const validation = DecisionResponseSchema.safeParse(responsePayload);
+
+    if (!validation.success) {
+      console.error(
+        "[/api/decision] response_validation_failed:",
+        JSON.stringify(validation.error.issues)
+      );
+      return NextResponse.json(
+        { ok: false, error: "response_validation_failed" },
+        { status: 500 }
+      );
+    }
+
+    return NextResponse.json(validation.data);
   } catch (err) {
     console.error("[/api/decision] error:", err);
     return NextResponse.json(
