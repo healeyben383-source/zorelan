@@ -15,8 +15,8 @@ export const PROVIDER_PROFILES: ProviderProfile[] = [
     name: "anthropic",
     label: "Anthropic Claude Sonnet",
     strengths: ["strategy", "creative", "general"],
-    speedTier: "fast",
-    costTier: "low",
+    speedTier: "medium",
+    costTier: "medium",
   },
   {
     name: "perplexity",

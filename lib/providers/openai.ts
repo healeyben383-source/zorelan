@@ -20,6 +20,7 @@ export async function runOpenAI(
     {
       model: "gpt-4o-mini",
       max_tokens: MAX_OUTPUT_TOKENS,
+      temperature: 0.3,
       messages: [
         {
           role: "system",

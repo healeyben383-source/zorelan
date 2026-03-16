@@ -607,6 +607,7 @@ async function scoreAnswerQuality(input: {
       anthropic.messages.create({
         model: QUALITY_JUDGE_MODEL,
         max_tokens: 60,
+        temperature: 0,
         messages: [{ role: "user", content: prompt }],
       }),
       new Promise<never>((_, reject) =>
@@ -650,6 +651,7 @@ async function buildDecisionVerdict(params: {
   const completion = await openai.chat.completions.create({
     model: "gpt-4o-mini",
     max_tokens: 260,
+    temperature: 0,
     response_format: { type: "json_object" },
     messages: [
       {
@@ -1015,6 +1017,7 @@ export async function POST(req: NextRequest) {
     const synthesisCompletion = await openai.chat.completions.create({
       model: "gpt-4o-mini",
       max_tokens: 400,
+      temperature: 0.3,
       messages: [
         {
           role: "system",

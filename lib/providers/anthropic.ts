@@ -20,6 +20,7 @@ export async function runAnthropic(
     {
       model: "claude-sonnet-4-5",
       max_tokens: MAX_OUTPUT_TOKENS,
+      temperature: 0.3,
       system: DEFAULT_SYSTEM,
       messages: [
         {

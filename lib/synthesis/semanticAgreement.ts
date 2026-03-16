@@ -192,6 +192,7 @@ async function judgeWithOpenAI(
   const response = await withTimeout(
     client.responses.create({
       model,
+      temperature: 0,
       input: [
         {
           role: "system",
@@ -255,6 +256,7 @@ async function judgeWithAnthropic(
     client.messages.create({
       model,
       max_tokens: maxOutputTokens,
+      temperature: 0,
       system: systemPrompt,
       messages: [
         {

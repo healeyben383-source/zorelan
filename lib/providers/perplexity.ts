@@ -22,6 +22,7 @@ export async function runPerplexity(
     {
       model: "sonar",
       max_tokens: MAX_OUTPUT_TOKENS,
+      temperature: 0.3,
       messages: [
         {
           role: "system",
