@@ -39,7 +39,7 @@ const TIMEOUT_MS = 30_000;
 const VERIFICATION_TIMEOUT_MS = 20_000;
 const MAX_PROMPT_CHARS = 10_000;
 const MAX_PROVIDERS = 2;
-const CACHE_TTL_SECONDS = 86_400; // 24 hours
+const CACHE_TTL_SECONDS = 21_600; // 6 hours
 
 const QUALITY_JUDGE_MODEL = "claude-haiku-4-5-20251001";
 
