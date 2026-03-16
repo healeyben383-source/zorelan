@@ -14,6 +14,13 @@ type FeedbackRecord = {
   notes?: string;
 };
 
+type Analytics = {
+  total: number;
+  triggered: number;
+  changed: number;
+  confirmed: number;
+};
+
 const ISSUE_LABELS: Record<string, string> = {
   incorrect_verdict: "Incorrect verdict",
   wrong_agreement_level: "Wrong agreement level",
@@ -31,6 +38,7 @@ const ISSUE_COLOURS: Record<string, string> = {
 export default function AdminPage() {
   const [apiKey, setApiKey] = useState("");
   const [feedback, setFeedback] = useState<FeedbackRecord[]>([]);
+  const [analytics, setAnalytics] = useState<Analytics | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [authenticated, setAuthenticated] = useState(false);
@@ -55,6 +63,20 @@ export default function AdminPage() {
       }
 
       setFeedback(data.feedback);
+
+      // Load arbitration analytics
+      try {
+        const analyticsRes = await fetch("/api/analytics", {
+          headers: { Authorization: `Bearer ${apiKey}` },
+        });
+        const analyticsData = await analyticsRes.json();
+        if (analyticsData.ok) {
+          setAnalytics(analyticsData.analytics);
+        }
+      } catch {
+        // Analytics load failure is non-fatal
+      }
+
       setAuthenticated(true);
     } catch {
       setError("Network error. Try again.");
@@ -108,21 +130,84 @@ export default function AdminPage() {
     <main className="min-h-screen bg-black text-white px-6 py-12 max-w-3xl mx-auto">
       <div className="flex items-center justify-between mb-10">
         <div>
-          <h1 className="text-2xl font-semibold">Feedback</h1>
+          <h1 className="text-2xl font-semibold">Admin</h1>
           <p className="text-white/40 text-sm mt-0.5">
-            {feedback.length} {feedback.length === 1 ? "record" : "records"}
+            Zorelan dashboard
           </p>
         </div>
         <button
           onClick={() => {
             setAuthenticated(false);
             setFeedback([]);
+            setAnalytics(null);
             setApiKey("");
           }}
           className="text-sm text-white/30 hover:text-white/60 transition-colors"
         >
           Sign out
         </button>
+      </div>
+
+      {analytics && (
+        <div className="rounded-2xl border border-white/10 p-5 mb-8 space-y-4">
+          <div className="text-xs uppercase tracking-widest text-white/30">
+            Arbitration Analytics
+          </div>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <div className="rounded-xl border border-white/10 p-4 space-y-1">
+              <div className="text-xs text-white/30 uppercase tracking-widest">
+                Total requests
+              </div>
+              <div className="text-2xl font-semibold">{analytics.total}</div>
+            </div>
+            <div className="rounded-xl border border-white/10 p-4 space-y-1">
+              <div className="text-xs text-white/30 uppercase tracking-widest">
+                Triggered
+              </div>
+              <div className="text-2xl font-semibold">{analytics.triggered}</div>
+              <div className="text-xs text-white/40">
+                {analytics.total > 0
+                  ? `${Math.round((analytics.triggered / analytics.total) * 100)}% of requests`
+                  : "—"}
+              </div>
+            </div>
+            <div className="rounded-xl border border-white/10 p-4 space-y-1">
+              <div className="text-xs text-white/30 uppercase tracking-widest">
+                Changed verdict
+              </div>
+              <div className="text-2xl font-semibold text-green-400">
+                {analytics.changed}
+              </div>
+              <div className="text-xs text-white/40">
+                {analytics.triggered > 0
+                  ? `${Math.round((analytics.changed / analytics.triggered) * 100)}% of triggered`
+                  : "—"}
+              </div>
+            </div>
+            <div className="rounded-xl border border-white/10 p-4 space-y-1">
+              <div className="text-xs text-white/30 uppercase tracking-widest">
+                Confirmed initial
+              </div>
+              <div className="text-2xl font-semibold text-white/40">
+                {analytics.confirmed}
+              </div>
+              <div className="text-xs text-white/40">
+                {analytics.triggered > 0
+                  ? `${Math.round((analytics.confirmed / analytics.triggered) * 100)}% of triggered`
+                  : "—"}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div className="flex items-center justify-between mb-6">
+        <div>
+          <h2 className="text-lg font-semibold">Feedback</h2>
+          <p className="text-white/40 text-sm mt-0.5">
+            {feedback.length} {feedback.length === 1 ? "record" : "records"}
+          </p>
+        </div>
       </div>
 
       {feedback.length === 0 ? (
@@ -179,7 +264,7 @@ export default function AdminPage() {
                   </div>
 
                   <div>
-                    <div className="text-xs uppercase tracking-widest text-white/30 mb-1">
+                    <div className="text-xs uppercase tracking-widests text-white/30 mb-1">
                       Zorelan verdict
                     </div>
                     <p className="text-sm text-white/70 leading-relaxed">
