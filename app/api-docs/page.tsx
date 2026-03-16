@@ -29,7 +29,8 @@ const data = await response.json();
 
 console.log(data.verified_answer);    // synthesized answer
 console.log(data.trust_score.score);  // 0–100
-console.log(data.consensus.level);    // "high" | "medium" | "low"`;
+console.log(data.consensus.level);    // "high" | "medium" | "low"
+console.log(data.cached);             // true if result was cached`;
 
 const pythonExample = `import requests
 import os
@@ -48,7 +49,8 @@ response = requests.post(
 data = response.json()
 print(data["verified_answer"])
 print(data["trust_score"]["score"])
-print(data["consensus"]["level"])`;
+print(data["consensus"]["level"])
+print(data["cached"])  # True if result was cached`;
 
 const responseExample = `{
   "ok": true,
@@ -68,6 +70,7 @@ const responseExample = `{
   "confidence_reason": "Both models reached the same core conclusion...",
   "key_disagreement": "No meaningful difference in conclusion.",
   "recommended_action": "Use the shared conclusion as the answer.",
+  "cached": false,
   "providers_used": ["anthropic", "perplexity"],
   "verification": {
     "final_conclusion_aligned": true,
@@ -104,6 +107,11 @@ const responseExample = `{
   }
 }`;
 
+const cacheBypassExample = `{
+  "prompt": "Should I use microservices or a monolith for my startup?",
+  "cache_bypass": true
+}`;
+
 const feedbackPostExample = `curl -X POST https://zorelan.com/api/feedback \\
   -H "Authorization: Bearer YOUR_API_KEY" \\
   -H "Content-Type: application/json" \\
@@ -130,6 +138,7 @@ const responseFields = [
   { field: "risk_level", type: "string", desc: '"low" · "moderate" · "high" — assessed risk of acting on this answer.' },
   { field: "key_disagreement", type: "string", desc: "The main tension, tradeoff, or difference between the model responses." },
   { field: "recommended_action", type: "string", desc: "Practical guidance on how to use this answer." },
+  { field: "cached", type: "boolean", desc: 'false on a fresh live verification. true when the result was served from cache — meaning this exact prompt was verified within the last 6 hours and the stored result is being returned. Use cache_bypass: true to force a fresh verification.' },
   { field: "providers_used", type: "string[]", desc: "The AI providers queried for this request." },
   { field: "verification.disagreement_type", type: "string", desc: "Structured classification of how models differed. See disagreement types below." },
   { field: "verification.semantic_judge_model", type: "string", desc: "Which model performed the neutral semantic judgment." },
@@ -389,6 +398,11 @@ Content-Type: application/json`}
               "string",
               "The question or decision you want verified. Plain natural language. Max 10,000 characters.",
             ],
+            [
+              "cache_bypass",
+              "boolean",
+              "Optional. Set to true to force a fresh live verification, bypassing any cached result. Defaults to false.",
+            ],
           ]}
         />
         <div className="mt-4">
@@ -432,6 +446,56 @@ Content-Type: application/json`}
             desc,
           ])}
         />
+      </section>
+
+      <Divider />
+
+      {/* Caching */}
+      <section className="mb-12">
+        <SectionLabel>Caching</SectionLabel>
+        <h2 className="text-xl font-semibold mb-4">Verified result caching</h2>
+        <p className="text-white/60 leading-relaxed mb-6">
+          Zorelan caches verified results for 6 hours. The first request for a
+          given prompt runs the full verification pipeline — querying multiple
+          AI providers, running the semantic agreement judge, and producing a
+          trust score. Subsequent identical requests within the cache window
+          return the stored verified result instantly.
+        </p>
+        <InfoBox>
+          A cached response is not an unverified response. It is a previously
+          verified result being replayed. The full verification pipeline ran on
+          the first request — the cache stores that output, not a shortcut
+          around it.
+        </InfoBox>
+        <div className="mt-6">
+          <Table
+            headers={["Request", "Latency", "cached field"]}
+            rows={[
+              ["First request (live verification)", "~12–20s", <span className="font-mono text-white/50 text-xs">false</span>],
+              ["Repeat request within 6 hours (cached)", "~1–2s", <span className="font-mono text-emerald-400 text-xs">true</span>],
+            ]}
+          />
+        </div>
+        <p className="text-white/50 text-sm leading-relaxed mt-4">
+          Every response includes a <InlineCode>cached</InlineCode> field so
+          your application always knows whether it received a fresh live
+          verification or a recently verified cached result. Cache keys are
+          scoped to the prompt and provider pair — different provider
+          combinations produce separate cache entries.
+        </p>
+        <h3 className="text-base font-semibold mt-8 mb-3">Bypassing the cache</h3>
+        <p className="text-white/60 leading-relaxed mb-4">
+          To force a fresh live verification regardless of cache state, pass{" "}
+          <InlineCode>cache_bypass: true</InlineCode> in the request body. This
+          is useful when you need the most current provider outputs — for
+          example, on time-sensitive prompts or after a known change in
+          underlying facts.
+        </p>
+        <CodeBlock label="json · cache bypass" code={cacheBypassExample} />
+        <div className="mt-4 rounded-xl border border-yellow-500/20 bg-yellow-500/5 px-5 py-4 text-sm text-white/60 leading-relaxed">
+          ⚠ Cache bypass requests count against your monthly quota and run the
+          full pipeline — expect normal verification latency.
+        </div>
       </section>
 
       <Divider />
