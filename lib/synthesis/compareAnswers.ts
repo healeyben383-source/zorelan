@@ -245,7 +245,6 @@ export function compareAnswers(a: string, b: string): ComparisonSignal {
   ];
 
   const strongApprovalPhrases = [
-    "yes",
     "recommended",
     "good idea",
     "worth it",
