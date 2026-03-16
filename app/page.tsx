@@ -450,6 +450,7 @@ export default function Home() {
   const [decisionVerification, setDecisionVerification] =
     useState<DecisionVerification | null>(null);
   const [trustScore, setTrustScore] = useState<TrustScore | null>(null);
+  const [cached, setCached] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [running, setRunning] = useState(false);
@@ -533,6 +534,7 @@ export default function Home() {
     setComparison(null);
     setDecisionVerification(null);
     setTrustScore(null);
+    setCached(false);
     setUserAnswers(["", "", ""]);
     setError(null);
     setPromptCopied(false);
@@ -566,6 +568,7 @@ export default function Home() {
     setComparison(entry.comparison ?? null);
     setDecisionVerification(entry.decisionVerification ?? null);
     setTrustScore(entry.trustScore ?? null);
+    setCached(false);
     setError(null);
     setHistoryOpen(false);
     setPromptCopied(false);
@@ -649,6 +652,7 @@ export default function Home() {
       setComparison(json.comparison ?? null);
       setDecisionVerification(json.decisionVerification ?? null);
       setTrustScore(json.trustScore ?? null);
+      setCached(json.cached ?? false);
 
       setTimeout(() => {
         resultsRef.current?.scrollIntoView({
@@ -1224,9 +1228,16 @@ export default function Home() {
             {(trustScore || decisionVerification) && (
               <div className="rounded-2xl border border-black/10 p-5 dark:border-white/10 space-y-4 bg-black/[0.02] dark:bg-white/[0.02]">
                 <div className="flex items-center justify-between gap-3 flex-wrap">
-                  <div className="text-xs uppercase tracking-wide opacity-50">
-                    Analysis Summary
-                  </div>
+                  <div className="flex items-center gap-3 flex-wrap">
+                    <div className="text-xs uppercase tracking-wide opacity-50">
+                      Analysis Summary
+                    </div>
+                    {cached && (
+                      <div className="text-xs px-2.5 py-1 rounded-full bg-white/5 border border-white/10 text-white/40">
+                        ⚡ Cached result · verified earlier
+                      </div>
+                    )}
+                 </div>
                   <div
                     className={cx(
                       "text-xs font-medium px-3 py-1 rounded-full",

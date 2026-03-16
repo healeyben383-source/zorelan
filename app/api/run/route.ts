@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import OpenAI from "openai";
 import Anthropic from "@anthropic-ai/sdk";
+import { Redis } from "@upstash/redis";
 import { z } from "zod";
+import crypto from "crypto";
 
 import { runOpenAI } from "@/lib/providers/openai";
 import { runAnthropic } from "@/lib/providers/anthropic";
@@ -31,9 +33,19 @@ export const runtime = "nodejs";
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
+const redisUrl = process.env.KV_REST_API_URL;
+const redisToken = process.env.KV_REST_API_TOKEN;
+
+if (!redisUrl || !redisToken) {
+  throw new Error("Missing Upstash Redis environment variables");
+}
+
+const redis = new Redis({ url: redisUrl, token: redisToken });
+
 const PROVIDER_TIMEOUT_MS = 30_000;
 const VERIFICATION_TIMEOUT_MS = 20_000;
 const MAX_PROVIDERS = 2;
+const CACHE_TTL_SECONDS = 3_600; // 1 hour
 
 const QUALITY_JUDGE_MODEL = "claude-haiku-4-5-20251001";
 
@@ -132,6 +144,7 @@ const TrustScoreSchema = z.object({
 
 const RunResponseSchema = z.object({
   ok: z.literal(true),
+  cached: z.boolean(),
   answers: z.object({
     openai: z.string(),
     anthropic: z.string(),
@@ -144,6 +157,17 @@ const RunResponseSchema = z.object({
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
+
+function generateCacheKey(prompt: string, providers: string[]): string {
+  const normalizedPrompt = prompt.trim().toLowerCase();
+  const sortedProviders = [...providers].sort().join(":");
+  const hash = crypto
+    .createHash("sha256")
+    .update(`${normalizedPrompt}::${sortedProviders}`)
+    .digest("hex")
+    .slice(0, 32);
+  return `cache:run:${hash}`;
+}
 
 function withTimeout<T>(
   promise: Promise<T>,
@@ -468,6 +492,7 @@ async function scoreAnswerQuality(input: {
       anthropic.messages.create({
         model: QUALITY_JUDGE_MODEL,
         max_tokens: 60,
+        temperature: 0,
         messages: [{ role: "user", content: prompt }],
       }),
       new Promise<never>((_, reject) =>
@@ -608,6 +633,7 @@ async function buildDecisionVerification(input: {
       openai.chat.completions.create({
         model: "gpt-4o-mini",
         max_tokens: 260,
+        temperature: 0,
         response_format: { type: "json_object" },
         messages: [
           {
@@ -744,6 +770,7 @@ export async function POST(req: NextRequest) {
         {
           ok: false,
           error: "missing_prompt",
+          cached: false,
           answers: { openai: "", anthropic: "", perplexity: "" },
           selectedProviders: [] as ProviderName[],
         },
@@ -770,6 +797,24 @@ export async function POST(req: NextRequest) {
       ) as ProviderName[];
       selectionMode = adaptiveSelection.selectionMode;
     }
+
+    // ── Cache lookup ──────────────────────────────────────────────────────
+    const cacheKey = generateCacheKey(body.prompt, selectedProviders);
+    try {
+      const cached = await redis.get(cacheKey);
+      if (cached) {
+        const cachedPayload =
+          typeof cached === "string" ? JSON.parse(cached) : cached;
+        if (cachedPayload && typeof cachedPayload === "object") {
+          cachedPayload.cached = true;
+          console.log("[/api/run] cache_hit", { cacheKey });
+          return NextResponse.json(cachedPayload);
+        }
+      }
+    } catch (cacheErr) {
+      console.warn("[/api/run] cache_lookup_error:", cacheErr);
+    }
+    // ─────────────────────────────────────────────────────────────────────
 
     const { results, diagnostics } = await routeProviders(
       body.prompt,
@@ -804,6 +849,7 @@ export async function POST(req: NextRequest) {
     if (selectedProviders.length < 2) {
       return NextResponse.json({
         ok: true,
+        cached: false,
         answers: results,
         selectedProviders,
         comparison: null,
@@ -940,9 +986,9 @@ export async function POST(req: NextRequest) {
       )
     );
 
-    // Build the response payload
     const responsePayload = {
       ok: true as const,
+      cached: false,
       answers: results,
       selectedProviders,
       comparison: {
@@ -961,8 +1007,6 @@ export async function POST(req: NextRequest) {
       trustScore,
     };
 
-    // Validate response shape before sending — catches any malformed
-    // internal state before it reaches the client
     const validation = RunResponseSchema.safeParse(responsePayload);
 
     if (!validation.success) {
@@ -974,6 +1018,7 @@ export async function POST(req: NextRequest) {
         {
           ok: false,
           error: "response_validation_failed",
+          cached: false,
           answers: { openai: "", anthropic: "", perplexity: "" },
           selectedProviders: [] as ProviderName[],
           comparison: null,
@@ -984,6 +1029,20 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // ── Cache write ───────────────────────────────────────────────────────
+    try {
+      const { cached: _cached, ...payloadWithoutCached } = validation.data;
+      await redis.set(
+        cacheKey,
+        JSON.stringify(payloadWithoutCached),
+        { ex: CACHE_TTL_SECONDS }
+      );
+      console.log("[/api/run] cache_write", { cacheKey });
+    } catch (cacheErr) {
+      console.warn("[/api/run] cache_write_error:", cacheErr);
+    }
+    // ─────────────────────────────────────────────────────────────────────
+
     return NextResponse.json(validation.data);
   } catch (error) {
     console.error("RUN API ERROR:", error);
@@ -991,6 +1050,7 @@ export async function POST(req: NextRequest) {
       {
         ok: false,
         error: "server_error",
+        cached: false,
         answers: { openai: "", anthropic: "", perplexity: "" },
         selectedProviders: [] as ProviderName[],
         comparison: null,
