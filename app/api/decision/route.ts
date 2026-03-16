@@ -39,6 +39,7 @@ const TIMEOUT_MS = 30_000;
 const VERIFICATION_TIMEOUT_MS = 20_000;
 const MAX_PROMPT_CHARS = 10_000;
 const MAX_PROVIDERS = 2;
+const CACHE_TTL_SECONDS = 86_400; // 24 hours
 
 const QUALITY_JUDGE_MODEL = "claude-haiku-4-5-20251001";
 
@@ -282,6 +283,17 @@ function getClientIp(req: NextRequest): string {
 
 function hashKey(value: string): string {
   return crypto.createHash("sha256").update(value).digest("hex");
+}
+
+function generateCacheKey(prompt: string, providers: string[]): string {
+  const normalizedPrompt = prompt.trim().toLowerCase();
+  const sortedProviders = [...providers].sort().join(":");
+  const hash = crypto
+    .createHash("sha256")
+    .update(`${normalizedPrompt}::${sortedProviders}`)
+    .digest("hex")
+    .slice(0, 32);
+  return `cache:decision:${hash}`;
 }
 
 function getRetryAfterSeconds(reset: number): number {
@@ -856,6 +868,25 @@ export async function POST(req: NextRequest) {
 
     const [providerA, providerB] = limitedProviders;
 
+    // ── Cache lookup ──────────────────────────────────────────────────────
+    const cacheKey = generateCacheKey(prompt, limitedProviders);
+    try {
+      const cached = await redis.get(cacheKey);
+      if (cached) {
+        const cachedPayload =
+          typeof cached === "string" ? JSON.parse(cached) : cached;
+        if (cachedPayload && typeof cachedPayload === "object") {
+          cachedPayload.usage = customerKeyMeta ?? null;
+          cachedPayload.cached = true;
+          console.log("[/api/decision] cache_hit", { cacheKey });
+          return NextResponse.json(cachedPayload);
+        }
+      }
+    } catch (cacheErr) {
+      console.warn("[/api/decision] cache_lookup_error:", cacheErr);
+    }
+    // ─────────────────────────────────────────────────────────────────────
+
     const providerMap: Record<ProviderName, ProviderRunner> = {
       openai: runOpenAI,
       anthropic: runAnthropic,
@@ -1112,7 +1143,6 @@ export async function POST(req: NextRequest) {
       riskLevel,
     });
 
-    // Build response payload
     const responsePayload = {
       ok: true as const,
       verdict: verdictPayload.verdict,
@@ -1176,7 +1206,6 @@ export async function POST(req: NextRequest) {
       usage: customerKeyMeta ?? null,
     };
 
-    // Validate response shape before sending
     const validation = DecisionResponseSchema.safeParse(responsePayload);
 
     if (!validation.success) {
@@ -1189,6 +1218,20 @@ export async function POST(req: NextRequest) {
         { status: 500 }
       );
     }
+
+    // ── Cache write ───────────────────────────────────────────────────────
+    try {
+      const { usage: _usage, ...payloadWithoutUsage } = validation.data;
+      await redis.set(
+        cacheKey,
+        JSON.stringify(payloadWithoutUsage),
+        { ex: CACHE_TTL_SECONDS }
+      );
+      console.log("[/api/decision] cache_write", { cacheKey });
+    } catch (cacheErr) {
+      console.warn("[/api/decision] cache_write_error:", cacheErr);
+    }
+    // ─────────────────────────────────────────────────────────────────────
 
     return NextResponse.json(validation.data);
   } catch (err) {
