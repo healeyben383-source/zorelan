@@ -196,6 +196,7 @@ const DecisionResponseSchema = z.object({
       status: z.enum(["active", "inactive"]),
     })
     .nullable(),
+  cached: z.boolean().optional(),
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -564,8 +565,9 @@ function shouldTriggerArbitration(input: {
   if (
     input.agreementLevel === "medium" &&
     input.finalConclusionAligned === false
-  )
+  ) {
     return true;
+  }
   return false;
 }
 
@@ -577,6 +579,47 @@ function getPairStrength(
     return 2;
   if (semantic.agreementLevel === "medium" && semantic.likelyConflict) return 1;
   return 0;
+}
+
+function logArbitrationDiagnostic(input: {
+  prompt: string;
+  taskType: string;
+  initialPair: [ProviderName, ProviderName];
+  thirdProvider: ProviderName | null;
+  initialAgreementLevel: AgreementLevel;
+  initialLikelyConflict: boolean;
+  initialSemanticLabel: string;
+  initialSemanticRationale: string;
+  initialUsedFallback: boolean;
+  arbitrationTriggered: boolean;
+  arbitrationUsed: boolean;
+  arbitrationProvider: ProviderName | null;
+  winningPair: [ProviderName, ProviderName];
+  pairStrengths: {
+    initial: number;
+    withAThird: number | null;
+    withBThird: number | null;
+  } | null;
+}) {
+  console.log(
+    "[/api/decision] arbitration_diagnostic",
+    JSON.stringify({
+      prompt: input.prompt.slice(0, 100),
+      task_type: input.taskType,
+      initial_pair: input.initialPair,
+      third_provider: input.thirdProvider,
+      initial_agreement_level: input.initialAgreementLevel,
+      initial_likely_conflict: input.initialLikelyConflict,
+      initial_semantic_label: input.initialSemanticLabel,
+      initial_semantic_rationale: input.initialSemanticRationale,
+      initial_used_fallback: input.initialUsedFallback,
+      arbitration_triggered: input.arbitrationTriggered,
+      arbitration_used: input.arbitrationUsed,
+      arbitration_provider: input.arbitrationProvider,
+      winning_pair: input.winningPair,
+      pair_strengths: input.pairStrengths,
+    })
+  );
 }
 
 async function evaluatePair(input: {
@@ -834,9 +877,12 @@ export async function POST(req: NextRequest) {
     const prompt = body?.prompt;
     const cacheBypass = body?.cache_bypass === true;
 
-    if (!prompt || typeof prompt !== "string")
+    if (!prompt || typeof prompt !== "string") {
       return badRequest("missing_prompt");
-    if (prompt.length > MAX_PROMPT_CHARS) return badRequest("prompt_too_large");
+    }
+    if (prompt.length > MAX_PROMPT_CHARS) {
+      return badRequest("prompt_too_large");
+    }
 
     if (!isMasterKey && parsedKeyRecord) {
       const keyStatus = parsedKeyRecord.status ?? "active";
@@ -878,6 +924,7 @@ export async function POST(req: NextRequest) {
     const [providerA, providerB] = limitedProviders;
 
     void incrementAnalytic("arbitration:total");
+
     // ── Cache lookup ──────────────────────────────────────────────────────
     const cacheKey = generateCacheKey(prompt, limitedProviders);
     try {
@@ -977,17 +1024,18 @@ export async function POST(req: NextRequest) {
       likelyConflict: initialPair.semantic.likelyConflict,
     });
 
-    if (
-      thirdProvider &&
+    const arbitrationTriggered =
+      !!thirdProvider &&
       shouldTriggerArbitration({
         agreementLevel: initialPair.semantic.agreementLevel,
         likelyConflict: initialPair.semantic.likelyConflict,
         finalConclusionAligned:
           initialFallbackClassification.finalConclusionAligned,
-      })
-    ) {
+      });
 
+    if (arbitrationTriggered && thirdProvider) {
       void incrementAnalytic("arbitration:triggered");
+
       const thirdResult = await withTimeout(
         (signal) => providerMap[thirdProvider](prompt, signal),
         TIMEOUT_MS,
@@ -1057,9 +1105,28 @@ export async function POST(req: NextRequest) {
         }
       }
     }
-      if (arbitrationPairStrengths !== null && !arbitrationUsed) {
-  void incrementAnalytic("arbitration:confirmed");
-}
+
+    if (arbitrationPairStrengths !== null && !arbitrationUsed) {
+      void incrementAnalytic("arbitration:confirmed");
+    }
+
+    logArbitrationDiagnostic({
+      prompt,
+      taskType,
+      initialPair: [initialPair.providerA, initialPair.providerB],
+      thirdProvider: thirdProvider ?? null,
+      initialAgreementLevel: initialPair.semantic.agreementLevel,
+      initialLikelyConflict: initialPair.semantic.likelyConflict,
+      initialSemanticLabel: initialPair.semantic.label,
+      initialSemanticRationale: initialPair.semantic.rationale,
+      initialUsedFallback: initialPair.semantic.usedFallback,
+      arbitrationTriggered,
+      arbitrationUsed,
+      arbitrationProvider,
+      winningPair: [activePair.providerA, activePair.providerB],
+      pairStrengths: arbitrationPairStrengths,
+    });
+
     const synthesisCompletion = await openai.chat.completions.create({
       model: "gpt-4o-mini",
       max_tokens: 400,
@@ -1219,6 +1286,7 @@ export async function POST(req: NextRequest) {
         initial_pair: [initialPair.providerA, initialPair.providerB],
       },
       usage: customerKeyMeta ?? null,
+      cached: false,
     };
 
     const validation = DecisionResponseSchema.safeParse(responsePayload);
@@ -1237,11 +1305,9 @@ export async function POST(req: NextRequest) {
     // ── Cache write ───────────────────────────────────────────────────────
     try {
       const { usage: _usage, ...payloadWithoutUsage } = validation.data;
-      await redis.set(
-        cacheKey,
-        JSON.stringify(payloadWithoutUsage),
-        { ex: CACHE_TTL_SECONDS }
-      );
+      await redis.set(cacheKey, JSON.stringify(payloadWithoutUsage), {
+        ex: CACHE_TTL_SECONDS,
+      });
       console.log("[/api/decision] cache_write", { cacheKey });
     } catch (cacheErr) {
       console.warn("[/api/decision] cache_write_error:", cacheErr);
