@@ -39,6 +39,7 @@ export default function AdminPage() {
   const [apiKey, setApiKey] = useState("");
   const [feedback, setFeedback] = useState<FeedbackRecord[]>([]);
   const [analytics, setAnalytics] = useState<Analytics | null>(null);
+  const [providerAnalytics, setProviderAnalytics] = useState<Record<string, Record<string, Record<string, number | null>>> | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [authenticated, setAuthenticated] = useState(false);
@@ -63,6 +64,19 @@ export default function AdminPage() {
       }
 
       setFeedback(data.feedback);
+
+      // Load provider analytics
+      try {
+        const providerRes = await fetch("/api/provider-analytics", {
+          headers: { Authorization: `Bearer ${apiKey}` },
+        });
+        const providerData = await providerRes.json();
+        if (providerData.ok) {
+          setProviderAnalytics(providerData.taskTypes);
+        }
+      } catch {
+        // Provider analytics load failure is non-fatal
+      }
 
       // Load arbitration analytics
       try {
@@ -140,6 +154,7 @@ export default function AdminPage() {
             setAuthenticated(false);
             setFeedback([]);
             setAnalytics(null);
+            setProviderAnalytics(null);
             setApiKey("");
           }}
           className="text-sm text-white/30 hover:text-white/60 transition-colors"
@@ -147,6 +162,59 @@ export default function AdminPage() {
           Sign out
         </button>
       </div>
+      
+      {providerAnalytics && (
+        <div className="rounded-2xl border border-white/10 p-5 mb-8 space-y-6">
+          <div className="text-xs uppercase tracking-widest text-white/30">
+            Provider Performance
+          </div>
+          {Object.entries(providerAnalytics).map(([taskType, providers]) => (
+            <div key={taskType} className="space-y-3">
+              <div className="text-xs font-medium text-white/50 capitalize">
+                {taskType}
+              </div>
+              <div className="rounded-xl border border-white/10 overflow-hidden">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="border-b border-white/10 bg-white/[0.03]">
+                      <th className="text-left px-4 py-2 text-white/30 uppercase tracking-widest">Provider</th>
+                      <th className="text-left px-4 py-2 text-white/30 uppercase tracking-widest">Score</th>
+                      <th className="text-left px-4 py-2 text-white/30 uppercase tracking-widest">Quality</th>
+                      <th className="text-left px-4 py-2 text-white/30 uppercase tracking-widest">Latency</th>
+                      <th className="text-left px-4 py-2 text-white/30 uppercase tracking-widest">Timeouts</th>
+                      <th className="text-left px-4 py-2 text-white/30 uppercase tracking-widests">Samples</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {Object.entries(providers).map(([provider, metrics]) => (
+                      <tr key={provider} className="border-b border-white/10 last:border-0">
+                        <td className="px-4 py-3 text-white/70 font-medium capitalize">{provider}</td>
+                        <td className="px-4 py-3 text-white/60">{(metrics as Record<string, number | null>).score ?? "—"}</td>
+                        <td className="px-4 py-3 text-white/60">
+                          {(metrics as Record<string, number | null>).avgQuality != null
+                            ? (metrics as Record<string, number | null>).avgQuality
+                            : "—"}
+                        </td>
+                        <td className="px-4 py-3 text-white/60">
+                          {(metrics as Record<string, number | null>).avgLatencyMs != null
+                            ? `${(metrics as Record<string, number | null>).avgLatencyMs}ms`
+                            : "—"}
+                        </td>
+                        <td className="px-4 py-3 text-white/60">
+                          {(metrics as Record<string, number | null>).timeoutRate != null
+                            ? `${Math.round(((metrics as Record<string, number | null>).timeoutRate as number) * 100)}%`
+                            : "—"}
+                        </td>
+                        <td className="px-4 py-3 text-white/60">{(metrics as Record<string, number | null>).sampleCount ?? 0}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
 
       {analytics && (
         <div className="rounded-2xl border border-white/10 p-5 mb-8 space-y-4">
