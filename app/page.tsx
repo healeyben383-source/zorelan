@@ -145,7 +145,13 @@ function renderMarkdown(text: string) {
   while (i < lines.length) {
     const line = lines[i];
 
-    if (line.startsWith("### ")) {
+    if (line.startsWith("#### ")) {
+      elements.push(
+        <h4 key={i} className="font-semibold text-sm mt-2 mb-1">
+          {renderInline(line.slice(5))}
+        </h4>
+      );
+    } else if (line.startsWith("### ")) {
       elements.push(
         <h3 key={i} className="font-semibold text-sm mt-3 mb-1">
           {renderInline(line.slice(4))}
