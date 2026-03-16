@@ -546,6 +546,14 @@ function calculateTrustScore(input: {
   return { score: finalScore, label: getTrustLabel(finalScore), reason };
 }
 
+async function incrementAnalytic(key: string): Promise<void> {
+  try {
+    await redis.incr(`zorelan:analytics:${key}`);
+  } catch {
+    // Analytics errors are non-fatal
+  }
+}
+
 function shouldTriggerArbitration(input: {
   agreementLevel: AgreementLevel;
   likelyConflict: boolean;
@@ -869,6 +877,7 @@ export async function POST(req: NextRequest) {
 
     const [providerA, providerB] = limitedProviders;
 
+    void incrementAnalytic("arbitration:total");
     // ── Cache lookup ──────────────────────────────────────────────────────
     const cacheKey = generateCacheKey(prompt, limitedProviders);
     try {
@@ -977,6 +986,8 @@ export async function POST(req: NextRequest) {
           initialFallbackClassification.finalConclusionAligned,
       })
     ) {
+
+      void incrementAnalytic("arbitration:triggered");
       const thirdResult = await withTimeout(
         (signal) => providerMap[thirdProvider](prompt, signal),
         TIMEOUT_MS,
@@ -1032,6 +1043,7 @@ export async function POST(req: NextRequest) {
       ) {
         arbitrationUsed = true;
         arbitrationProvider = thirdProvider;
+        void incrementAnalytic("arbitration:changed");
 
         if (aThirdStrength > bThirdStrength) {
           activePair = pairWithAThird;
@@ -1045,7 +1057,9 @@ export async function POST(req: NextRequest) {
         }
       }
     }
-
+      if (arbitrationPairStrengths !== null && !arbitrationUsed) {
+  void incrementAnalytic("arbitration:confirmed");
+}
     const synthesisCompletion = await openai.chat.completions.create({
       model: "gpt-4o-mini",
       max_tokens: 400,
