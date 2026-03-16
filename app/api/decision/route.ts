@@ -824,6 +824,7 @@ export async function POST(req: NextRequest) {
 
     const body = await req.json().catch(() => null);
     const prompt = body?.prompt;
+    const cacheBypass = body?.cache_bypass === true;
 
     if (!prompt || typeof prompt !== "string")
       return badRequest("missing_prompt");
@@ -871,7 +872,7 @@ export async function POST(req: NextRequest) {
     // ── Cache lookup ──────────────────────────────────────────────────────
     const cacheKey = generateCacheKey(prompt, limitedProviders);
     try {
-      const cached = await redis.get(cacheKey);
+      const cached = !cacheBypass ? await redis.get(cacheKey) : null;
       if (cached) {
         const cachedPayload =
           typeof cached === "string" ? JSON.parse(cached) : cached;
