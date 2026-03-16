@@ -104,6 +104,21 @@ const responseExample = `{
   }
 }`;
 
+const feedbackPostExample = `curl -X POST https://zorelan.com/api/feedback \\
+  -H "Authorization: Bearer YOUR_API_KEY" \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "prompt": "Should I use microservices or a monolith?",
+    "verdict": "Both models recommend a monolith.",
+    "issue": "incorrect_verdict",
+    "correct_answer": "Microservices are better for this use case.",
+    "request_id": "req_abc123",
+    "notes": "The prompt was about a high-scale system."
+  }'`;
+
+const feedbackGetExample = `curl https://zorelan.com/api/feedback \\
+  -H "Authorization: Bearer YOUR_MASTER_KEY"`;
+
 const responseFields = [
   { field: "verified_answer", type: "string", desc: "The synthesized final answer combining the best insights from all models." },
   { field: "verdict", type: "string", desc: "A concise one-sentence decision verdict." },
@@ -594,6 +609,109 @@ Trust score recalculated on winning pair`}
           <InlineCode>retry_after</InlineCode> field indicating seconds to wait
           before retrying.
         </p>
+      </section>
+
+      <Divider />
+
+      {/* Feedback API */}
+      <section className="mb-12">
+        <SectionLabel>Feedback API</SectionLabel>
+        <h2 className="text-xl font-semibold mb-4">Submit feedback</h2>
+        <p className="text-white/60 leading-relaxed mb-6">
+          If Zorelan returns an incorrect verdict, you can submit feedback
+          programmatically. Feedback is stored and reviewed to improve the
+          verification engine.
+        </p>
+
+        <div className="rounded-2xl border border-white/10 p-5 mb-6">
+          <div className="flex items-center gap-3">
+            <span className="text-xs font-mono bg-emerald-500/15 text-emerald-400 px-2 py-1 rounded font-semibold">
+              POST
+            </span>
+            <span className="font-mono text-white/70 text-sm">
+              https://zorelan.com/api/feedback
+            </span>
+          </div>
+        </div>
+
+        <p className="text-white/60 leading-relaxed mb-6">
+          Accepts any valid API key or master key. Requires the original
+          prompt, the verdict Zorelan returned, the issue type, and your
+          correct answer.
+        </p>
+
+        <h3 className="text-base font-semibold mb-3">Request body</h3>
+        <Table
+          headers={["Field", "Type", "Required", "Description"]}
+          rows={[
+            [
+              <>prompt <span className="text-red-400/80 text-[10px] border border-red-400/20 bg-red-400/10 px-1.5 py-0.5 rounded ml-1">required</span></>,
+              "string",
+              "Yes",
+              "The original prompt you submitted to /v1/decision.",
+            ],
+            [
+              <>verdict <span className="text-red-400/80 text-[10px] border border-red-400/20 bg-red-400/10 px-1.5 py-0.5 rounded ml-1">required</span></>,
+              "string",
+              "Yes",
+              "The verdict Zorelan returned.",
+            ],
+            [
+              <>issue <span className="text-red-400/80 text-[10px] border border-red-400/20 bg-red-400/10 px-1.5 py-0.5 rounded ml-1">required</span></>,
+              "string",
+              "Yes",
+              <>
+                One of: <InlineCode>incorrect_verdict</InlineCode>{" · "}
+                <InlineCode>wrong_agreement_level</InlineCode>{" · "}
+                <InlineCode>missing_nuance</InlineCode>{" · "}
+                <InlineCode>other</InlineCode>
+              </>,
+            ],
+            [
+              <>correct_answer <span className="text-red-400/80 text-[10px] border border-red-400/20 bg-red-400/10 px-1.5 py-0.5 rounded ml-1">required</span></>,
+              "string",
+              "Yes",
+              "What the correct answer should have been.",
+            ],
+            ["request_id", "string", "No", "The request ID from the original /v1/decision response, if available."],
+            ["notes", "string", "No", "Any additional context about why the verdict was wrong."],
+          ]}
+        />
+
+        <div className="mt-6">
+          <CodeBlock label="curl · post feedback" code={feedbackPostExample} />
+        </div>
+
+        <div className="mt-4">
+          <CodeBlock
+            label="json · response"
+            code={`{
+  "ok": true,
+  "id": "42d9ba4d-cab3-4721-83cb-06ae40c74562",
+  "message": "Feedback received. Thank you."
+}`}
+          />
+        </div>
+
+        <h2 className="text-xl font-semibold mt-10 mb-4">Retrieve feedback</h2>
+
+        <div className="rounded-2xl border border-white/10 p-5 mb-6">
+          <div className="flex items-center gap-3">
+            <span className="text-xs font-mono bg-blue-500/15 text-blue-400 px-2 py-1 rounded font-semibold">
+              GET
+            </span>
+            <span className="font-mono text-white/70 text-sm">
+              https://zorelan.com/api/feedback
+            </span>
+          </div>
+        </div>
+
+        <p className="text-white/60 leading-relaxed mb-6">
+          Returns all feedback records. Requires the master key — not available
+          to regular API keys.
+        </p>
+
+        <CodeBlock label="curl · get feedback" code={feedbackGetExample} />
       </section>
 
       <Divider />
