@@ -6,7 +6,7 @@ import CheckoutStatusBanner from "./CheckoutStatusBanner";
 export const metadata: Metadata = {
   title: "API Docs — Zorelan",
   description:
-    "Zorelan is an AI verification engine that compares multiple model responses and returns the most reliable answer with a trust score, consensus level, and disagreement analysis.",
+    "Zorelan is an AI verification engine and consensus layer for production systems. Compare multiple model responses and return the most reliable answer with trust scoring and disagreement analysis.",
 };
 
 const curlExample = `curl -X POST https://zorelan.com/v1/decision \\
@@ -112,9 +112,34 @@ const cacheBypassExample = `{
   "cache_bypass": true
 }`;
 
+const integrationExample = `const result = await fetch("https://zorelan.com/v1/decision", {
+  method: "POST",
+  headers: {
+    "Authorization": \`Bearer \${process.env.ZORELAN_API_KEY}\`,
+    "Content-Type": "application/json",
+  },
+  body: JSON.stringify({
+    prompt: userQuestion,
+  }),
+}).then((r) => r.json());
+
+if (result.trust_score.score >= 75 && result.consensus.level === "high") {
+  return {
+    answer: result.verified_answer,
+    state: "ready",
+  };
+}
+
+return {
+  answer: result.verified_answer,
+  state: "review",
+  warning: "Low confidence or disagreement detected.",
+  disagreement: result.key_disagreement,
+};`;
+
 const feedbackPostExample = `curl -X POST https://zorelan.com/api/feedback \\
   -H "Authorization: Bearer YOUR_API_KEY" \\
-  -H "Content-Type: application/json" \\
+  -H "Content-Type": "application/json" \\
   -d '{
     "prompt": "Should I use microservices or a monolith?",
     "verdict": "Both models recommend a monolith.",
@@ -283,21 +308,25 @@ export default function ApiDocsPage() {
           Zorelan API
         </h1>
 
-        <p className="text-white text-2xl leading-tight tracking-tight mb-4 max-w-3xl">
+        <p className="text-white text-2xl leading-tight tracking-tight mb-2 max-w-3xl">
           Zorelan is an AI verification engine.
+        </p>
+
+        <p className="text-white/40 text-sm mb-5">
+          AI consensus infrastructure for production systems.
         </p>
 
         <p className="text-white/70 text-lg leading-relaxed mb-4 max-w-3xl">
           It compares multiple model responses and returns the most reliable
-          answer — with a trust score, consensus level, and structured
-          disagreement analysis — in a single API call.
+          answer with a trust score and consensus signal.
         </p>
 
         <p className="text-white/55 text-base leading-relaxed mb-8 max-w-3xl">
-          Most AI applications rely on a single model output. Zorelan adds a
-          verification layer between your app and AI providers, helping reduce
-          hallucinations, expose disagreement, and increase confidence before
-          you act on an answer.
+          Most AI applications rely on a single model output. Zorelan adds a{" "}
+          <span className="text-white font-medium">verification layer</span>{" "}
+          between your app and AI providers, helping reduce hallucinations,
+          expose disagreement, and increase confidence before you act on an
+          answer.
         </p>
 
         <div className="flex flex-wrap gap-8">
@@ -336,13 +365,13 @@ export default function ApiDocsPage() {
 
             <CodeBlock
               label="mental model"
-              code={`Your app
+              code={`Your App
     ↓
-Zorelan API
+Zorelan (verification layer)
     ↓
-OpenAI · Claude · Perplexity
+Multiple AI models
     ↓
-Agreement check + arbitration
+Agreement + arbitration
     ↓
 Verified answer + trust score`}
             />
@@ -368,6 +397,54 @@ Verified answer + trust score`}
             diagnostics, and usage metadata.
           </FeatureCard>
         </div>
+      </section>
+
+      {/* Use cases */}
+      <section className="mb-12">
+        <SectionLabel>Use Cases</SectionLabel>
+        <h2 className="text-xl font-semibold mb-4">Where to use Zorelan</h2>
+        <div className="grid gap-4 md:grid-cols-2">
+          <FeatureCard title="Validate AI before showing users">
+            Verify responses before displaying them in your UI. Use trust score
+            and consensus level to decide whether to present an answer directly
+            or show uncertainty.
+          </FeatureCard>
+          <FeatureCard title="Gate actions based on confidence">
+            Only trigger workflows, automations, notifications, or downstream
+            decisions when the trust score clears your threshold.
+          </FeatureCard>
+          <FeatureCard title="Reduce hallucinations in production">
+            Add a verification layer between your app and LLMs to reduce
+            fabricated or weak answers in higher-risk contexts.
+          </FeatureCard>
+          <FeatureCard title="Compare model behaviour">
+            Inspect agreement, disagreement type, and arbitration results to
+            understand how different providers respond to the same prompt.
+          </FeatureCard>
+          <FeatureCard title="Add explainability to AI features">
+            Return confidence and disagreement metadata alongside the answer so
+            your product can communicate uncertainty clearly.
+          </FeatureCard>
+          <FeatureCard title="Build trust-aware product logic">
+            Use trust score, risk level, and cached status as inputs into your
+            application state, routing, or review flows.
+          </FeatureCard>
+        </div>
+      </section>
+
+      {/* Integration example */}
+      <section className="mb-12">
+        <SectionLabel>Integration Pattern</SectionLabel>
+        <h2 className="text-xl font-semibold mb-4">
+          Example: gate responses by trust score
+        </h2>
+        <p className="text-white/60 leading-relaxed mb-6">
+          A common pattern is to use Zorelan as a decision layer in front of
+          your UI or workflow engine. High-confidence answers can flow straight
+          through. Lower-confidence answers can trigger review, fallback, or
+          a user warning.
+        </p>
+        <CodeBlock label="node.js / trust gating" code={integrationExample} />
       </section>
 
       <Divider />
