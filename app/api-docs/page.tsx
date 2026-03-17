@@ -6,12 +6,12 @@ import CheckoutStatusBanner from "./CheckoutStatusBanner";
 export const metadata: Metadata = {
   title: "API Docs — Zorelan",
   description:
-    "Zorelan is an AI verification engine and consensus layer for production systems. Compare multiple model responses and return the most reliable answer with trust scoring and disagreement analysis.",
+    "Zorelan is an AI verification engine and consensus layer for production systems. Compare multiple model responses and return a verified answer with trust scoring and disagreement analysis.",
 };
 
 const curlExample = `curl -X POST https://zorelan.com/v1/decision \\
   -H "Authorization: Bearer YOUR_API_KEY" \\
-  -H "Content-Type: application/json" \\
+  -H "Content-Type": "application/json" \\
   -d '{"prompt": "Should I use microservices or a monolith for my startup?"}'`;
 
 const nodeExample = `const response = await fetch("https://zorelan.com/v1/decision", {
@@ -112,34 +112,29 @@ const cacheBypassExample = `{
   "cache_bypass": true
 }`;
 
-const integrationExample = `const result = await fetch("https://zorelan.com/v1/decision", {
+const integrationExample = `const zorelan = await fetch("https://zorelan.com/v1/decision", {
   method: "POST",
   headers: {
-    "Authorization": \`Bearer \${process.env.ZORELAN_API_KEY}\`,
+    Authorization: \`Bearer \${process.env.ZORELAN_API_KEY}\`,
     "Content-Type": "application/json",
   },
   body: JSON.stringify({
-    prompt: userQuestion,
+    prompt: userInput,
   }),
-}).then((r) => r.json());
+});
 
-if (result.trust_score.score >= 75 && result.consensus.level === "high") {
-  return {
-    answer: result.verified_answer,
-    state: "ready",
-  };
-}
+const result = await zorelan.json();
 
-return {
-  answer: result.verified_answer,
-  state: "review",
-  warning: "Low confidence or disagreement detected.",
-  disagreement: result.key_disagreement,
-};`;
+// Gate behaviour based on trust score
+if (result.trust_score.score >= 75) {
+  showAnswer(result.verified_answer);
+} else {
+  showWarning("Low confidence. Review before acting.");
+}`;
 
 const feedbackPostExample = `curl -X POST https://zorelan.com/api/feedback \\
   -H "Authorization: Bearer YOUR_API_KEY" \\
-  -H "Content-Type": "application/json" \\
+  -H "Content-Type: application/json" \\
   -d '{
     "prompt": "Should I use microservices or a monolith?",
     "verdict": "Both models recommend a monolith.",
@@ -153,42 +148,162 @@ const feedbackGetExample = `curl https://zorelan.com/api/feedback \\
   -H "Authorization: Bearer YOUR_MASTER_KEY"`;
 
 const responseFields = [
-  { field: "verified_answer", type: "string", desc: "The synthesized final answer combining the best insights from all models." },
-  { field: "verdict", type: "string", desc: "A concise one-sentence decision verdict." },
-  { field: "consensus.level", type: "string", desc: '"high" · "medium" · "low" — how strongly the models agreed.' },
-  { field: "consensus.models_aligned", type: "number", desc: "Number of models that reached the same conclusion." },
-  { field: "trust_score.score", type: "number", desc: "Overall reliability score from 0–100. Driven by agreement level, quality, and risk." },
-  { field: "trust_score.label", type: "string", desc: '"high" (≥75) · "moderate" (≥55) · "low" (<55)' },
-  { field: "trust_score.reason", type: "string", desc: "Plain English explanation of why the score is what it is." },
-  { field: "risk_level", type: "string", desc: '"low" · "moderate" · "high" — assessed risk of acting on this answer.' },
-  { field: "key_disagreement", type: "string", desc: "The main tension, tradeoff, or difference between the model responses." },
-  { field: "recommended_action", type: "string", desc: "Practical guidance on how to use this answer." },
-  { field: "cached", type: "boolean", desc: 'false on a fresh live verification. true when the result was served from cache — meaning this exact prompt was verified within the last 6 hours and the stored result is being returned. Use cache_bypass: true to force a fresh verification.' },
-  { field: "providers_used", type: "string[]", desc: "The AI providers queried for this request." },
-  { field: "verification.disagreement_type", type: "string", desc: "Structured classification of how models differed. See disagreement types below." },
-  { field: "verification.semantic_judge_model", type: "string", desc: "Which model performed the neutral semantic judgment." },
-  { field: "arbitration.used", type: "boolean", desc: "Whether a third model was invoked to resolve disagreement." },
-  { field: "model_diagnostics", type: "object", desc: "Per-provider quality scores, latency, and timeout status." },
-  { field: "meta.task_type", type: "string", desc: '"technical" · "strategy" · "creative" · "general" — detected category of the prompt.' },
-  { field: "usage", type: "object", desc: "Your current plan, call limits, and remaining calls for the billing period." },
+  {
+    field: "verified_answer",
+    type: "string",
+    desc: "The synthesized final answer combining the best insights from all models.",
+  },
+  {
+    field: "verdict",
+    type: "string",
+    desc: "A concise one-sentence decision verdict.",
+  },
+  {
+    field: "consensus.level",
+    type: "string",
+    desc: '"high" · "medium" · "low" — how strongly the models agreed.',
+  },
+  {
+    field: "consensus.models_aligned",
+    type: "number",
+    desc: "Number of models that reached the same conclusion.",
+  },
+  {
+    field: "trust_score.score",
+    type: "number",
+    desc: "Overall reliability score from 0–100. Driven by agreement level, quality, and risk.",
+  },
+  {
+    field: "trust_score.label",
+    type: "string",
+    desc: '"high" (≥75) · "moderate" (≥55) · "low" (<55)',
+  },
+  {
+    field: "trust_score.reason",
+    type: "string",
+    desc: "Plain English explanation of why the score is what it is.",
+  },
+  {
+    field: "risk_level",
+    type: "string",
+    desc: '"low" · "moderate" · "high" — assessed risk of acting on this answer.',
+  },
+  {
+    field: "key_disagreement",
+    type: "string",
+    desc: "The main tension, tradeoff, or difference between the model responses.",
+  },
+  {
+    field: "recommended_action",
+    type: "string",
+    desc: "Practical guidance on how to use this answer.",
+  },
+  {
+    field: "cached",
+    type: "boolean",
+    desc: 'false on a fresh live verification. true when the result was served from cache — meaning this exact prompt was verified within the last 6 hours and the stored result is being returned. Use cache_bypass: true to force a fresh verification.',
+  },
+  {
+    field: "providers_used",
+    type: "string[]",
+    desc: "The AI providers queried for this request.",
+  },
+  {
+    field: "verification.disagreement_type",
+    type: "string",
+    desc: "Structured classification of how models differed. See disagreement types below.",
+  },
+  {
+    field: "verification.semantic_judge_model",
+    type: "string",
+    desc: "Which model performed the neutral semantic judgment.",
+  },
+  {
+    field: "arbitration.used",
+    type: "boolean",
+    desc: "Whether a third model was invoked to resolve disagreement.",
+  },
+  {
+    field: "model_diagnostics",
+    type: "object",
+    desc: "Per-provider quality scores, latency, and timeout status.",
+  },
+  {
+    field: "meta.task_type",
+    type: "string",
+    desc: '"technical" · "strategy" · "creative" · "general" — detected category of the prompt.',
+  },
+  {
+    field: "usage",
+    type: "object",
+    desc: "Your current plan, call limits, and remaining calls for the billing period.",
+  },
 ];
 
 const errorCodes = [
-  { status: "400", code: "missing_prompt", desc: 'The request body is missing the required "prompt" field.' },
-  { status: "400", code: "prompt_too_large", desc: "The prompt exceeds 10,000 characters." },
-  { status: "401", code: "unauthorized", desc: "Missing or invalid API key." },
-  { status: "403", code: "subscription_inactive", desc: "Your subscription is inactive. Check your billing at zorelan.com." },
-  { status: "429", code: "rate_limit_exceeded", desc: "You have used all calls for this billing period." },
-  { status: "429", code: "too_many_requests", desc: 'Too many requests in a short window. Includes a "retry_after" field in seconds.' },
-  { status: "500", code: "internal_error", desc: "An unexpected server error. Retry with exponential backoff." },
+  {
+    status: "400",
+    code: "missing_prompt",
+    desc: 'The request body is missing the required "prompt" field.',
+  },
+  {
+    status: "400",
+    code: "prompt_too_large",
+    desc: "The prompt exceeds 10,000 characters.",
+  },
+  {
+    status: "401",
+    code: "unauthorized",
+    desc: "Missing or invalid API key.",
+  },
+  {
+    status: "403",
+    code: "subscription_inactive",
+    desc: "Your subscription is inactive. Check your billing at zorelan.com.",
+  },
+  {
+    status: "429",
+    code: "rate_limit_exceeded",
+    desc: "You have used all calls for this billing period.",
+  },
+  {
+    status: "429",
+    code: "too_many_requests",
+    desc: 'Too many requests in a short window. Includes a "retry_after" field in seconds.',
+  },
+  {
+    status: "500",
+    code: "internal_error",
+    desc: "An unexpected server error. Retry with exponential backoff.",
+  },
 ];
 
 const disagreementTypes = [
-  { type: "none", impact: "No penalty", desc: "Models reached the same conclusion with no meaningful difference." },
-  { type: "additive_nuance", impact: "No penalty", desc: "One model added correct detail without changing the core conclusion." },
-  { type: "explanation_variation", impact: "−4 pts", desc: "Same conclusion, different framing, emphasis, or supporting reasoning." },
-  { type: "conditional_alignment", impact: "−12 pts", desc: "A usable answer exists only by adding context or conditions. Models didn't cleanly agree." },
-  { type: "material_conflict", impact: "−20 pts", desc: "Models gave materially opposite recommendations or conclusions." },
+  {
+    type: "none",
+    impact: "No penalty",
+    desc: "Models reached the same conclusion with no meaningful difference.",
+  },
+  {
+    type: "additive_nuance",
+    impact: "No penalty",
+    desc: "One model added correct detail without changing the core conclusion.",
+  },
+  {
+    type: "explanation_variation",
+    impact: "−4 pts",
+    desc: "Same conclusion, different framing, emphasis, or supporting reasoning.",
+  },
+  {
+    type: "conditional_alignment",
+    impact: "−12 pts",
+    desc: "A usable answer exists only by adding context or conditions. Models didn't cleanly agree.",
+  },
+  {
+    type: "material_conflict",
+    impact: "−20 pts",
+    desc: "Models gave materially opposite recommendations or conclusions.",
+  },
 ];
 
 function SectionLabel({ children }: { children: React.ReactNode }) {
@@ -317,8 +432,8 @@ export default function ApiDocsPage() {
         </p>
 
         <p className="text-white/70 text-lg leading-relaxed mb-4 max-w-3xl">
-          It compares multiple model responses and returns the most reliable
-          answer with a trust score and consensus signal.
+          It compares multiple model responses and returns a verified answer with
+          a trust score and consensus signal — in a single API call.
         </p>
 
         <p className="text-white/55 text-base leading-relaxed mb-8 max-w-3xl">
@@ -334,7 +449,10 @@ export default function ApiDocsPage() {
             { value: "3", label: "AI providers compared" },
             { value: "0–100", label: "Trust score range" },
             { value: "5", label: "Disagreement types" },
-            { value: "89%", label: "Agreement accuracy · 100-question benchmark" },
+            {
+              value: "89%",
+              label: "Agreement accuracy · 100-question benchmark",
+            },
           ].map(({ value, label }) => (
             <div key={label}>
               <div className="text-2xl font-semibold font-mono">{value}</div>
@@ -434,17 +552,32 @@ Verified answer + trust score`}
 
       {/* Integration example */}
       <section className="mb-12">
-        <SectionLabel>Integration Pattern</SectionLabel>
+        <SectionLabel>Example</SectionLabel>
         <h2 className="text-xl font-semibold mb-4">
-          Example: gate responses by trust score
+          Using Zorelan in a product
         </h2>
+
         <p className="text-white/60 leading-relaxed mb-6">
-          A common pattern is to use Zorelan as a decision layer in front of
-          your UI or workflow engine. High-confidence answers can flow straight
-          through. Lower-confidence answers can trigger review, fallback, or
-          a user warning.
+          A common pattern is to verify AI responses before showing them to
+          users or triggering actions. Zorelan acts as a verification layer
+          between your app and AI models, allowing you to gate behaviour based
+          on confidence.
         </p>
-        <CodeBlock label="node.js / trust gating" code={integrationExample} />
+
+        <CodeBlock
+          label="node.js · verify before display"
+          code={integrationExample}
+        />
+
+        <div className="mt-6 grid gap-4 md:grid-cols-2">
+          <FeatureCard title="High confidence">
+            Show the verified answer directly when models strongly agree.
+          </FeatureCard>
+
+          <FeatureCard title="Low confidence">
+            Flag uncertainty, request confirmation, or trigger fallback logic.
+          </FeatureCard>
+        </div>
       </section>
 
       <Divider />
@@ -480,22 +613,6 @@ Trust score + verified answer`}
           judges Claude outputs. This eliminates self-scoring bias from the
           verification layer.
         </p>
-      </section>
-
-      <Divider />
-
-      {/* Access */}
-      <section className="mb-12">
-        <SectionLabel>Access</SectionLabel>
-        <h2 className="text-xl font-semibold mb-4">Get your API key</h2>
-        <p className="text-white/60 leading-relaxed mb-6">
-          Subscribe below to receive your API key instantly. All plans include
-          full API access with the same response schema, trust scoring, and
-          arbitration.
-        </p>
-        <div className="rounded-2xl border border-white/10 p-6">
-          <PricingButtons />
-        </div>
       </section>
 
       <Divider />
@@ -631,8 +748,23 @@ Content-Type: application/json`}
           <Table
             headers={["Request", "Latency", "cached field"]}
             rows={[
-              ["First request (live verification)", "~12–20s", <span className="font-mono text-white/50 text-xs">false</span>],
-              ["Repeat request within 6 hours (cached)", "~1–2s", <span className="font-mono text-emerald-400 text-xs">true</span>],
+              [
+                "First request (live verification)",
+                "~12–20s",
+                <span className="font-mono text-white/50 text-xs" key="live">
+                  false
+                </span>,
+              ],
+              [
+                "Repeat request within 6 hours (cached)",
+                "~1–2s",
+                <span
+                  className="font-mono text-emerald-400 text-xs"
+                  key="cached"
+                >
+                  true
+                </span>,
+              ],
             ]}
           />
         </div>
@@ -643,7 +775,9 @@ Content-Type: application/json`}
           scoped to the prompt and provider pair — different provider
           combinations produce separate cache entries.
         </p>
-        <h3 className="text-base font-semibold mt-8 mb-3">Bypassing the cache</h3>
+        <h3 className="text-base font-semibold mt-8 mb-3">
+          Bypassing the cache
+        </h3>
         <p className="text-white/60 leading-relaxed mb-4">
           To force a fresh live verification regardless of cache state, pass{" "}
           <InlineCode>cache_bypass: true</InlineCode> in the request body. This
@@ -869,19 +1003,34 @@ Trust score recalculated on winning pair`}
           headers={["Field", "Type", "Required", "Description"]}
           rows={[
             [
-              <>prompt <span className="text-red-400/80 text-[10px] border border-red-400/20 bg-red-400/10 px-1.5 py-0.5 rounded ml-1">required</span></>,
+              <>
+                prompt{" "}
+                <span className="text-red-400/80 text-[10px] border border-red-400/20 bg-red-400/10 px-1.5 py-0.5 rounded ml-1">
+                  required
+                </span>
+              </>,
               "string",
               "Yes",
               "The original prompt you submitted to /v1/decision.",
             ],
             [
-              <>verdict <span className="text-red-400/80 text-[10px] border border-red-400/20 bg-red-400/10 px-1.5 py-0.5 rounded ml-1">required</span></>,
+              <>
+                verdict{" "}
+                <span className="text-red-400/80 text-[10px] border border-red-400/20 bg-red-400/10 px-1.5 py-0.5 rounded ml-1">
+                  required
+                </span>
+              </>,
               "string",
               "Yes",
               "The verdict Zorelan returned.",
             ],
             [
-              <>issue <span className="text-red-400/80 text-[10px] border border-red-400/20 bg-red-400/10 px-1.5 py-0.5 rounded ml-1">required</span></>,
+              <>
+                issue{" "}
+                <span className="text-red-400/80 text-[10px] border border-red-400/20 bg-red-400/10 px-1.5 py-0.5 rounded ml-1">
+                  required
+                </span>
+              </>,
               "string",
               "Yes",
               <>
@@ -892,13 +1041,28 @@ Trust score recalculated on winning pair`}
               </>,
             ],
             [
-              <>correct_answer <span className="text-red-400/80 text-[10px] border border-red-400/20 bg-red-400/10 px-1.5 py-0.5 rounded ml-1">required</span></>,
+              <>
+                correct_answer{" "}
+                <span className="text-red-400/80 text-[10px] border border-red-400/20 bg-red-400/10 px-1.5 py-0.5 rounded ml-1">
+                  required
+                </span>
+              </>,
               "string",
               "Yes",
               "What the correct answer should have been.",
             ],
-            ["request_id", "string", "No", "The request ID from the original /v1/decision response, if available."],
-            ["notes", "string", "No", "Any additional context about why the verdict was wrong."],
+            [
+              "request_id",
+              "string",
+              "No",
+              "The request ID from the original /v1/decision response, if available.",
+            ],
+            [
+              "notes",
+              "string",
+              "No",
+              "Any additional context about why the verdict was wrong.",
+            ],
           ]}
         />
 
@@ -936,6 +1100,22 @@ Trust score recalculated on winning pair`}
         </p>
 
         <CodeBlock label="curl · get feedback" code={feedbackGetExample} />
+      </section>
+
+      <Divider />
+
+      {/* Access */}
+      <section className="mb-12">
+        <SectionLabel>Access</SectionLabel>
+        <h2 className="text-xl font-semibold mb-4">Get your API key</h2>
+        <p className="text-white/60 leading-relaxed mb-6">
+          Subscribe below to receive your API key instantly. All plans include
+          full API access with the same response schema, trust scoring, and
+          arbitration.
+        </p>
+        <div className="rounded-2xl border border-white/10 p-6">
+          <PricingButtons />
+        </div>
       </section>
 
       <Divider />
