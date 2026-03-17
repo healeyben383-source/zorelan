@@ -6,7 +6,7 @@ import CheckoutStatusBanner from "./CheckoutStatusBanner";
 export const metadata: Metadata = {
   title: "API Docs — Zorelan",
   description:
-    "Integrate Zorelan's AI verification engine into your app with a single API call.",
+    "Zorelan is an AI verification engine that compares multiple model responses and returns the most reliable answer with a trust score, consensus level, and disagreement analysis.",
 };
 
 const curlExample = `curl -X POST https://zorelan.com/v1/decision \\
@@ -254,6 +254,21 @@ function InlineCode({ children }: { children: React.ReactNode }) {
   );
 }
 
+function FeatureCard({
+  title,
+  children,
+}: {
+  title: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-5">
+      <h3 className="text-sm font-semibold text-white mb-2">{title}</h3>
+      <p className="text-sm text-white/55 leading-relaxed">{children}</p>
+    </div>
+  );
+}
+
 export default function ApiDocsPage() {
   return (
     <main className="min-h-screen bg-black text-white px-6 py-16 max-w-3xl mx-auto">
@@ -267,11 +282,24 @@ export default function ApiDocsPage() {
         <h1 className="text-4xl font-semibold tracking-tight mb-4">
           Zorelan API
         </h1>
-        <p className="text-white/60 text-lg leading-relaxed mb-8">
-          Send one prompt. Get a verified answer from multiple AI models — with
-          a trust score, consensus level, and structured disagreement analysis
-          — in a single API call.
+
+        <p className="text-white text-2xl leading-tight tracking-tight mb-4 max-w-3xl">
+          Zorelan is an AI verification engine.
         </p>
+
+        <p className="text-white/70 text-lg leading-relaxed mb-4 max-w-3xl">
+          It compares multiple model responses and returns the most reliable
+          answer — with a trust score, consensus level, and structured
+          disagreement analysis — in a single API call.
+        </p>
+
+        <p className="text-white/55 text-base leading-relaxed mb-8 max-w-3xl">
+          Most AI applications rely on a single model output. Zorelan adds a
+          verification layer between your app and AI providers, helping reduce
+          hallucinations, expose disagreement, and increase confidence before
+          you act on an answer.
+        </p>
+
         <div className="flex flex-wrap gap-8">
           {[
             { value: "3", label: "AI providers compared" },
@@ -286,6 +314,61 @@ export default function ApiDocsPage() {
           ))}
         </div>
       </div>
+
+      {/* 2-second understanding block */}
+      <section className="mb-12">
+        <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-6">
+          <div className="grid gap-6 md:grid-cols-2">
+            <div>
+              <h2 className="text-lg font-semibold mb-3">What Zorelan does</h2>
+              <p className="text-white/60 leading-relaxed mb-4">
+                Send one prompt to Zorelan. It queries multiple AI models,
+                compares their outputs, and returns a verified answer with
+                machine-readable confidence signals.
+              </p>
+              <div className="space-y-2 text-sm text-white/55">
+                <div>• Reduces single-model failure risk</div>
+                <div>• Surfaces model agreement and disagreement</div>
+                <div>• Returns a trust score you can use in product logic</div>
+                <div>• Adds a verification layer to AI-powered apps</div>
+              </div>
+            </div>
+
+            <CodeBlock
+              label="mental model"
+              code={`Your app
+    ↓
+Zorelan API
+    ↓
+OpenAI · Claude · Perplexity
+    ↓
+Agreement check + arbitration
+    ↓
+Verified answer + trust score`}
+            />
+          </div>
+        </div>
+      </section>
+
+      {/* Quick outcome block */}
+      <section className="mb-12">
+        <SectionLabel>Quickstart</SectionLabel>
+        <h2 className="text-xl font-semibold mb-4">What you get back</h2>
+        <div className="grid gap-4 md:grid-cols-3">
+          <FeatureCard title="Verified answer">
+            A synthesized final answer based on the strongest aligned model
+            outputs.
+          </FeatureCard>
+          <FeatureCard title="Trust score">
+            A 0–100 reliability score based on agreement strength, output
+            quality, and risk.
+          </FeatureCard>
+          <FeatureCard title="Structured analysis">
+            Consensus level, disagreement type, arbitration usage, provider
+            diagnostics, and usage metadata.
+          </FeatureCard>
+        </div>
+      </section>
 
       <Divider />
 
