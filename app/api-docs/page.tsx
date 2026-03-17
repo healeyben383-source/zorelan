@@ -580,6 +580,38 @@ Verified answer + trust score`}
         </div>
       </section>
 
+      {/* Why not just use one model */}
+<section className="mb-12">
+  <SectionLabel>Positioning</SectionLabel>
+  <h2 className="text-xl font-semibold mb-4">
+    Why not just use one model?
+  </h2>
+  
+<p className="text-white/60 leading-relaxed mb-6 max-w-2xl">
+  A single model can give you a fast answer — but it gives you no built-in
+  verification layer. You don’t know if it’s correct, partially correct, or
+  confidently wrong. Zorelan compares multiple model outputs and returns a
+  structured confidence signal you can use in your product.
+</p>
+  
+
+  <div className="grid gap-4 md:grid-cols-3">
+    <FeatureCard title="Single model">
+      One answer. No cross-check. No visibility into agreement or disagreement.
+    </FeatureCard>
+
+    <FeatureCard title="Zorelan">
+      Multiple model outputs compared and verified using a semantic agreement
+      engine.
+    </FeatureCard>
+
+    <FeatureCard title="Result">
+      Trust-aware outputs with scores, consensus signals, and structured
+      disagreement analysis.
+    </FeatureCard>
+  </div>
+</section>
+
       <Divider />
 
       {/* How it works */}
