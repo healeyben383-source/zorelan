@@ -9,28 +9,37 @@ export const metadata: Metadata = {
     "Zorelan is an AI verification engine and consensus layer for production systems. Compare multiple model responses and return a verified answer with trust scoring and disagreement analysis.",
 };
 
+const sdkInstallExample = `npm install @zorelan/sdk`;
+
+const sdkQuickstartExample = `import { Zorelan } from "@zorelan/sdk";
+
+const zorelan = new Zorelan(process.env.ZORELAN_API_KEY!);
+
+const result = await zorelan.verify(
+  "Should I use microservices or a monolith for my startup?"
+);
+
+console.log(result.verified_answer);
+console.log(result.trust_score.score);
+console.log(result.consensus.level);`;
+
 const curlExample = `curl -X POST https://zorelan.com/v1/decision \\
   -H "Authorization: Bearer YOUR_API_KEY" \\
-  -H "Content-Type": "application/json" \\
+  -H "Content-Type: application/json" \\
   -d '{"prompt": "Should I use microservices or a monolith for my startup?"}'`;
 
-const nodeExample = `const response = await fetch("https://zorelan.com/v1/decision", {
-  method: "POST",
-  headers: {
-    "Authorization": \`Bearer \${process.env.ZORELAN_API_KEY}\`,
-    "Content-Type": "application/json",
-  },
-  body: JSON.stringify({
-    prompt: "Should I use microservices or a monolith for my startup?",
-  }),
-});
+const nodeExample = `import { Zorelan } from "@zorelan/sdk";
 
-const data = await response.json();
+const zorelan = new Zorelan(process.env.ZORELAN_API_KEY!);
 
-console.log(data.verified_answer);    // synthesized answer
-console.log(data.trust_score.score);  // 0–100
-console.log(data.consensus.level);    // "high" | "medium" | "low"
-console.log(data.cached);             // true if result was cached`;
+const result = await zorelan.verify(
+  "Should I use microservices or a monolith for my startup?"
+);
+
+console.log(result.verified_answer);    // synthesized answer
+console.log(result.trust_score.score);  // 0–100
+console.log(result.consensus.level);    // "high" | "medium" | "low"
+console.log(result.cached);             // true if result was cached`;
 
 const pythonExample = `import requests
 import os
@@ -112,18 +121,11 @@ const cacheBypassExample = `{
   "cache_bypass": true
 }`;
 
-const integrationExample = `const zorelan = await fetch("https://zorelan.com/v1/decision", {
-  method: "POST",
-  headers: {
-    Authorization: \`Bearer \${process.env.ZORELAN_API_KEY}\`,
-    "Content-Type": "application/json",
-  },
-  body: JSON.stringify({
-    prompt: userInput,
-  }),
-});
+const integrationExample = `import { Zorelan } from "@zorelan/sdk";
 
-const result = await zorelan.json();
+const zorelan = new Zorelan(process.env.ZORELAN_API_KEY!);
+
+const result = await zorelan.verify(userInput);
 
 // Gate behaviour based on trust score
 if (result.trust_score.score >= 75) {
@@ -497,9 +499,25 @@ Verified answer + trust score`}
         </div>
       </section>
 
-      {/* Quick outcome block */}
+      {/* SDK Quickstart */}
       <section className="mb-12">
         <SectionLabel>Quickstart</SectionLabel>
+        <h2 className="text-xl font-semibold mb-4">Install the SDK</h2>
+        <p className="text-white/60 leading-relaxed mb-6">
+          Zorelan verifies AI responses by comparing multiple models and
+          returning confidence signals you can use in your product. The fastest
+          way to integrate is through the TypeScript SDK.
+        </p>
+
+        <div className="space-y-4">
+          <CodeBlock label="bash" code={sdkInstallExample} />
+          <CodeBlock label="node.js / typescript" code={sdkQuickstartExample} />
+        </div>
+      </section>
+
+      {/* Quick outcome block */}
+      <section className="mb-12">
+        <SectionLabel>Outputs</SectionLabel>
         <h2 className="text-xl font-semibold mb-4">What you get back</h2>
         <div className="grid gap-4 md:grid-cols-3">
           <FeatureCard title="Verified answer">
@@ -581,36 +599,37 @@ Verified answer + trust score`}
       </section>
 
       {/* Why not just use one model */}
-<section className="mb-12">
-  <SectionLabel>Positioning</SectionLabel>
-  <h2 className="text-xl font-semibold mb-4">
-    Why not just use one model?
-  </h2>
-  
-<p className="text-white/60 leading-relaxed mb-6 max-w-2xl">
-  A single model can give you a fast answer — but it gives you no built-in
-  verification layer. You don’t know if it’s correct, partially correct, or
-  confidently wrong. Zorelan compares multiple model outputs and returns a
-  structured confidence signal you can use in your product.
-</p>
-  
+      <section className="mb-12">
+        <SectionLabel>Positioning</SectionLabel>
+        <h2 className="text-xl font-semibold mb-4">
+          Why not just use one model?
+        </h2>
 
-  <div className="grid gap-4 md:grid-cols-3">
-    <FeatureCard title="Single model">
-      One answer. No cross-check. No visibility into agreement or disagreement.
-    </FeatureCard>
+        <p className="text-white/60 leading-relaxed mb-6 max-w-2xl">
+          A single model can give you a fast answer — but it gives you no
+          built-in verification layer. You don’t know if it’s correct,
+          partially correct, or confidently wrong. Zorelan compares multiple
+          model outputs and returns a structured confidence signal you can use
+          in your product.
+        </p>
 
-    <FeatureCard title="Zorelan">
-      Multiple model outputs compared and verified using a semantic agreement
-      engine.
-    </FeatureCard>
+        <div className="grid gap-4 md:grid-cols-3">
+          <FeatureCard title="Single model">
+            One answer. No cross-check. No visibility into agreement or
+            disagreement.
+          </FeatureCard>
 
-    <FeatureCard title="Result">
-      Trust-aware outputs with scores, consensus signals, and structured
-      disagreement analysis.
-    </FeatureCard>
-  </div>
-</section>
+          <FeatureCard title="Zorelan">
+            Multiple model outputs compared and verified using a semantic
+            agreement engine.
+          </FeatureCard>
+
+          <FeatureCard title="Result">
+            Trust-aware outputs with scores, consensus signals, and structured
+            disagreement analysis.
+          </FeatureCard>
+        </div>
+      </section>
 
       <Divider />
 
@@ -724,12 +743,12 @@ Content-Type: application/json`}
         </div>
       </section>
 
-      {/* Quickstart */}
+      {/* Quickstart examples */}
       <section className="mb-12">
         <h2 className="text-xl font-semibold mb-6">Quickstart examples</h2>
         <div className="space-y-4">
           <CodeBlock label="curl" code={curlExample} />
-          <CodeBlock label="node.js / typescript" code={nodeExample} />
+          <CodeBlock label="node.js / typescript SDK" code={nodeExample} />
           <CodeBlock label="python" code={pythonExample} />
         </div>
       </section>
