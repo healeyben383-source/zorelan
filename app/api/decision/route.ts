@@ -45,6 +45,16 @@ const QUALITY_JUDGE_MODEL = "claude-haiku-4-5-20251001";
 
 const ENABLE_API_RATE_LIMIT = process.env.ENABLE_API_RATE_LIMIT === "true";
 
+// ── Confidence weighting constants ────────────────────────────────────────────
+// Threshold is 20 rather than 10 — early over-learning is a bigger risk than
+// slow learning for a system where miscalibrated weights affect verdict quality.
+// DEFAULT_QUALITY of 7.0 is a starting calibration point, not a fixed truth —
+// revisit after a real prompt-set review once data has accumulated.
+const MINIMUM_SAMPLES_FOR_WEIGHTING = 20;
+const DEFAULT_WEIGHT = 1.0;
+const DEFAULT_QUALITY = 7.0;
+// ─────────────────────────────────────────────────────────────────────────────
+
 const apiKeyRateLimit = new Ratelimit({
   redis,
   limiter: Ratelimit.fixedWindow(10, "10 s"),
@@ -547,6 +557,38 @@ function calculateTrustScore(input: {
   return { score: finalScore, label: getTrustLabel(finalScore), reason };
 }
 
+// ── Confidence weighting ──────────────────────────────────────────────────────
+
+/**
+ * Derives a confidence weight for a provider from its raw Redis score record.
+ *
+ * Raw weight = avgQuality / DEFAULT_QUALITY, normalised around 7.0.
+ * Final weight is clamped to keep the signal light:
+ *   0.9 ≤ weight ≤ 1.1
+ *
+ * Returns DEFAULT_WEIGHT (1.0) when:
+ *   - no score record exists
+ *   - totalRuns < MINIMUM_SAMPLES_FOR_WEIGHTING (avoids miscalibrated early weights)
+ *   - qualityRatings is 0 (no quality data yet)
+ */
+function getConfidenceWeight(raw: unknown): number {
+  if (!raw || typeof raw !== "object") return DEFAULT_WEIGHT;
+  const r = raw as Record<string, unknown>;
+  const totalRuns = typeof r.totalRuns === "number" ? r.totalRuns : 0;
+  if (totalRuns < MINIMUM_SAMPLES_FOR_WEIGHTING) return DEFAULT_WEIGHT;
+  const totalQuality =
+    typeof r.totalQualityScore === "number" ? r.totalQualityScore : 0;
+  const qualityRatings =
+    typeof r.qualityRatings === "number" ? r.qualityRatings : 0;
+  if (qualityRatings === 0) return DEFAULT_WEIGHT;
+  const avgQuality = totalQuality / qualityRatings;
+  // Clamped to ±10% of baseline — keeps this as a nudge, not a steering wheel.
+  // A provider scoring 9.3 avg gets weight 1.10, not 1.33.
+  return clamp(avgQuality / DEFAULT_QUALITY, 0.9, 1.1);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+
 async function incrementAnalytic(key: string): Promise<void> {
   try {
     await redis.incr(`zorelan:analytics:${key}`);
@@ -702,6 +744,8 @@ async function buildDecisionVerdict(params: {
   prompt: string;
   answerA: string;
   answerB: string;
+  weightA: number;
+  weightB: number;
   agreementLevel: AgreementLevel;
   likelyConflict: boolean;
   verifiedAnswer: string;
@@ -720,7 +764,7 @@ async function buildDecisionVerdict(params: {
       {
         role: "system",
         content:
-          'You are a decision-verification engine. Return JSON only with this exact shape: {"verdict":"string","keyDisagreement":"string","recommendedAction":"string","finalConclusionAligned":boolean,"disagreementType":"none|additive_nuance|explanation_variation|conditional_alignment|material_conflict"}. Judge alignment from the ORIGINAL model responses first. The verified synthesis can help summarize the situation, but it is not evidence that the original answers aligned. finalConclusionAligned should be true only when both responses support the same main conclusion. Use additive_nuance when one response mostly adds correct detail without changing the core conclusion. Use explanation_variation when both responses support the same conclusion but differ in framing, emphasis, or supporting reasoning. Use conditional_alignment when a usable combined takeaway exists only by adding conditions, context, or tradeoffs, but the original responses do not cleanly support the same main conclusion. Use material_conflict only when the main recommendation, conclusion, or decision materially differs.',
+          'You are a decision-verification engine. Return JSON only with this exact shape: {"verdict":"string","keyDisagreement":"string","recommendedAction":"string","finalConclusionAligned":boolean,"disagreementType":"none|additive_nuance|explanation_variation|conditional_alignment|material_conflict"}. Judge alignment from the ORIGINAL model responses first. The verified synthesis can help summarize the situation, but it is not evidence that the original answers aligned. finalConclusionAligned should be true only when both responses support the same main conclusion. Use additive_nuance when one response mostly adds correct detail without changing the core conclusion. Use explanation_variation when both responses support the same conclusion but differ in framing, emphasis, or supporting reasoning. Use conditional_alignment when a usable combined takeaway exists only by adding conditions, context, or tradeoffs, but the original responses do not cleanly support the same main conclusion. Use material_conflict only when the main recommendation, conclusion, or decision materially differs. Each response carries a confidence score (1.0 = baseline, >1.0 = historically stronger on this task type). Treat this as a light secondary signal, not as a substitute for evaluating the actual content of the responses. Do not let it override a clearly stronger current response.',
       },
       {
         role: "user",
@@ -730,9 +774,9 @@ async function buildDecisionVerdict(params: {
           `Agreement level: ${params.agreementLevel}`,
           `Likely conflict: ${params.likelyConflict ? "yes" : "no"}`,
           "",
-          `Response A: ${params.answerA}`,
+          `Response A (confidence: ${params.weightA.toFixed(2)}): ${params.answerA}`,
           "",
-          `Response B: ${params.answerB}`,
+          `Response B (confidence: ${params.weightB.toFixed(2)}): ${params.answerB}`,
           "",
           `Verified synthesis: ${params.verifiedAnswer}`,
           "",
@@ -944,6 +988,17 @@ export async function POST(req: NextRequest) {
     }
     // ─────────────────────────────────────────────────────────────────────
 
+    // ── Confidence weight fetch (initial pair) ────────────────────────────
+    // Weights are fetched here for the initially selected pair. If arbitration
+    // later changes the active pair, weights are re-fetched below to match.
+    const [rawScoreA, rawScoreB] = await Promise.all([
+      redis.get(`zorelan:score:v2:${taskType}:${providerA}`),
+      redis.get(`zorelan:score:v2:${taskType}:${providerB}`),
+    ]);
+    let weightA = getConfidenceWeight(rawScoreA);
+    let weightB = getConfidenceWeight(rawScoreB);
+    // ─────────────────────────────────────────────────────────────────────
+
     const providerMap: Record<ProviderName, ProviderRunner> = {
       openai: runOpenAI,
       anthropic: runAnthropic,
@@ -1104,6 +1159,19 @@ export async function POST(req: NextRequest) {
           activePair = prefersPairWithA ? pairWithAThird : pairWithBThird;
         }
       }
+
+      // ── Re-fetch confidence weights if arbitration changed the active pair ──
+      // The winning pair may include the third provider, so weights from the
+      // initial fetch may no longer apply. Always re-fetch when arbitration ran.
+      if (arbitrationUsed) {
+        const [rawScoreActivePairA, rawScoreActivePairB] = await Promise.all([
+          redis.get(`zorelan:score:v2:${taskType}:${activePair.providerA}`),
+          redis.get(`zorelan:score:v2:${taskType}:${activePair.providerB}`),
+        ]);
+        weightA = getConfidenceWeight(rawScoreActivePairA);
+        weightB = getConfidenceWeight(rawScoreActivePairB);
+      }
+      // ───────────────────────────────────────────────────────────────────────
     }
 
     if (arbitrationPairStrengths !== null && !arbitrationUsed) {
@@ -1127,6 +1195,9 @@ export async function POST(req: NextRequest) {
       pairStrengths: arbitrationPairStrengths,
     });
 
+    // ── Synthesis (confidence-weighted) ──────────────────────────────────────
+    // Responses are labelled with their historical confidence scores so the
+    // synthesis model receives historical confidence scores as a light secondary signal.
     const synthesisCompletion = await openai.chat.completions.create({
       model: "gpt-4o-mini",
       max_tokens: 400,
@@ -1137,30 +1208,38 @@ export async function POST(req: NextRequest) {
           content:
             "You are a synthesis engine. Combine the two AI responses into one superior final answer. " +
             "Be concise and direct. Preserve important caveats and tradeoffs. " +
-            "Do not mention that you are combining two answers.",
+            "Do not mention that you are combining two answers. " +
+            "Each response carries a confidence score (1.0 = baseline, >1.0 = historically stronger on this task type). " +
+            "When responses differ, consider this as a secondary weighting signal, but prioritise the quality, accuracy, and relevance of the current responses.",
         },
         {
           role: "user",
           content: [
             `Question: ${prompt}`,
             "",
-            `Response A (${activePair.providerA}): ${activePair.answerA}`,
+            `Response A (${activePair.providerA}, confidence: ${weightA.toFixed(2)}): ${activePair.answerA}`,
             "",
-            `Response B (${activePair.providerB}): ${activePair.answerB}`,
+            `Response B (${activePair.providerB}, confidence: ${weightB.toFixed(2)}): ${activePair.answerB}`,
           ].join("\n"),
         },
       ],
     });
+    // ─────────────────────────────────────────────────────────────────────────
 
     const verifiedAnswer = stripCodeFences(
       synthesisCompletion.choices[0]?.message?.content ?? ""
     );
 
+    // ── Verdict + quality scoring ─────────────────────────────────────────────
+    // buildDecisionVerdict depends on verifiedAnswer, so it runs after synthesis.
+    // scoreAnswerQuality is independent and runs in parallel with verdict generation.
     const [verdictPayloadRaw, qualityScores] = await Promise.all([
       buildDecisionVerdict({
         prompt,
         answerA: activePair.answerA,
         answerB: activePair.answerB,
+        weightA,
+        weightB,
         agreementLevel: activePair.semantic.agreementLevel,
         likelyConflict: activePair.semantic.likelyConflict,
         verifiedAnswer,
@@ -1172,6 +1251,7 @@ export async function POST(req: NextRequest) {
         providerB: activePair.providerB,
       }),
     ]);
+    // ─────────────────────────────────────────────────────────────────────────
 
     const verdictPayload = normalizeVerdictWithSemantic({
       semanticAgreementLevel: activePair.semantic.agreementLevel,
