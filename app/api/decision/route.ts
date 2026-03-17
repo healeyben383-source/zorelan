@@ -506,6 +506,8 @@ function calculateTrustScore(input: {
   const qualityNormalized = input.averageQuality * 10;
   let score = agreementBase * 0.65 + qualityNormalized * 0.35;
 
+  // additive_nuance is not a real disagreement — one provider added a correct
+  // detail the other didn't. No penalty applied.
   if (input.disagreementType === "explanation_variation") score -= 4;
   else if (input.disagreementType === "conditional_alignment") score -= 12;
   else if (input.disagreementType === "material_conflict") score -= 20;
@@ -513,6 +515,27 @@ function calculateTrustScore(input: {
   if (!input.finalConclusionAligned) score -= 10;
   if (input.riskLevel === "moderate") score -= 5;
   else if (input.riskLevel === "high") score -= 15;
+
+  // ── Hard anchors ──────────────────────────────────────────────────────────
+  // Floors and ceilings per agreement level so the score reflects real-world
+  // expectations. High agreement on absolute questions must land in the 90s.
+  // Medium agreement must never appear as "high" trust. Low agreement is capped
+  // well below moderate so the label distinction is meaningful.
+  if (input.agreementLevel === "high") {
+    if (
+      input.disagreementType === "none" ||
+      input.disagreementType === "additive_nuance"
+    ) {
+      score = Math.max(score, 92);
+    } else if (input.disagreementType === "explanation_variation") {
+      score = Math.max(score, 85);
+    }
+  } else if (input.agreementLevel === "medium") {
+    score = Math.min(score, 74);
+  } else if (input.agreementLevel === "low") {
+    score = Math.min(score, 54);
+  }
+  // ─────────────────────────────────────────────────────────────────────────
 
   const finalScore = Math.round(clamp(score, 0, 100));
 
