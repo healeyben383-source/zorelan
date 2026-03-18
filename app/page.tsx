@@ -341,7 +341,7 @@ function CopyIconButton({
       onClick={onClick}
       aria-label={label}
       title={copied ? "Copied" : label}
-      className="inline-flex h-11 w-11 md:h-auto md:w-auto items-center justify-center rounded-xl border border-black/10 dark:border-white/10 px-2.5 py-2 text-xs opacity-75 hover:opacity-100 active:scale-[0.98] transition-all"
+      className="inline-flex items-center justify-center rounded-lg border border-black/10 dark:border-white/10 px-2.5 py-2 text-xs opacity-70 hover:opacity-100 transition-opacity"
     >
       {copied ? (
         <svg
@@ -378,12 +378,12 @@ function CopyIconButton({
 }
 
 const selectedStyle = {
-  border: "1px solid rgba(255,255,255,0.55)",
-  background: "rgba(255,255,255,0.12)",
+  border: "1px solid rgba(255,255,255,0.5)",
+  background: "rgba(255,255,255,0.14)",
 };
 
 const unselectedStyle = {
-  border: "1px solid rgba(255,255,255,0.12)",
+  border: "1px solid rgba(255,255,255,0.1)",
 };
 
 function ProviderAnswerCard({
@@ -428,23 +428,23 @@ function LoadingProviderCard() {
 }
 
 function PrimaryActionButton({
-  children,
   onClick,
   disabled,
+  children,
 }: {
-  children: React.ReactNode;
   onClick: () => void;
   disabled: boolean;
+  children: React.ReactNode;
 }) {
   return (
     <button
       onClick={onClick}
       disabled={disabled}
       className={cx(
-        "w-full rounded-2xl px-4 py-3.5 md:py-3 text-base md:text-sm font-medium transition-all active:scale-[0.99]",
+        "w-full rounded-2xl px-4 py-3.5 text-base md:text-sm font-medium transition-all active:scale-[0.985]",
         disabled
-          ? "bg-black/20 text-black/50 dark:bg-white/20 dark:text-white/50"
-          : "bg-white text-black shadow-sm hover:shadow-md dark:bg-white dark:text-black"
+          ? "bg-white/15 text-white/45 shadow-none"
+          : "bg-white text-black shadow-sm hover:shadow-md"
       )}
     >
       {children}
@@ -453,46 +453,23 @@ function PrimaryActionButton({
 }
 
 function SecondaryActionButton({
-  children,
   onClick,
   disabled,
+  children,
 }: {
-  children: React.ReactNode;
   onClick: () => void;
   disabled: boolean;
+  children: React.ReactNode;
 }) {
   return (
     <button
       onClick={onClick}
       disabled={disabled}
       className={cx(
-        "w-full rounded-2xl px-4 py-3.5 md:py-3 text-base md:text-sm font-medium transition-all active:scale-[0.99]",
+        "w-full rounded-2xl px-4 py-3 text-base md:text-sm font-medium transition-all active:scale-[0.985]",
         disabled
-          ? "bg-black/20 text-black/50 dark:bg-white/20 dark:text-white/50"
-          : "bg-black text-white hover:bg-black/90 dark:bg-white dark:text-black dark:hover:bg-white/90"
-      )}
-    >
-      {children}
-    </button>
-  );
-}
-
-function ToggleButton({
-  selected,
-  children,
-  onClick,
-}: {
-  selected: boolean;
-  children: React.ReactNode;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      style={selected ? selectedStyle : unselectedStyle}
-      className={cx(
-        "rounded-xl px-3 py-3 md:py-2 text-base md:text-sm transition-all active:scale-[0.98]",
-        selected ? "shadow-sm" : "opacity-90 hover:opacity-100"
+          ? "bg-black/20 text-black/50 dark:bg-white/10 dark:text-white/45"
+          : "bg-black text-white dark:bg-white dark:text-black shadow-sm hover:shadow-md"
       )}
     >
       {children}
@@ -985,14 +962,16 @@ export default function Home() {
       </div>
 
       <div className="mx-auto w-full max-w-5xl space-y-6">
-        <header className="space-y-4 text-center">
+        <header className="space-y-3 text-center">
           <div className="flex items-center justify-between">
             <div className="w-16" />
-            <h1 className="text-4xl font-semibold tracking-tight">Zorelan</h1>
+            <h1 className="text-4xl md:text-5xl font-semibold tracking-tight">
+              Zorelan
+            </h1>
             <div className="flex items-center gap-2 justify-end">
               <button
                 onClick={() => setHistoryOpen(true)}
-                className="flex h-11 md:h-auto items-center gap-1.5 rounded-xl border border-black/10 dark:border-white/10 px-3 py-1.5 text-sm md:text-xs opacity-70 hover:opacity-100 active:scale-[0.98] transition-all"
+                className="flex items-center gap-1.5 rounded-xl border border-black/10 dark:border-white/10 px-3 py-1.5 text-xs opacity-70 hover:opacity-100 transition-opacity"
               >
                 <svg
                   xmlns="http://www.w3.org/2000/svg"
@@ -1012,7 +991,7 @@ export default function Home() {
               </button>
               <a
                 href="/api-docs"
-                className="flex h-11 md:h-auto items-center rounded-xl border border-black/10 dark:border-white/10 px-3 py-1.5 text-sm md:text-xs opacity-70 hover:opacity-100 active:scale-[0.98] transition-all"
+                className="flex items-center rounded-xl border border-black/10 dark:border-white/10 px-3 py-1.5 text-xs opacity-70 hover:opacity-100 transition-opacity"
               >
                 API
               </a>
@@ -1020,14 +999,16 @@ export default function Home() {
           </div>
 
           <div className="space-y-2">
-            <p className="text-sm opacity-70">Verify AI before you trust it.</p>
-            <p className="mx-auto max-w-2xl text-sm opacity-50 leading-relaxed">
-              Zorelan compares multiple models and returns a verified answer
-              with calibrated trust — not just agreement.
+            <p className="text-base md:text-sm opacity-80">
+              Verify AI before you trust it.
+            </p>
+            <p className="mx-auto max-w-2xl text-base md:text-sm opacity-55 leading-relaxed">
+              Zorelan compares multiple models and returns a verified answer with
+              calibrated trust — not just agreement.
             </p>
           </div>
 
-          <div className="flex flex-wrap items-center justify-center gap-3 text-xs opacity-45">
+          <div className="flex flex-wrap items-center justify-center gap-3 text-sm md:text-xs opacity-45">
             <span>Consensus</span>
             <span>•</span>
             <span>Risk</span>
@@ -1039,10 +1020,10 @@ export default function Home() {
             <button
               onClick={() => setAppMode("simple")}
               className={cx(
-                "rounded-lg px-5 py-2.5 md:px-4 md:py-1.5 text-base md:text-sm font-medium transition-all active:scale-[0.98]",
+                "rounded-lg px-5 py-2 text-base md:text-sm font-medium transition-all",
                 appMode === "simple"
-                  ? "bg-white text-black shadow-sm dark:bg-white dark:text-black"
-                  : "opacity-60 hover:opacity-90"
+                  ? "bg-white text-black shadow-sm"
+                  : "opacity-55 hover:opacity-85"
               )}
             >
               Simple
@@ -1050,10 +1031,10 @@ export default function Home() {
             <button
               onClick={() => setAppMode("pro")}
               className={cx(
-                "rounded-lg px-5 py-2.5 md:px-4 md:py-1.5 text-base md:text-sm font-medium transition-all active:scale-[0.98]",
+                "rounded-lg px-5 py-2 text-base md:text-sm font-medium transition-all",
                 appMode === "pro"
-                  ? "bg-white text-black shadow-sm dark:bg-white dark:text-black"
-                  : "opacity-60 hover:opacity-90"
+                  ? "bg-white text-black shadow-sm"
+                  : "opacity-55 hover:opacity-85"
               )}
             >
               Pro
@@ -1068,15 +1049,16 @@ export default function Home() {
                 <div className="text-lg md:text-base font-medium opacity-90">
                   I am asking about
                 </div>
-                <div className="grid grid-cols-3 gap-3 md:gap-2">
+                <div className="grid grid-cols-3 gap-3">
                   {(Object.keys(CONTEXT_LABEL) as Context[]).map((c) => (
-                    <ToggleButton
+                    <button
                       key={c}
-                      selected={c === context}
                       onClick={() => setContext(c)}
+                      style={c === context ? selectedStyle : unselectedStyle}
+                      className="rounded-xl px-3 py-3 text-base md:text-sm"
                     >
                       {CONTEXT_LABEL[c]}
-                    </ToggleButton>
+                    </button>
                   ))}
                 </div>
               </div>
@@ -1085,15 +1067,16 @@ export default function Home() {
                 <div className="text-lg md:text-base font-medium opacity-90">
                   I need help with
                 </div>
-                <div className="grid grid-cols-3 gap-3 md:gap-2">
+                <div className="grid grid-cols-3 gap-3">
                   {(Object.keys(MODE_LABEL) as Mode[]).map((m) => (
-                    <ToggleButton
+                    <button
                       key={m}
-                      selected={m === mode}
                       onClick={() => setMode(m)}
+                      style={m === mode ? selectedStyle : unselectedStyle}
+                      className="rounded-xl px-3 py-3 text-base md:text-sm"
                     >
                       {MODE_LABEL[m]}
-                    </ToggleButton>
+                    </button>
                   ))}
                 </div>
               </div>
@@ -1245,12 +1228,12 @@ export default function Home() {
               </p>
             </div>
 
-            <div className="grid grid-cols-2 gap-3 md:flex md:flex-wrap md:items-center md:gap-2">
+            <div className="grid grid-cols-2 gap-2 md:flex md:flex-wrap md:items-center md:gap-2">
               {AI_BUTTONS.map((a) => (
                 <button
                   key={a.name}
                   onClick={() => openAI(a.name)}
-                  className="rounded-xl border border-black/10 px-3 py-3 md:py-2 text-base md:text-sm opacity-85 hover:opacity-100 active:scale-[0.98] dark:border-white/10 transition-all"
+                  className="rounded-xl border border-black/10 px-3 py-2.5 text-base md:text-sm opacity-85 hover:opacity-100 dark:border-white/10 transition-all"
                 >
                   {a.name === "ChatGPT" ? "ChatGPT (copies)" : a.name}
                 </button>
@@ -1272,7 +1255,7 @@ export default function Home() {
             </PrimaryActionButton>
 
             {!running && !answers && (
-              <p className="text-xs text-center opacity-60 mt-1">
+              <p className="text-sm md:text-xs text-center opacity-60 mt-1">
                 This usually takes 15–20 seconds
               </p>
             )}
@@ -1600,12 +1583,12 @@ export default function Home() {
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-3 md:flex md:flex-wrap md:items-center md:gap-2">
+            <div className="grid grid-cols-2 gap-2 md:flex md:flex-wrap md:items-center md:gap-2">
               {AI_BUTTONS.map((a) => (
                 <button
                   key={a.name}
                   onClick={() => openAI(a.name, synthesis)}
-                  className="rounded-xl border border-black/10 px-3 py-3 md:py-2 text-base md:text-sm opacity-85 hover:opacity-100 active:scale-[0.98] dark:border-white/10 transition-all"
+                  className="rounded-xl border border-black/10 px-3 py-2.5 text-base md:text-sm opacity-85 hover:opacity-100 dark:border-white/10 transition-all"
                 >
                   {a.name === "ChatGPT" ? "ChatGPT (copies)" : a.name}
                 </button>
