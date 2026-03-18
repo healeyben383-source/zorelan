@@ -20,6 +20,10 @@ import {
   updateProviderScore,
   updateProviderQualityScore,
 } from "@/lib/routing/providerScores";
+import {
+  classifyPrompt,
+  type PromptClassification,
+} from "@/lib/routing/promptClassification";
 
 export const runtime = "nodejs";
 
@@ -389,6 +393,13 @@ function normalizeVerdictWithSemantic(input: {
     ) {
       normalized.disagreementType = "explanation_variation";
     }
+    // When the semantic judge confirms high agreement, explanation_variation
+    // is too penalising — the judge has already determined the responses
+    // are strongly aligned. Downgrade to additive_nuance so the trust score
+    // reflects actual agreement rather than surface-level framing differences.
+    if (normalized.disagreementType === "explanation_variation") {
+      normalized.disagreementType = "additive_nuance";
+    }
   }
 
   if (
@@ -453,58 +464,12 @@ function getConsensusLevelFromAligned(
  * there is no genuine tradeoff. Only fires on explicit tradeoff structure,
  * speculative/investment language, or startup choice signals.
  */
-function isInherentlyUncertainPrompt(prompt: string): boolean {
-  // " or " alone is too broad — "is water made of hydrogen or oxygen?" would
-  // fire. Only treat "or" as a tradeoff signal when paired with "should i",
-  // which indicates a genuine choice question rather than a factual one.
-  const lower = prompt.toLowerCase();
-  const shouldIWithOr = lower.includes("should i") && lower.includes(" or ");
-  const tradeoffTerms = [" vs ", " versus ", "better than", "which is better", "which should i", "or should i", "should i choose"];
-  const speculativeTerms = ["invest", "investment", "long-term", "worth it", "prediction", "outlook", "will it", "forecast"];
-  const startupTerms = ["bootstrap", "venture capital", "raise capital", " vc "];
-
-  const allTerms = [...tradeoffTerms, ...speculativeTerms, ...startupTerms];
-  return shouldIWithOr || allTerms.some((term) => lower.includes(term));
-}
-
-/**
- * Detects high-stakes speculative prompts where risk should be forced to
- * "high" regardless of provider agreement. Requires BOTH:
- *   - a decision/opinion framing signal ("should i", "good idea", "worth it",
- *     "is it safe", "is it wise")
- *   - a high-stakes domain signal (investing, health, legal, macro strategy)
- *
- * Requiring both signals prevents obvious best-practice prompts like
- * "Should I use HTTPS?" from being caught — those have no high-stakes domain.
- */
-function isHighStakesSpeculative(prompt: string): boolean {
-  const lower = prompt.toLowerCase();
-
-  const decisionFraming = [
-    "should i", "good idea", "worth it", "is it safe", "is it wise",
-    "a good investment", "is it worth", "is now a good time",
-    "good long-term", "a good long",
-  ];
-
-  // "startup" intentionally excluded — bootstrap/VC is a strategic tradeoff,
-  // not a financial speculation. Startup context alone is not high-stakes.
-  const highStakesDomains = [
-    "invest", "investment", "stocks", "crypto", "bitcoin", "cryptocurrency",
-    "market crash", "recession", "financial ruin", "health", "diagnosis",
-    "medical", "legal", "lawsuit", "sue", "quit my job", "leave my job", "macro",
-  ];
-
-  const hasFraming = decisionFraming.some((t) => lower.includes(t));
-  const hasDomain = highStakesDomains.some((t) => lower.includes(t));
-
-  return hasFraming && hasDomain;
-}
 
 function getRiskLevel(input: {
   agreementLevel: AgreementLevel;
   disagreementType: DisagreementType;
   finalConclusionAligned: boolean;
-  prompt: string;
+  promptClassification: PromptClassification;
 }): RiskLevel {
   if (input.disagreementType === "material_conflict") return "high";
   if (input.disagreementType === "conditional_alignment") return "moderate";
@@ -513,14 +478,11 @@ function getRiskLevel(input: {
   if (!input.finalConclusionAligned) return "moderate";
   if (input.agreementLevel === "low") return "moderate";
 
-  // High-stakes speculative prompts — investing, health, legal, macro — must
-  // never be stamped low-risk purely because providers agreed. Agreement on
-  // an uncertain domain is not the same as factual certainty.
-  if (isHighStakesSpeculative(input.prompt)) return "high";
-
-  // Tradeoff and context-dependent prompts floor at moderate even when
-  // providers agree, because the correct answer depends on circumstances.
-  if (isInherentlyUncertainPrompt(input.prompt)) return "moderate";
+  // Use the structured prompt classification to floor risk appropriately.
+  // This replaces the old one-off isHighStakesSpeculative and
+  // isInherentlyUncertainPrompt detectors with a single explainable classifier.
+  if (input.promptClassification.risk === "high") return "high";
+  if (input.promptClassification.risk === "moderate") return "moderate";
 
   return "low";
 }
@@ -869,7 +831,7 @@ async function buildDecisionVerdict(params: {
       {
         role: "system",
         content:
-          'You are a decision-verification engine. Return JSON only with this exact shape: {"verdict":"string","keyDisagreement":"string","recommendedAction":"string","finalConclusionAligned":boolean,"disagreementType":"none|additive_nuance|explanation_variation|conditional_alignment|material_conflict"}. Judge alignment from the ORIGINAL model responses first. The verified synthesis can help summarize the situation, but it is not evidence that the original answers aligned. finalConclusionAligned should be true only when both responses support the same main conclusion. Use none when both responses reach the same conclusion and any additional detail is purely reinforcing — extra facts, examples, or context that strengthen rather than qualify the conclusion. This includes cases where one response provides more scientific, technical, or contextual detail than the other — detail difference alone is never grounds for explanation_variation or additive_nuance. Use additive_nuance only when one response introduces conditions, tradeoffs, or qualifications that are absent from the other and that affect how or when the conclusion should be applied. Use explanation_variation only when both responses support the same conclusion but frame it in meaningfully different ways that could lead a reader to apply it differently. Use explanation_variation when both responses support the same conclusion but differ in framing, emphasis, or supporting reasoning. Use conditional_alignment when both responses support the same primary recommendation but one adds meaningful caveats, conditions, or tradeoffs that qualify when or how to apply it — this is NOT material_conflict. Use material_conflict ONLY when the two responses give genuinely opposing primary recommendations where following one would contradict the other — for example, one says "always use X" and the other says "use Y instead". A softened or qualified version of the same recommendation is never material_conflict. If one response says "use X" and the other says "use X in most cases, but Y may work under specific conditions", that is conditional_alignment, not material_conflict. If both responses recommend the same main action, material_conflict is usually incorrect. Each response carries a confidence score (1.0 = baseline, >1.0 = historically stronger on this task type). Treat this as a light secondary signal, not as a substitute for evaluating the actual content of the responses. Do not let it override a clearly stronger current response.',
+          'You are a decision-verification engine. Return JSON only with this exact shape: {"verdict":"string","keyDisagreement":"string","recommendedAction":"string","finalConclusionAligned":boolean,"disagreementType":"none|additive_nuance|explanation_variation|conditional_alignment|material_conflict"}. Judge alignment from the ORIGINAL model responses first. The verified synthesis can help summarize the situation, but it is not evidence that the original answers aligned. finalConclusionAligned should be true only when both responses support the same main conclusion. Use none when both responses reach the same conclusion and any additional detail is purely reinforcing — extra facts, examples, or context that strengthen rather than qualify the conclusion. This includes cases where one response provides more scientific, technical, or contextual detail than the other — detail difference alone is never grounds for explanation_variation or additive_nuance. When both responses describe the same core physical, biological, or factual outcome but differ in emphasis — for example, one focusing on rapid harm and another on a brief survivability window — treat these as none or additive_nuance, not as disagreement. Descriptions of different time horizons or severity framings within the same factual event are complementary, not contradictory. Use additive_nuance only when one response introduces conditions, tradeoffs, or qualifications that are absent from the other and that affect how or when the conclusion should be applied. Use explanation_variation only when both responses support the same conclusion but frame it in meaningfully different ways that could lead a reader to apply it differently. Use explanation_variation when both responses support the same conclusion but differ in framing, emphasis, or supporting reasoning. Use conditional_alignment when both responses support the same primary recommendation but one adds meaningful caveats, conditions, or tradeoffs that qualify when or how to apply it — this is NOT material_conflict. Use material_conflict ONLY when the two responses give genuinely opposing primary recommendations where following one would contradict the other — for example, one says "always use X" and the other says "use Y instead". A softened or qualified version of the same recommendation is never material_conflict. If one response says "use X" and the other says "use X in most cases, but Y may work under specific conditions", that is conditional_alignment, not material_conflict. If both responses recommend the same main action, material_conflict is usually incorrect. When responses share the same strategic direction — for example, both recommend caution, diversification, limited exposure, or a conditional approach — but differ only in specific parameters such as percentages, timing, thresholds, or emphasis, do NOT classify as material_conflict. Treat these as explanation_variation or additive_nuance. material_conflict requires fundamentally opposed recommendations where following one would contradict the other, not merely different calibrations of the same recommendation. Each response carries a confidence score (1.0 = baseline, >1.0 = historically stronger on this task type). Treat this as a light secondary signal, not as a substitute for evaluating the actual content of the responses. Do not let it override a clearly stronger current response.',
       },
       {
         role: "user",
@@ -1055,6 +1017,16 @@ export async function POST(req: NextRequest) {
     }
 
     const taskType = detectTaskType(prompt);
+
+    // Classify the prompt once — feeds risk floor and diagnostic logging.
+    const promptClassification = classifyPrompt(prompt);
+    console.log("[/api/decision] prompt_classification", JSON.stringify({
+      domain: promptClassification.domain,
+      drivers: promptClassification.drivers,
+      stakes: promptClassification.stakes,
+      risk: promptClassification.risk,
+      reasons: promptClassification.reasons,
+    }));
     const { selectedProviders, rankedProviders } =
       await adaptiveSelectProviders(prompt, taskType);
 
@@ -1398,7 +1370,7 @@ export async function POST(req: NextRequest) {
       agreementLevel: activePair.semantic.agreementLevel,
       disagreementType: verdictPayload.disagreementType,
       finalConclusionAligned: verdictPayload.finalConclusionAligned,
-      prompt,
+      promptClassification,
     });
 
     const averageQuality = (qualityScores.scoreA + qualityScores.scoreB) / 2;
