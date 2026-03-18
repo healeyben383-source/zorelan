@@ -416,6 +416,12 @@ function getModelsAligned(input: {
     case "none":
     case "additive_nuance":
     case "explanation_variation":
+      // Even if the verdict engine classified disagreement as minor, the
+      // semantic judge's agreement level is the more reliable signal.
+      // If the judge said medium, consensus should not report high.
+      if (input.agreementLevel === "low") return 0;
+      if (input.agreementLevel === "medium")
+        return Math.max(1, input.totalProviders - 1);
       return input.totalProviders;
     case "conditional_alignment":
       return Math.max(1, input.totalProviders - 1);
@@ -438,10 +444,34 @@ function getConsensusLevelFromAligned(
   return "low";
 }
 
+/**
+ * Detects whether a prompt is inherently uncertain — i.e. a tradeoff decision,
+ * speculative forecast, or investment question — where high provider agreement
+ * does not mean the answer is objectively certain.
+ *
+ * Deliberately narrow: "should I use HTTPS?" does NOT trigger this because
+ * there is no genuine tradeoff. Only fires on explicit tradeoff structure,
+ * speculative/investment language, or startup choice signals.
+ */
+function isInherentlyUncertainPrompt(prompt: string): boolean {
+  // " or " alone is too broad — "is water made of hydrogen or oxygen?" would
+  // fire. Only treat "or" as a tradeoff signal when paired with "should i",
+  // which indicates a genuine choice question rather than a factual one.
+  const lower = prompt.toLowerCase();
+  const shouldIWithOr = lower.includes("should i") && lower.includes(" or ");
+  const tradeoffTerms = [" vs ", " versus ", "better than", "which is better", "which should i", "or should i", "should i choose"];
+  const speculativeTerms = ["invest", "investment", "long-term", "worth it", "prediction", "outlook", "will it", "forecast"];
+  const startupTerms = ["bootstrap", "venture capital", "raise capital", " vc "];
+
+  const allTerms = [...tradeoffTerms, ...speculativeTerms, ...startupTerms];
+  return shouldIWithOr || allTerms.some((term) => lower.includes(term));
+}
+
 function getRiskLevel(input: {
   agreementLevel: AgreementLevel;
   disagreementType: DisagreementType;
   finalConclusionAligned: boolean;
+  prompt: string;
 }): RiskLevel {
   if (input.disagreementType === "material_conflict") return "high";
   if (input.disagreementType === "conditional_alignment") return "moderate";
@@ -449,6 +479,12 @@ function getRiskLevel(input: {
     return "high";
   if (!input.finalConclusionAligned) return "moderate";
   if (input.agreementLevel === "low") return "moderate";
+
+  // Even when providers agree, inherently uncertain prompts (tradeoffs,
+  // investment questions, speculative decisions) should not get a low risk
+  // stamp — that would allow trust scores to overstate certainty.
+  if (isInherentlyUncertainPrompt(input.prompt)) return "moderate";
+
   return "low";
 }
 
@@ -522,13 +558,16 @@ function calculateTrustScore(input: {
   // Medium agreement must never appear as "high" trust. Low agreement is capped
   // well below moderate so the label distinction is meaningful.
   if (input.agreementLevel === "high") {
-    if (
-      input.disagreementType === "none" ||
-      input.disagreementType === "additive_nuance"
-    ) {
-      score = Math.max(score, 92);
+    if (input.disagreementType === "none") {
+      // Hard factual certainty — both providers fully agree, no nuance at all
+      score = Math.max(score, 94);
+    } else if (input.disagreementType === "additive_nuance") {
+      // Same conclusion, one provider added correct detail — still strong but
+      // not as absolute as a clean factual agreement
+      score = Math.max(score, 88);
     } else if (input.disagreementType === "explanation_variation") {
-      score = Math.max(score, 85);
+      // Same conclusion, different framing — credible but less certain
+      score = Math.max(score, 82);
     }
   } else if (input.agreementLevel === "medium") {
     score = Math.min(score, 74);
@@ -536,6 +575,12 @@ function calculateTrustScore(input: {
     score = Math.min(score, 54);
   }
   // ─────────────────────────────────────────────────────────────────────────
+
+  // Backstop cap — if risk is not low, the subject carries real uncertainty
+  // regardless of provider agreement. Prevent overconfident scores.
+  if (input.riskLevel !== "low") {
+    score = Math.min(score, 85);
+  }
 
   const finalScore = Math.round(clamp(score, 0, 100));
 
@@ -1316,6 +1361,7 @@ export async function POST(req: NextRequest) {
       agreementLevel: activePair.semantic.agreementLevel,
       disagreementType: verdictPayload.disagreementType,
       finalConclusionAligned: verdictPayload.finalConclusionAligned,
+      prompt,
     });
 
     const averageQuality = (qualityScores.scoreA + qualityScores.scoreB) / 2;
