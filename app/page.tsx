@@ -341,7 +341,7 @@ function CopyIconButton({
       onClick={onClick}
       aria-label={label}
       title={copied ? "Copied" : label}
-      className="inline-flex items-center justify-center rounded-lg border border-black/10 dark:border-white/10 px-2.5 py-2 text-xs opacity-70 hover:opacity-100 transition-opacity"
+      className="inline-flex h-11 w-11 md:h-auto md:w-auto items-center justify-center rounded-xl border border-black/10 dark:border-white/10 px-2.5 py-2 text-xs opacity-75 hover:opacity-100 active:scale-[0.98] transition-all"
     >
       {copied ? (
         <svg
@@ -378,12 +378,12 @@ function CopyIconButton({
 }
 
 const selectedStyle = {
-  border: "1px solid rgba(255,255,255,0.5)",
-  background: "rgba(255,255,255,0.1)",
+  border: "1px solid rgba(255,255,255,0.55)",
+  background: "rgba(255,255,255,0.12)",
 };
 
 const unselectedStyle = {
-  border: "1px solid rgba(255,255,255,0.1)",
+  border: "1px solid rgba(255,255,255,0.12)",
 };
 
 function ProviderAnswerCard({
@@ -424,6 +424,79 @@ function LoadingProviderCard() {
       </div>
       <PulsePlaceholder />
     </div>
+  );
+}
+
+function PrimaryActionButton({
+  children,
+  onClick,
+  disabled,
+}: {
+  children: React.ReactNode;
+  onClick: () => void;
+  disabled: boolean;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      className={cx(
+        "w-full rounded-2xl px-4 py-3.5 md:py-3 text-base md:text-sm font-medium transition-all active:scale-[0.99]",
+        disabled
+          ? "bg-black/20 text-black/50 dark:bg-white/20 dark:text-white/50"
+          : "bg-white text-black shadow-sm hover:shadow-md dark:bg-white dark:text-black"
+      )}
+    >
+      {children}
+    </button>
+  );
+}
+
+function SecondaryActionButton({
+  children,
+  onClick,
+  disabled,
+}: {
+  children: React.ReactNode;
+  onClick: () => void;
+  disabled: boolean;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      className={cx(
+        "w-full rounded-2xl px-4 py-3.5 md:py-3 text-base md:text-sm font-medium transition-all active:scale-[0.99]",
+        disabled
+          ? "bg-black/20 text-black/50 dark:bg-white/20 dark:text-white/50"
+          : "bg-black text-white hover:bg-black/90 dark:bg-white dark:text-black dark:hover:bg-white/90"
+      )}
+    >
+      {children}
+    </button>
+  );
+}
+
+function ToggleButton({
+  selected,
+  children,
+  onClick,
+}: {
+  selected: boolean;
+  children: React.ReactNode;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      style={selected ? selectedStyle : unselectedStyle}
+      className={cx(
+        "rounded-xl px-3 py-3 md:py-2 text-base md:text-sm transition-all active:scale-[0.98]",
+        selected ? "shadow-sm" : "opacity-90 hover:opacity-100"
+      )}
+    >
+      {children}
+    </button>
   );
 }
 
@@ -770,15 +843,9 @@ export default function Home() {
       : ["openai", "anthropic"];
 
   const SynthesizeButton = () => (
-    <button
+    <SecondaryActionButton
       onClick={onSynthesize}
       disabled={!canSynthesize}
-      className={cx(
-        "w-full rounded-2xl px-4 py-3 text-sm font-medium",
-        canSynthesize
-          ? "bg-black text-white dark:bg-white dark:text-black"
-          : "bg-black/20 text-black/50 dark:bg-white/20 dark:text-white/50"
-      )}
     >
       {synthesizing ? (
         <>
@@ -788,7 +855,7 @@ export default function Home() {
       ) : (
         "Combine Best Insights"
       )}
-    </button>
+    </SecondaryActionButton>
   );
 
   const HistoryList = () =>
@@ -918,116 +985,115 @@ export default function Home() {
       </div>
 
       <div className="mx-auto w-full max-w-5xl space-y-6">
-        <header className="space-y-3 text-center">
-  <div className="flex items-center justify-between">
-    <div className="w-16" />
-    <h1 className="text-4xl font-semibold tracking-tight">Zorelan</h1>
-    <div className="flex items-center gap-2 justify-end">
-      <button
-        onClick={() => setHistoryOpen(true)}
-        className="flex items-center gap-1.5 rounded-xl border border-black/10 dark:border-white/10 px-3 py-1.5 text-xs opacity-60 hover:opacity-100 transition-opacity"
-      >
-        <svg
-          xmlns="http://www.w3.org/2000/svg"
-          width="12"
-          height="12"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        >
-          <circle cx="12" cy="12" r="10" />
-          <polyline points="12 6 12 12 16 14" />
-        </svg>
-        <span>{history.length > 0 ? history.length : "History"}</span>
-      </button>
-      <a
-        href="/api-docs"
-        className="flex items-center rounded-xl border border-black/10 dark:border-white/10 px-3 py-1.5 text-xs opacity-60 hover:opacity-100 transition-opacity"
-      >
-        API
-      </a>
-    </div>
-  </div>
+        <header className="space-y-4 text-center">
+          <div className="flex items-center justify-between">
+            <div className="w-16" />
+            <h1 className="text-4xl font-semibold tracking-tight">Zorelan</h1>
+            <div className="flex items-center gap-2 justify-end">
+              <button
+                onClick={() => setHistoryOpen(true)}
+                className="flex h-11 md:h-auto items-center gap-1.5 rounded-xl border border-black/10 dark:border-white/10 px-3 py-1.5 text-sm md:text-xs opacity-70 hover:opacity-100 active:scale-[0.98] transition-all"
+              >
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  width="12"
+                  height="12"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <circle cx="12" cy="12" r="10" />
+                  <polyline points="12 6 12 12 16 14" />
+                </svg>
+                <span>{history.length > 0 ? history.length : "History"}</span>
+              </button>
+              <a
+                href="/api-docs"
+                className="flex h-11 md:h-auto items-center rounded-xl border border-black/10 dark:border-white/10 px-3 py-1.5 text-sm md:text-xs opacity-70 hover:opacity-100 active:scale-[0.98] transition-all"
+              >
+                API
+              </a>
+            </div>
+          </div>
 
-  <div className="space-y-2">
-    <p className="text-sm opacity-70">Verify AI before you trust it.</p>
-    <p className="mx-auto max-w-2xl text-sm opacity-50 leading-relaxed">
-      Zorelan compares multiple models and returns a verified answer with calibrated trust — not just agreement.
-    </p>
-  </div>
+          <div className="space-y-2">
+            <p className="text-sm opacity-70">Verify AI before you trust it.</p>
+            <p className="mx-auto max-w-2xl text-sm opacity-50 leading-relaxed">
+              Zorelan compares multiple models and returns a verified answer
+              with calibrated trust — not just agreement.
+            </p>
+          </div>
 
-  <div className="flex flex-wrap items-center justify-center gap-3 text-xs opacity-45">
-    <span>Consensus</span>
-    <span>•</span>
-    <span>Risk</span>
-    <span>•</span>
-    <span>Trust Score</span>
-  </div>
+          <div className="flex flex-wrap items-center justify-center gap-3 text-xs opacity-45">
+            <span>Consensus</span>
+            <span>•</span>
+            <span>Risk</span>
+            <span>•</span>
+            <span>Trust Score</span>
+          </div>
 
-  <div className="inline-flex rounded-xl border border-black/10 p-1 dark:border-white/10">
-    <button
-      onClick={() => setAppMode("simple")}
-      className={cx(
-        "rounded-lg px-4 py-1.5 text-sm font-medium transition-all",
-        appMode === "simple"
-          ? "bg-black text-white dark:bg-white dark:text-black"
-          : "opacity-50 hover:opacity-80"
-      )}
-    >
-      Simple
-    </button>
-    <button
-      onClick={() => setAppMode("pro")}
-      className={cx(
-        "rounded-lg px-4 py-1.5 text-sm font-medium transition-all",
-        appMode === "pro"
-          ? "bg-black text-white dark:bg-white dark:text-black"
-          : "opacity-50 hover:opacity-80"
-      )}
-    >
-      Pro
-    </button>
-  </div>
-</header>
+          <div className="inline-flex rounded-xl border border-black/10 p-1 dark:border-white/10">
+            <button
+              onClick={() => setAppMode("simple")}
+              className={cx(
+                "rounded-lg px-5 py-2.5 md:px-4 md:py-1.5 text-base md:text-sm font-medium transition-all active:scale-[0.98]",
+                appMode === "simple"
+                  ? "bg-white text-black shadow-sm dark:bg-white dark:text-black"
+                  : "opacity-60 hover:opacity-90"
+              )}
+            >
+              Simple
+            </button>
+            <button
+              onClick={() => setAppMode("pro")}
+              className={cx(
+                "rounded-lg px-5 py-2.5 md:px-4 md:py-1.5 text-base md:text-sm font-medium transition-all active:scale-[0.98]",
+                appMode === "pro"
+                  ? "bg-white text-black shadow-sm dark:bg-white dark:text-black"
+                  : "opacity-60 hover:opacity-90"
+              )}
+            >
+              Pro
+            </button>
+          </div>
+        </header>
 
-        <section className="space-y-3">
+        <section className="space-y-4">
           {appMode === "pro" && (
             <>
               <div className="space-y-4">
-                <div className="text-base font-medium opacity-90">
+                <div className="text-lg md:text-base font-medium opacity-90">
                   I am asking about
                 </div>
-                <div className="grid grid-cols-3 gap-2">
+                <div className="grid grid-cols-3 gap-3 md:gap-2">
                   {(Object.keys(CONTEXT_LABEL) as Context[]).map((c) => (
-                    <button
+                    <ToggleButton
                       key={c}
+                      selected={c === context}
                       onClick={() => setContext(c)}
-                      style={c === context ? selectedStyle : unselectedStyle}
-                      className="rounded-xl px-3 py-2 text-sm"
                     >
                       {CONTEXT_LABEL[c]}
-                    </button>
+                    </ToggleButton>
                   ))}
                 </div>
               </div>
 
               <div className="space-y-4">
-                <div className="text-base font-medium opacity-90">
+                <div className="text-lg md:text-base font-medium opacity-90">
                   I need help with
                 </div>
-                <div className="grid grid-cols-3 gap-2">
+                <div className="grid grid-cols-3 gap-3 md:gap-2">
                   {(Object.keys(MODE_LABEL) as Mode[]).map((m) => (
-                    <button
+                    <ToggleButton
                       key={m}
+                      selected={m === mode}
                       onClick={() => setMode(m)}
-                      style={m === mode ? selectedStyle : unselectedStyle}
-                      className="rounded-xl px-3 py-2 text-sm"
                     >
                       {MODE_LABEL[m]}
-                    </button>
+                    </ToggleButton>
                   ))}
                 </div>
               </div>
@@ -1037,13 +1103,14 @@ export default function Home() {
           <div className="relative">
             {showPlaceholder && (
               <div
-                className="absolute top-0 left-0 w-full p-4 text-sm pointer-events-none select-none opacity-30 leading-relaxed"
+                className="absolute top-0 left-0 w-full p-4 text-base md:text-sm pointer-events-none select-none opacity-30 leading-relaxed"
                 aria-hidden="true"
               >
                 <div className="mb-5">What are you trying to figure out?</div>
                 <div>
-                  Type any question, decision, or problem and Zorelan will structure it, 
-                  verify it across multiple models, and return a trust-aware answer.
+                  Type any question, decision, or problem and Zorelan will
+                  structure it, verify it across multiple models, and return a
+                  trust-aware answer.
                 </div>
               </div>
             )}
@@ -1053,21 +1120,16 @@ export default function Home() {
               contentEditable
               suppressContentEditableWarning
               onInput={handleEditableInput}
-              className="min-h-40 w-full rounded-2xl border border-black/10 bg-transparent p-4 text-sm outline-none focus:border-black/30 dark:border-white/10 dark:focus:border-white/30 leading-relaxed"
-              style={{ whiteSpace: "pre-wrap", wordBreak: "break-word" }}
+              className="min-h-40 w-full rounded-2xl border border-black/10 bg-transparent p-4 text-base md:text-sm outline-none focus:border-black/30 dark:border-white/10 dark:focus:border-white/30 leading-relaxed"
+              style={{
+                whiteSpace: "pre-wrap",
+                wordBreak: "break-word",
+                overflowWrap: "anywhere",
+              }}
             />
           </div>
 
-          <button
-            onClick={onPreframe}
-            disabled={!canRun}
-            className={cx(
-              "w-full rounded-2xl px-4 py-3 text-sm font-medium",
-              canRun
-                ? "bg-black text-white dark:bg-white dark:text-black"
-                : "bg-black/20 text-black/50 dark:bg-white/20 dark:text-white/50"
-            )}
-          >
+          <PrimaryActionButton onClick={onPreframe} disabled={!canRun}>
             {busy ? (
               <>
                 <Spinner />
@@ -1076,7 +1138,7 @@ export default function Home() {
             ) : (
               "Structure My Question"
             )}
-          </button>
+          </PrimaryActionButton>
         </section>
 
         {error && (
@@ -1153,7 +1215,7 @@ export default function Home() {
                       setUserAnswers(updated);
                     }}
                     placeholder="Your answer…"
-                    className="w-full rounded-xl border border-black/10 bg-transparent px-3 py-2 text-sm outline-none focus:border-black/30 dark:border-white/10 dark:focus:border-white/30"
+                    className="w-full rounded-xl border border-black/10 bg-transparent px-3 py-2.5 text-base md:text-sm outline-none focus:border-black/30 dark:border-white/10 dark:focus:border-white/30"
                   />
                 </div>
               ))}
@@ -1183,27 +1245,21 @@ export default function Home() {
               </p>
             </div>
 
-            <div className="flex flex-wrap items-center gap-2">
+            <div className="grid grid-cols-2 gap-3 md:flex md:flex-wrap md:items-center md:gap-2">
               {AI_BUTTONS.map((a) => (
                 <button
                   key={a.name}
                   onClick={() => openAI(a.name)}
-                  className="rounded-xl border border-black/10 px-3 py-2 text-sm opacity-80 hover:opacity-100 dark:border-white/10"
+                  className="rounded-xl border border-black/10 px-3 py-3 md:py-2 text-base md:text-sm opacity-85 hover:opacity-100 active:scale-[0.98] dark:border-white/10 transition-all"
                 >
                   {a.name === "ChatGPT" ? "ChatGPT (copies)" : a.name}
                 </button>
               ))}
             </div>
 
-            <button
+            <PrimaryActionButton
               onClick={onRunAnalysis}
               disabled={!canAnalyse}
-              className={cx(
-                "w-full rounded-2xl px-4 py-3 text-sm font-medium",
-                canAnalyse
-                  ? "bg-black text-white dark:bg-white dark:text-black"
-                  : "bg-black/20 text-black/50 dark:bg-white/20 dark:text-white/50"
-              )}
             >
               {running ? (
                 <>
@@ -1213,7 +1269,7 @@ export default function Home() {
               ) : (
                 "Run Analysis"
               )}
-            </button>
+            </PrimaryActionButton>
 
             {!running && !answers && (
               <p className="text-xs text-center opacity-60 mt-1">
@@ -1250,7 +1306,7 @@ export default function Home() {
                         ⚡ Cached result · verified earlier
                       </div>
                     )}
-                 </div>
+                  </div>
                   <div
                     className={cx(
                       "text-xs font-medium px-3 py-1 rounded-full",
@@ -1544,12 +1600,12 @@ export default function Home() {
               </div>
             </div>
 
-            <div className="flex flex-wrap items-center gap-2">
+            <div className="grid grid-cols-2 gap-3 md:flex md:flex-wrap md:items-center md:gap-2">
               {AI_BUTTONS.map((a) => (
                 <button
                   key={a.name}
                   onClick={() => openAI(a.name, synthesis)}
-                  className="rounded-xl border border-black/10 px-3 py-2 text-sm opacity-80 hover:opacity-100 dark:border-white/10"
+                  className="rounded-xl border border-black/10 px-3 py-3 md:py-2 text-base md:text-sm opacity-85 hover:opacity-100 active:scale-[0.98] dark:border-white/10 transition-all"
                 >
                   {a.name === "ChatGPT" ? "ChatGPT (copies)" : a.name}
                 </button>
