@@ -16,7 +16,7 @@ const sdkQuickstartExample = `import { Zorelan } from "@zorelan/sdk";
 const zorelan = new Zorelan(process.env.ZORELAN_API_KEY!);
 
 const result = await zorelan.verify(
-  "Should I use microservices or a monolith for my startup?"
+  "Should I use HTTPS for my web application?"
 );
 
 console.log(result.verified_answer);
@@ -26,14 +26,14 @@ console.log(result.consensus.level);`;
 const curlExample = `curl -X POST https://zorelan.com/v1/decision \\
   -H "Authorization: Bearer YOUR_API_KEY" \\
   -H "Content-Type: application/json" \\
-  -d '{"prompt": "Should I use microservices or a monolith for my startup?"}'`;
+  -d '{"prompt": "Should I use HTTPS for my web application?"}'`;
 
 const nodeExample = `import { Zorelan } from "@zorelan/sdk";
 
 const zorelan = new Zorelan(process.env.ZORELAN_API_KEY!);
 
 const result = await zorelan.verify(
-  "Should I use microservices or a monolith for my startup?"
+  "Should I use HTTPS for my web application?"
 );
 
 console.log(result.verified_answer);    // synthesized answer
@@ -51,7 +51,7 @@ response = requests.post(
         "Content-Type": "application/json",
     },
     json={
-        "prompt": "Should I use microservices or a monolith for my startup?",
+        "prompt": "Should I use HTTPS for my web application?",
     }
 )
 
@@ -63,20 +63,20 @@ print(data["cached"])  # True if result was cached`;
 
 const responseExample = `{
   "ok": true,
-  "verified_answer": "Start with a monolith. Both models strongly recommend...",
-  "verdict": "Both responses recommend starting with a monolith architecture.",
+  "verified_answer": "Yes — you should use HTTPS for your web application. The providers agree that HTTPS is standard practice for protecting user data, securing sessions, and establishing trust.",
+  "verdict": "Both responses recommend using HTTPS for a web application.",
   "consensus": {
     "level": "high",
     "models_aligned": 2
   },
   "trust_score": {
-    "score": 83,
+    "score": 94,
     "label": "high",
-    "reason": "The original answers support the same main conclusion..."
+    "reason": "The providers reached the same core conclusion on a low-risk best-practice question."
   },
   "risk_level": "low",
   "confidence": "high",
-  "confidence_reason": "Both models reached the same core conclusion...",
+  "confidence_reason": "Both models reached the same core conclusion with no meaningful conflict.",
   "key_disagreement": "No meaningful difference in conclusion.",
   "recommended_action": "Use the shared conclusion as the answer.",
   "cached": false,
@@ -85,7 +85,7 @@ const responseExample = `{
     "final_conclusion_aligned": true,
     "disagreement_type": "none",
     "semantic_label": "HIGH_AGREEMENT",
-    "semantic_rationale": "Both answers strongly advocate starting with a monolith...",
+    "semantic_rationale": "Both answers strongly recommend HTTPS as standard practice for security and trust.",
     "semantic_judge_model": "openai/gpt-4o-mini",
     "semantic_used_fallback": false
   },
@@ -100,10 +100,10 @@ const responseExample = `{
     "perplexity": { "quality_score": 8, "duration_ms": 5158, "timed_out": false }
   },
   "meta": {
-    "task_type": "strategy",
-    "overlap_ratio": 0.34,
+    "task_type": "general",
+    "overlap_ratio": 0.42,
     "agreement_summary": "The two model outputs support the same main conclusion.",
-    "prompt_chars": 58,
+    "prompt_chars": 44,
     "likely_conflict": false,
     "disagreement_type": "none"
   },
@@ -117,7 +117,7 @@ const responseExample = `{
 }`;
 
 const cacheBypassExample = `{
-  "prompt": "Should I use microservices or a monolith for my startup?",
+  "prompt": "Should I use HTTPS for my web application?",
   "cache_bypass": true
 }`;
 
@@ -138,12 +138,12 @@ const feedbackPostExample = `curl -X POST https://zorelan.com/api/feedback \\
   -H "Authorization: Bearer YOUR_API_KEY" \\
   -H "Content-Type: application/json" \\
   -d '{
-    "prompt": "Should I use microservices or a monolith?",
-    "verdict": "Both models recommend a monolith.",
+    "prompt": "Should I use HTTPS for my web application?",
+    "verdict": "Both models recommend using HTTPS.",
     "issue": "incorrect_verdict",
-    "correct_answer": "Microservices are better for this use case.",
+    "correct_answer": "HTTPS should be used by default for production web applications.",
     "request_id": "req_abc123",
-    "notes": "The prompt was about a high-scale system."
+    "notes": "This should be treated as a low-risk best-practice question."
   }'`;
 
 const feedbackGetExample = `curl https://zorelan.com/api/feedback \\
@@ -173,7 +173,7 @@ const responseFields = [
   {
     field: "trust_score.score",
     type: "number",
-    desc: "Overall reliability score from 0–100. Driven by agreement level, quality, and risk.",
+    desc: "Overall reliability score from 0–100. Calibrated from consensus, disagreement severity, and risk.",
   },
   {
     field: "trust_score.label",
@@ -430,12 +430,13 @@ export default function ApiDocsPage() {
         </p>
 
         <p className="text-white/40 text-sm mb-5">
-          AI consensus infrastructure for production systems.
+          AI verification infrastructure for production systems.
         </p>
 
         <p className="text-white/70 text-lg leading-relaxed mb-4 max-w-3xl">
           It compares multiple model responses and returns a verified answer with
-          a trust score and consensus signal — in a single API call.
+          calibrated trust scoring, consensus signals, and disagreement analysis
+          in a single API call.
         </p>
 
         <p className="text-white/55 text-base leading-relaxed mb-8 max-w-3xl">
@@ -453,7 +454,7 @@ export default function ApiDocsPage() {
             { value: "5", label: "Disagreement types" },
             {
               value: "89%",
-              label: "Agreement accuracy · 100-question benchmark",
+              label: "Agreement classification accuracy",
             },
           ].map(({ value, label }) => (
             <div key={label}>
@@ -525,12 +526,12 @@ Verified answer + trust score`}
             outputs.
           </FeatureCard>
           <FeatureCard title="Trust score">
-            A 0–100 reliability score based on agreement strength, output
-            quality, and risk.
+            A calibrated 0–100 confidence signal based on consensus,
+            disagreement severity, and domain risk.
           </FeatureCard>
           <FeatureCard title="Structured analysis">
-            Consensus level, disagreement type, arbitration usage, provider
-            diagnostics, and usage metadata.
+            Consensus level, risk level, disagreement type, arbitration usage,
+            provider diagnostics, and usage metadata.
           </FeatureCard>
         </div>
       </section>
@@ -610,7 +611,8 @@ Verified answer + trust score`}
           built-in verification layer. You don’t know if it’s correct,
           partially correct, or confidently wrong. Zorelan compares multiple
           model outputs and returns a structured confidence signal you can use
-          in your product.
+          in your product. Crucially, it does not treat model agreement as
+          automatic certainty.
         </p>
 
         <div className="grid gap-4 md:grid-cols-3">
@@ -737,7 +739,7 @@ Content-Type: application/json`}
           <CodeBlock
             label="json · request"
             code={`{
-  "prompt": "Should I use microservices or a monolith for my startup?"
+  "prompt": "Should I use HTTPS for my web application?"
 }`}
           />
         </div>
@@ -878,70 +880,106 @@ Content-Type: application/json`}
 
       <Divider />
 
-      {/* Trust score */}
+      {/* Trust scoring */}
       <section className="mb-12">
         <SectionLabel>Concepts</SectionLabel>
-        <h2 className="text-xl font-semibold mb-4">Trust score</h2>
+        <h2 className="text-xl font-semibold mb-4">How trust scoring works</h2>
+
         <p className="text-white/60 leading-relaxed mb-6">
-          The trust score is a 0–100 number representing how reliable the
-          verified answer is. It is calculated from two components with no
-          arbitrary floor constants or inflated minimums — a low-agreement
-          result genuinely produces a low score.
+          Zorelan does not just measure whether models agree. It measures
+          whether that agreement deserves confidence.
         </p>
-        <Table
-          headers={["Component", "Weight", "Description"]}
-          rows={[
-            [
-              "Agreement level",
-              "65%",
-              "How strongly the models agreed. High = base 85, Medium = 65, Low = 35.",
-            ],
-            [
-              "Output quality",
-              "35%",
-              "Per-response quality from 1–10, scored by a neutral cross-model judge. Claude scores OpenAI outputs, OpenAI scores Claude outputs.",
-            ],
-          ]}
-        />
-        <div className="mt-4 mb-6">
+
+        <div className="grid gap-4 md:grid-cols-3 mb-6">
+          <FeatureCard title="Consensus">
+            How closely the providers align in conclusion and reasoning. High
+            consensus means the models broadly support the same answer. Low
+            consensus means they materially diverge.
+          </FeatureCard>
+
+          <FeatureCard title="Risk level">
+            Whether the prompt belongs to a domain where certainty is naturally
+            limited. Factual questions tend to be lower risk. Strategic,
+            comparative, and speculative prompts are often inherently more
+            uncertain.
+          </FeatureCard>
+
+          <FeatureCard title="Trust score">
+            The final calibrated confidence signal. It combines agreement
+            strength, disagreement severity, and risk level to produce a score
+            from 0–100.
+          </FeatureCard>
+        </div>
+
+        <InfoBox>
+          High agreement in an uncertain domain is not treated as ground truth.
+        </InfoBox>
+
+        <div className="mt-6 mb-6">
           <Table
-            headers={["Score", "Label", "Interpretation"]}
+            headers={["Prompt", "Consensus", "Risk", "Trust score", "Interpretation"]}
             rows={[
-              ["75–100", '"high"', "Strong model agreement. Safe to act on."],
               [
-                "55–74",
-                '"moderate"',
-                "Partial agreement. Review key disagreements before acting.",
+                "Is water made of hydrogen and oxygen?",
+                "High",
+                "Low",
+                "94",
+                "Objective fact with strong provider alignment.",
               ],
               [
-                "0–54",
-                '"low"',
-                "Models diverged. Treat the answer as a starting point, not a conclusion.",
+                "Should I use TypeScript or JavaScript for a new project?",
+                "High",
+                "Moderate",
+                "~85",
+                "Strong aligned reasoning, but still a context-dependent tradeoff.",
+              ],
+              [
+                "Is cryptocurrency a good long-term investment?",
+                "Mixed / bounded",
+                "Moderate to high",
+                "Lower / capped",
+                "Even aligned answers should not be presented as hard certainty.",
               ],
             ]}
           />
         </div>
-        <InfoBox>
-          Penalties reduce the score for disagreement type (−4 to −20 points),
-          misaligned conclusions (−10 points), and elevated risk level (−5 to
-          −15 points).
-        </InfoBox>
 
-        <div className="mt-6 rounded-xl border border-white/10 bg-white/[0.02] px-5 py-5 text-sm text-white/60 leading-relaxed space-y-3">
+        <div className="mt-4 mb-6">
+          <Table
+            headers={["Score range", "Interpretation", "How to use it"]}
+            rows={[
+              [
+                "90+",
+                "High-confidence factual or near-factual verification",
+                "Usually safe to rely on directly in product logic.",
+              ],
+              [
+                "~85",
+                "Strong aligned reasoning in an uncertain or tradeoff-heavy domain",
+                "Useful, but should still be treated as judgment rather than ground truth.",
+              ],
+              [
+                "Below 85",
+                "Material disagreement, ambiguity, or elevated uncertainty",
+                "Review before acting or expose uncertainty in the UI.",
+              ],
+            ]}
+          />
+        </div>
+
+        <div className="rounded-xl border border-white/10 bg-white/[0.02] px-5 py-5 text-sm text-white/60 leading-relaxed space-y-3">
           <p>
-            <span className="text-white/80 font-medium">Benchmark results.</span>{" "}
-            Tested across 100 questions spanning factual, technical, strategy,
-            health, finance, and controversial topics — Zorelan correctly
-            assessed agreement level in{" "}
-            <span className="text-white/90 font-semibold">89% of cases</span>,
-            with 100% accuracy on factual questions and strong performance on
-            technical and developer questions.
+            <span className="text-white/80 font-medium">Why this matters.</span>{" "}
+            Most systems treat agreement as confidence. Zorelan separates the
+            two. That makes the trust score more useful in production,
+            especially for verification, decision support, and trust-aware
+            downstream logic.
           </p>
           <p>
-            A key finding: AI models agree far more than humans expect, even on
-            controversial topics. Models trained for balance tend to converge on
-            nuanced positions rather than taking opposing sides. Zorelan detects
-            this convergence accurately.
+            Two models can strongly agree and still receive a bounded score if
+            the prompt itself is inherently uncertain. This is intentional:
+            Zorelan is designed to avoid presenting aligned speculation as hard
+            certainty.
           </p>
         </div>
       </section>
