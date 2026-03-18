@@ -919,66 +919,79 @@ export default function Home() {
 
       <div className="mx-auto w-full max-w-5xl space-y-6">
         <header className="space-y-3 text-center">
-          <div className="flex items-center justify-between">
-            <div className="w-16" />
-            <h1 className="text-4xl font-semibold tracking-tight">Zorelan</h1>
-            <div className="flex items-center gap-2 justify-end">
-              <button
-                onClick={() => setHistoryOpen(true)}
-                className="flex items-center gap-1.5 rounded-xl border border-black/10 dark:border-white/10 px-3 py-1.5 text-xs opacity-60 hover:opacity-100 transition-opacity"
-              >
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  width="12"
-                  height="12"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                >
-                  <circle cx="12" cy="12" r="10" />
-                  <polyline points="12 6 12 12 16 14" />
-                </svg>
-                <span>{history.length > 0 ? history.length : "History"}</span>
-              </button>
-              <a
-                href="/api-docs"
-                className="flex items-center rounded-xl border border-black/10 dark:border-white/10 px-3 py-1.5 text-xs opacity-60 hover:opacity-100 transition-opacity"
-              >
-                API
-              </a>
-            </div>
-          </div>
+  <div className="flex items-center justify-between">
+    <div className="w-16" />
+    <h1 className="text-4xl font-semibold tracking-tight">Zorelan</h1>
+    <div className="flex items-center gap-2 justify-end">
+      <button
+        onClick={() => setHistoryOpen(true)}
+        className="flex items-center gap-1.5 rounded-xl border border-black/10 dark:border-white/10 px-3 py-1.5 text-xs opacity-60 hover:opacity-100 transition-opacity"
+      >
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          width="12"
+          height="12"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
+          <circle cx="12" cy="12" r="10" />
+          <polyline points="12 6 12 12 16 14" />
+        </svg>
+        <span>{history.length > 0 ? history.length : "History"}</span>
+      </button>
+      <a
+        href="/api-docs"
+        className="flex items-center rounded-xl border border-black/10 dark:border-white/10 px-3 py-1.5 text-xs opacity-60 hover:opacity-100 transition-opacity"
+      >
+        API
+      </a>
+    </div>
+  </div>
 
-          <p className="text-sm opacity-70">Think once. Ask every AI.</p>
+  <div className="space-y-2">
+    <p className="text-sm opacity-70">Verify AI before you trust it.</p>
+    <p className="mx-auto max-w-2xl text-sm opacity-50 leading-relaxed">
+      Zorelan compares multiple models and returns a verified answer with calibrated trust — not just agreement.
+    </p>
+  </div>
 
-          <div className="inline-flex rounded-xl border border-black/10 p-1 dark:border-white/10">
-            <button
-              onClick={() => setAppMode("simple")}
-              className={cx(
-                "rounded-lg px-4 py-1.5 text-sm font-medium transition-all",
-                appMode === "simple"
-                  ? "bg-black text-white dark:bg-white dark:text-black"
-                  : "opacity-50 hover:opacity-80"
-              )}
-            >
-              Simple
-            </button>
-            <button
-              onClick={() => setAppMode("pro")}
-              className={cx(
-                "rounded-lg px-4 py-1.5 text-sm font-medium transition-all",
-                appMode === "pro"
-                  ? "bg-black text-white dark:bg-white dark:text-black"
-                  : "opacity-50 hover:opacity-80"
-              )}
-            >
-              Pro
-            </button>
-          </div>
-        </header>
+  <div className="flex flex-wrap items-center justify-center gap-3 text-xs opacity-45">
+    <span>Consensus</span>
+    <span>•</span>
+    <span>Risk</span>
+    <span>•</span>
+    <span>Trust Score</span>
+  </div>
+
+  <div className="inline-flex rounded-xl border border-black/10 p-1 dark:border-white/10">
+    <button
+      onClick={() => setAppMode("simple")}
+      className={cx(
+        "rounded-lg px-4 py-1.5 text-sm font-medium transition-all",
+        appMode === "simple"
+          ? "bg-black text-white dark:bg-white dark:text-black"
+          : "opacity-50 hover:opacity-80"
+      )}
+    >
+      Simple
+    </button>
+    <button
+      onClick={() => setAppMode("pro")}
+      className={cx(
+        "rounded-lg px-4 py-1.5 text-sm font-medium transition-all",
+        appMode === "pro"
+          ? "bg-black text-white dark:bg-white dark:text-black"
+          : "opacity-50 hover:opacity-80"
+      )}
+    >
+      Pro
+    </button>
+  </div>
+</header>
 
         <section className="space-y-3">
           {appMode === "pro" && (
@@ -1029,8 +1042,8 @@ export default function Home() {
               >
                 <div className="mb-5">What are you trying to figure out?</div>
                 <div>
-                  Type any question, decision, or problem and Zorelan will
-                  structure it and run it across multiple AI models for you.
+                  Type any question, decision, or problem and Zorelan will structure it, 
+                  verify it across multiple models, and return a trust-aware answer.
                 </div>
               </div>
             )}
