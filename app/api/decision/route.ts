@@ -387,21 +387,21 @@ function normalizeVerdictWithSemantic(input: {
   const normalized: VerdictPayload = { ...input.verdictPayload };
 
   if (input.semanticAgreementLevel === "high") {
-    normalized.finalConclusionAligned = true;
-    if (
-      normalized.disagreementType === "material_conflict" ||
-      normalized.disagreementType === "conditional_alignment"
-    ) {
-      normalized.disagreementType = "explanation_variation";
-    }
-    // When the semantic judge confirms high agreement, explanation_variation
-    // is too penalising — the judge has already determined the responses
-    // are strongly aligned. Downgrade to additive_nuance so the trust score
-    // reflects actual agreement rather than surface-level framing differences.
-    if (normalized.disagreementType === "explanation_variation") {
-      normalized.disagreementType = "additive_nuance";
-    }
+  // Semantic judge is authoritative for alignment
+  normalized.finalConclusionAligned = true;
+
+  // Prevent over-penalisation from verdict LLM
+  if (
+    normalized.disagreementType === "material_conflict" ||
+    normalized.disagreementType === "conditional_alignment"
+  ) {
+    normalized.disagreementType = "explanation_variation";
   }
+
+  if (normalized.disagreementType === "explanation_variation") {
+    normalized.disagreementType = "additive_nuance";
+  }
+}
 
   if (
     input.semanticAgreementLevel === "low" &&
