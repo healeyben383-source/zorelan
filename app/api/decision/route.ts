@@ -492,6 +492,17 @@ function getRiskLevel(input: {
 
   if (input.disagreementType === "material_conflict") return "high";
 
+  // Full alignment with no meaningful disagreement should be low risk
+  // before prompt-classification floors are applied.
+  if (
+    input.finalConclusionAligned &&
+    (input.disagreementType === "none" ||
+      input.disagreementType === "additive_nuance" ||
+      input.disagreementType === "explanation_variation")
+  ) {
+    return "low";
+  }
+
   if (input.disagreementType === "conditional_alignment") {
     if (classifiedRisk === "high") return "high";
     return "moderate";
