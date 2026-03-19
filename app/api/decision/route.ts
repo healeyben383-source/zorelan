@@ -490,15 +490,21 @@ function getRiskLevel(input: {
     lowerPrompt.includes("should i raise") ||
     lowerPrompt.includes("bootstrap");
 
-  if (input.disagreementType === "material_conflict") return "high";
+  // High conflict always wins
+if (input.disagreementType === "material_conflict") return "high";
 
-  // Full alignment with no meaningful disagreement should be low risk
-  // before prompt-classification floors are applied.
-  const isFactualLike =
-  input.promptClassification.risk === "low";
+// Strategic / decision prompts should default to moderate
+if (input.promptClassification.risk === "moderate") {
+  if (!input.finalConclusionAligned) return "high";
+  return "moderate";
+}
 
+// High-risk domains stay high
+if (input.promptClassification.risk === "high") return "high";
+
+// Factual / best-practice (low risk classification)
 if (
-  isFactualLike &&
+  input.promptClassification.risk === "low" &&
   input.finalConclusionAligned &&
   (input.disagreementType === "none" ||
     input.disagreementType === "additive_nuance" ||
@@ -507,22 +513,12 @@ if (
   return "low";
 }
 
-  if (input.disagreementType === "conditional_alignment") {
-    if (classifiedRisk === "high") return "high";
-    return "moderate";
-  }
+// Fallback safety
+if (!input.finalConclusionAligned && input.agreementLevel === "low") {
+  return "high";
+}
 
-  if (!input.finalConclusionAligned && input.agreementLevel === "low") {
-    return "high";
-  }
-
-  if (classifiedRisk === "high") return "high";
-  if (classifiedRisk === "moderate") return "moderate";
-
-  // Explicit tradeoff prompts should never be treated as low-risk certainty
-  if (explicitTradeoff) return "moderate";
-
-  return "low";
+return "moderate";
 }
 
 function getConfidenceReason(input: {
