@@ -44,6 +44,7 @@ const VERIFICATION_TIMEOUT_MS = 20_000;
 const MAX_PROMPT_CHARS = 10_000;
 const MAX_PROVIDERS = 2;
 const CACHE_TTL_SECONDS = 21_600; // 6 hours
+const CACHE_VERSION = "v2-calibration-2026-03-19";
 
 const QUALITY_JUDGE_MODEL = "claude-haiku-4-5-20251001";
 
@@ -305,7 +306,7 @@ function generateCacheKey(prompt: string, providers: string[]): string {
   const sortedProviders = [...providers].sort().join(":");
   const hash = crypto
     .createHash("sha256")
-    .update(`${normalizedPrompt}::${sortedProviders}`)
+    .update(`${CACHE_VERSION}::${normalizedPrompt}::${sortedProviders}`)
     .digest("hex")
     .slice(0, 32);
   return `cache:decision:${hash}`;
