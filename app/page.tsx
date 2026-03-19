@@ -684,25 +684,75 @@ export default function Home() {
     try {
       const prompt = buildPolishedPrompt(intent, userAnswers);
 
-      const res = await fetch("/api/run", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ prompt }),
-      });
+      const [runRes, verifyRes] = await Promise.all([
+        fetch("/api/run", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ prompt }),
+        }),
+        fetch("/api/verify", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ prompt, cache_bypass: true }),
+        }),
+      ]);
 
-      const json = await res.json().catch(() => null);
+      const runJson = await runRes.json().catch(() => null);
+      const verifyJson = await verifyRes.json().catch(() => null);
 
-      if (!json?.ok) {
-        setError(json?.error ?? "unknown_error");
+      if (!runRes.ok || !runJson?.ok) {
+        setError(runJson?.error ?? "run_failed");
         return;
       }
 
-      setAnswers(json.answers);
-      setSelectedProviders((json.selectedProviders ?? []).slice(0, 2));
-      setComparison(json.comparison ?? null);
-      setDecisionVerification(json.decisionVerification ?? null);
-      setTrustScore(json.trustScore ?? null);
-      setCached(json.cached ?? false);
+      if (!verifyRes.ok) {
+        setError(verifyJson?.error ?? "verify_failed");
+        return;
+      }
+
+      // Raw provider cards still come from /api/run
+      setAnswers(runJson.answers);
+      setSelectedProviders((runJson.selectedProviders ?? []).slice(0, 2));
+
+      // Calibrated scoring and verified answer now come from /api/verify
+      setComparison({
+        agreementLevel: verifyJson?.consensus?.level ?? "medium",
+        likelyConflict: verifyJson?.meta?.likely_conflict ?? false,
+        overlapRatio: verifyJson?.meta?.overlap_ratio,
+        summary: verifyJson?.meta?.agreement_summary ?? "",
+        finalConclusionAligned:
+          verifyJson?.verification?.final_conclusion_aligned ?? undefined,
+        disagreementType:
+          verifyJson?.verification?.disagreement_type ?? undefined,
+      });
+
+      setDecisionVerification({
+        verdict: verifyJson?.verdict ?? "",
+        consensus: {
+          level: verifyJson?.consensus?.level ?? "medium",
+          modelsAligned: verifyJson?.consensus?.models_aligned ?? 0,
+        },
+        riskLevel: verifyJson?.risk_level ?? "moderate",
+        keyDisagreement: verifyJson?.key_disagreement ?? "",
+        recommendedAction: verifyJson?.recommended_action ?? "",
+        finalConclusionAligned:
+          verifyJson?.verification?.final_conclusion_aligned ?? undefined,
+        disagreementType:
+          verifyJson?.verification?.disagreement_type ?? undefined,
+      });
+
+      setTrustScore(
+        verifyJson?.trust_score
+          ? {
+              score: verifyJson.trust_score.score,
+              label: verifyJson.trust_score.label,
+              reason: verifyJson.trust_score.reason,
+            }
+          : null
+      );
+
+      setSynthesis(verifyJson?.verified_answer ?? null);
+      setCached(verifyJson?.cached ?? false);
 
       setTimeout(() => {
         resultsRef.current?.scrollIntoView({
@@ -719,8 +769,6 @@ export default function Home() {
     if (!intent || !answers || selectedProviders.length !== 2) return;
 
     setSynthesizing(true);
-    setSynthesis(null);
-    setStructuredSynthesis(null);
     setInsightCopied(false);
     setError(null);
 
@@ -750,11 +798,10 @@ export default function Home() {
         return;
       }
 
+      // Keep synthesize additive-only. Do not let it overwrite
+      // calibrated trust/comparison/verification state from /api/verify.
       setSynthesis(json.synthesis);
       setStructuredSynthesis(json.structuredSynthesis ?? null);
-      setComparison(json.comparison ?? null);
-      setDecisionVerification(json.decisionVerification ?? null);
-      setTrustScore(json.trustScore ?? null);
 
       setTimeout(() => {
         synthesisRef.current?.scrollIntoView({
@@ -782,7 +829,8 @@ export default function Home() {
   }
 
   async function openAI(name: string, text?: string) {
-    const prompt = text ?? (intent ? buildPolishedPrompt(intent, userAnswers) : "");
+    const prompt =
+      text ?? (intent ? buildPolishedPrompt(intent, userAnswers) : "");
     const encoded = encodeURIComponent(prompt);
 
     if (name === "ChatGPT") {
@@ -820,10 +868,7 @@ export default function Home() {
       : ["openai", "anthropic"];
 
   const SynthesizeButton = () => (
-    <SecondaryActionButton
-      onClick={onSynthesize}
-      disabled={!canSynthesize}
-    >
+    <SecondaryActionButton onClick={onSynthesize} disabled={!canSynthesize}>
       {synthesizing ? (
         <>
           <Spinner />
@@ -874,9 +919,13 @@ export default function Home() {
     );
 
   const displayedConfidenceLevel: "high" | "medium" | "low" =
-    decisionVerification?.consensus.level ??
-    comparison?.agreementLevel ??
-    "medium";
+    decisionVerification?.riskLevel === "low"
+      ? "high"
+      : decisionVerification?.riskLevel === "moderate"
+      ? "medium"
+      : decisionVerification?.riskLevel === "high"
+      ? "low"
+      : decisionVerification?.consensus.level ?? comparison?.agreementLevel ?? "medium";
 
   const displayedConsensusLevel: "high" | "medium" | "low" =
     decisionVerification?.consensus.level ??

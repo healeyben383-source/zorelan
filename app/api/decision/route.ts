@@ -465,24 +465,46 @@ function getConsensusLevelFromAligned(
  * speculative/investment language, or startup choice signals.
  */
 
+// ONLY showing modified sections clearly — everything else remains EXACTLY the same
+
+// ─────────────────────────────────────────────────────────────────────────────
+
 function getRiskLevel(input: {
+  prompt: string;
   agreementLevel: AgreementLevel;
   disagreementType: DisagreementType;
   finalConclusionAligned: boolean;
   promptClassification: PromptClassification;
 }): RiskLevel {
-  if (input.disagreementType === "material_conflict") return "high";
-  if (input.disagreementType === "conditional_alignment") return "moderate";
-  if (!input.finalConclusionAligned && input.agreementLevel === "low")
-    return "high";
-  if (!input.finalConclusionAligned) return "moderate";
-  if (input.agreementLevel === "low") return "moderate";
+  const { risk: classifiedRisk } = input.promptClassification;
+  const lowerPrompt = input.prompt.toLowerCase();
 
-  // Use the structured prompt classification to floor risk appropriately.
-  // This replaces the old one-off isHighStakesSpeculative and
-  // isInherentlyUncertainPrompt detectors with a single explainable classifier.
-  if (input.promptClassification.risk === "high") return "high";
-  if (input.promptClassification.risk === "moderate") return "moderate";
+  const explicitTradeoff =
+    lowerPrompt.includes(" vs ") ||
+    lowerPrompt.includes("versus") ||
+    lowerPrompt.includes("or ") ||
+    lowerPrompt.includes("tradeoff") ||
+    lowerPrompt.includes("should i use") ||
+    lowerPrompt.includes("should i choose") ||
+    lowerPrompt.includes("should i raise") ||
+    lowerPrompt.includes("bootstrap");
+
+  if (input.disagreementType === "material_conflict") return "high";
+
+  if (input.disagreementType === "conditional_alignment") {
+    if (classifiedRisk === "high") return "high";
+    return "moderate";
+  }
+
+  if (!input.finalConclusionAligned && input.agreementLevel === "low") {
+    return "high";
+  }
+
+  if (classifiedRisk === "high") return "high";
+  if (classifiedRisk === "moderate") return "moderate";
+
+  // Explicit tradeoff prompts should never be treated as low-risk certainty
+  if (explicitTradeoff) return "moderate";
 
   return "low";
 }
@@ -530,42 +552,66 @@ function getTrustLabel(score: number): "high" | "moderate" | "low" {
   return "low";
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// 🔁 MODIFY calculateTrustScore (ONLY THIS SECTION CHANGES)
+// ─────────────────────────────────────────────────────────────────────────────
+
 function calculateTrustScore(input: {
   agreementLevel: AgreementLevel;
   disagreementType: DisagreementType;
   finalConclusionAligned: boolean;
   averageQuality: number;
   riskLevel: RiskLevel;
+  prompt: string;
 }): { score: number; label: "high" | "moderate" | "low"; reason: string } {
   const agreementBase = getAgreementBaseScore(input.agreementLevel);
   const qualityNormalized = input.averageQuality * 10;
   let score = agreementBase * 0.65 + qualityNormalized * 0.35;
 
-  // additive_nuance is not a real disagreement — one provider added a correct
-  // detail the other didn't. No penalty applied.
+  const lowerPrompt = input.prompt.toLowerCase();
+
+  const explicitTradeoff =
+    lowerPrompt.includes(" vs ") ||
+    lowerPrompt.includes("versus") ||
+    lowerPrompt.includes("or ") ||
+    lowerPrompt.includes("tradeoff") ||
+    lowerPrompt.includes("should i use") ||
+    lowerPrompt.includes("should i choose") ||
+    lowerPrompt.includes("should i raise") ||
+    lowerPrompt.includes("bootstrap");
+
+  const speculativeHighRisk =
+    lowerPrompt.includes("investment") ||
+    lowerPrompt.includes("invest") ||
+    lowerPrompt.includes("cryptocurrency") ||
+    lowerPrompt.includes("crypto") ||
+    lowerPrompt.includes("bitcoin") ||
+    lowerPrompt.includes("ethereum") ||
+    lowerPrompt.includes("stock") ||
+    lowerPrompt.includes("stocks") ||
+    lowerPrompt.includes("shares") ||
+    lowerPrompt.includes("asset") ||
+    lowerPrompt.includes("portfolio") ||
+    lowerPrompt.includes("long-term investment");
+
   if (input.disagreementType === "explanation_variation") score -= 4;
   else if (input.disagreementType === "conditional_alignment") score -= 12;
   else if (input.disagreementType === "material_conflict") score -= 20;
 
   if (!input.finalConclusionAligned) score -= 10;
-  if (input.riskLevel === "moderate") score -= 5;
-  else if (input.riskLevel === "high") score -= 15;
 
-  // ── Hard anchors ──────────────────────────────────────────────────────────
-  // Floors and ceilings per agreement level so the score reflects real-world
-  // expectations. High agreement on absolute questions must land in the 90s.
-  // Medium agreement must never appear as "high" trust. Low agreement is capped
-  // well below moderate so the label distinction is meaningful.
+  if (input.riskLevel === "moderate") {
+    score -= 3;
+  } else if (input.riskLevel === "high") {
+    score -= 8;
+  }
+
   if (input.agreementLevel === "high") {
     if (input.disagreementType === "none") {
-      // Hard factual certainty — both providers fully agree, no nuance at all
       score = Math.max(score, 94);
     } else if (input.disagreementType === "additive_nuance") {
-      // Same conclusion, one provider added correct detail — still strong but
-      // not as absolute as a clean factual agreement
       score = Math.max(score, 88);
     } else if (input.disagreementType === "explanation_variation") {
-      // Same conclusion, different framing — credible but less certain
       score = Math.max(score, 82);
     }
   } else if (input.agreementLevel === "medium") {
@@ -573,12 +619,26 @@ function calculateTrustScore(input: {
   } else if (input.agreementLevel === "low") {
     score = Math.min(score, 54);
   }
-  // ─────────────────────────────────────────────────────────────────────────
 
-  // Backstop cap — if risk is not low, the subject carries real uncertainty
-  // regardless of provider agreement. Prevent overconfident scores.
-  if (input.riskLevel !== "low") {
-    score = Math.min(score, 85);
+  // Only factual-style certainty gets the 95 floor.
+  if (
+    input.disagreementType === "none" &&
+    input.agreementLevel === "high" &&
+    input.riskLevel === "low" &&
+    !explicitTradeoff &&
+    !speculativeHighRisk
+  ) {
+    score = Math.max(score, 95);
+  }
+
+  // Tradeoff / choice prompts should not score like objective facts
+  if (explicitTradeoff) {
+    score = Math.min(score, 90);
+  }
+
+  // Speculative financial questions should never receive factual-grade trust
+  if (speculativeHighRisk || input.riskLevel === "high") {
+    score = Math.min(score, 70);
   }
 
   const finalScore = Math.round(clamp(score, 0, 100));
@@ -1367,21 +1427,23 @@ export async function POST(req: NextRequest) {
     );
 
     const riskLevel = getRiskLevel({
-      agreementLevel: activePair.semantic.agreementLevel,
-      disagreementType: verdictPayload.disagreementType,
-      finalConclusionAligned: verdictPayload.finalConclusionAligned,
-      promptClassification,
-    });
+  prompt,
+  agreementLevel: activePair.semantic.agreementLevel,
+  disagreementType: verdictPayload.disagreementType,
+  finalConclusionAligned: verdictPayload.finalConclusionAligned,
+  promptClassification,
+});
 
     const averageQuality = (qualityScores.scoreA + qualityScores.scoreB) / 2;
 
     const trustScore = calculateTrustScore({
-      agreementLevel: activePair.semantic.agreementLevel,
-      disagreementType: verdictPayload.disagreementType,
-      finalConclusionAligned: verdictPayload.finalConclusionAligned,
-      averageQuality,
-      riskLevel,
-    });
+  prompt,
+  agreementLevel: activePair.semantic.agreementLevel,
+  disagreementType: verdictPayload.disagreementType,
+  finalConclusionAligned: verdictPayload.finalConclusionAligned,
+  averageQuality,
+  riskLevel,
+});
 
     const responsePayload = {
       ok: true as const,
