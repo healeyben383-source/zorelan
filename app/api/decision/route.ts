@@ -44,21 +44,14 @@ const VERIFICATION_TIMEOUT_MS = 20_000;
 const MAX_PROMPT_CHARS = 10_000;
 const MAX_PROVIDERS = 2;
 const CACHE_TTL_SECONDS = 21_600; // 6 hours
-const CACHE_VERSION = "v2-calibration-2026-03-19";
+const CACHE_VERSION = "v3-single-source-ui-2026-03-19";
 
 const QUALITY_JUDGE_MODEL = "claude-haiku-4-5-20251001";
-
 const ENABLE_API_RATE_LIMIT = process.env.ENABLE_API_RATE_LIMIT === "true";
 
-// ── Confidence weighting constants ────────────────────────────────────────────
-// Threshold is 20 rather than 10 — early over-learning is a bigger risk than
-// slow learning for a system where miscalibrated weights affect verdict quality.
-// DEFAULT_QUALITY of 7.0 is a starting calibration point, not a fixed truth —
-// revisit after a real prompt-set review once data has accumulated.
 const MINIMUM_SAMPLES_FOR_WEIGHTING = 20;
 const DEFAULT_WEIGHT = 1.0;
 const DEFAULT_QUALITY = 7.0;
-// ─────────────────────────────────────────────────────────────────────────────
 
 const apiKeyRateLimit = new Ratelimit({
   redis,
@@ -132,10 +125,9 @@ type PairEvaluation = {
   semantic: Awaited<ReturnType<typeof judgeSemanticAgreementOrFallback>>;
 };
 
-// ─── Zod output schemas ───────────────────────────────────────────────────────
-
 const AgreementLevelSchema = z.enum(["high", "medium", "low"]);
 const RiskLevelSchema = z.enum(["low", "moderate", "high"]);
+const ProviderNameSchema = z.enum(["openai", "anthropic", "perplexity"]);
 const DisagreementTypeSchema = z.enum([
   "none",
   "additive_nuance",
@@ -163,6 +155,12 @@ const DecisionResponseSchema = z.object({
     label: z.enum(["high", "moderate", "low"]),
     reason: z.string(),
   }),
+  answers: z.object({
+    openai: z.string(),
+    anthropic: z.string(),
+    perplexity: z.string(),
+  }),
+  selectedProviders: z.array(ProviderNameSchema).length(2),
   providers_used: z.array(z.string()),
   verification: z.object({
     final_conclusion_aligned: z.boolean(),
@@ -213,8 +211,6 @@ const DecisionResponseSchema = z.object({
     .nullable(),
   cached: z.boolean().optional(),
 });
-
-// ─────────────────────────────────────────────────────────────────────────────
 
 function withTimeout<T>(
   promiseFactory: (signal: AbortSignal) => Promise<T>,
@@ -383,25 +379,40 @@ function normalizeVerdictWithSemantic(input: {
   semanticAgreementLevel: AgreementLevel;
   semanticLikelyConflict: boolean;
   verdictPayload: VerdictPayload;
+  promptClassification: PromptClassification;
 }): VerdictPayload {
   const normalized: VerdictPayload = { ...input.verdictPayload };
 
   if (input.semanticAgreementLevel === "high") {
-  // Semantic judge is authoritative for alignment
-  normalized.finalConclusionAligned = true;
+    normalized.finalConclusionAligned = true;
 
-  // Prevent over-penalisation from verdict LLM
+    if (
+      normalized.disagreementType === "material_conflict" ||
+      normalized.disagreementType === "conditional_alignment"
+    ) {
+      normalized.disagreementType = "explanation_variation";
+    }
+
+    if (normalized.disagreementType === "explanation_variation") {
+      normalized.disagreementType = "additive_nuance";
+    }
+  }
+
   if (
-    normalized.disagreementType === "material_conflict" ||
-    normalized.disagreementType === "conditional_alignment"
+    input.semanticAgreementLevel === "medium" &&
+    !input.semanticLikelyConflict &&
+    input.promptClassification.risk !== "low"
   ) {
-    normalized.disagreementType = "explanation_variation";
-  }
+    normalized.finalConclusionAligned = true;
 
-  if (normalized.disagreementType === "explanation_variation") {
-    normalized.disagreementType = "additive_nuance";
+    if (normalized.disagreementType === "none") {
+      normalized.disagreementType = "additive_nuance";
+    }
+
+    if (normalized.disagreementType === "material_conflict") {
+      normalized.disagreementType = "conditional_alignment";
+    }
   }
-}
 
   if (
     input.semanticAgreementLevel === "low" &&
@@ -428,9 +439,6 @@ function getModelsAligned(input: {
     case "none":
     case "additive_nuance":
     case "explanation_variation":
-      // Even if the verdict engine classified disagreement as minor, the
-      // semantic judge's agreement level is the more reliable signal.
-      // If the judge said medium, consensus should not report high.
       if (input.agreementLevel === "low") return 0;
       if (input.agreementLevel === "medium")
         return Math.max(1, input.totalProviders - 1);
@@ -456,20 +464,6 @@ function getConsensusLevelFromAligned(
   return "low";
 }
 
-/**
- * Detects whether a prompt is inherently uncertain — i.e. a tradeoff decision,
- * speculative forecast, or investment question — where high provider agreement
- * does not mean the answer is objectively certain.
- *
- * Deliberately narrow: "should I use HTTPS?" does NOT trigger this because
- * there is no genuine tradeoff. Only fires on explicit tradeoff structure,
- * speculative/investment language, or startup choice signals.
- */
-
-// ONLY showing modified sections clearly — everything else remains EXACTLY the same
-
-// ─────────────────────────────────────────────────────────────────────────────
-
 function getRiskLevel(input: {
   prompt: string;
   agreementLevel: AgreementLevel;
@@ -477,48 +471,30 @@ function getRiskLevel(input: {
   finalConclusionAligned: boolean;
   promptClassification: PromptClassification;
 }): RiskLevel {
-  const { risk: classifiedRisk } = input.promptClassification;
-  const lowerPrompt = input.prompt.toLowerCase();
+  if (input.disagreementType === "material_conflict") return "high";
 
-  const explicitTradeoff =
-    lowerPrompt.includes(" vs ") ||
-    lowerPrompt.includes("versus") ||
-    lowerPrompt.includes("or ") ||
-    lowerPrompt.includes("tradeoff") ||
-    lowerPrompt.includes("should i use") ||
-    lowerPrompt.includes("should i choose") ||
-    lowerPrompt.includes("should i raise") ||
-    lowerPrompt.includes("bootstrap");
+  if (input.promptClassification.risk === "moderate") {
+    if (!input.finalConclusionAligned) return "high";
+    return "moderate";
+  }
 
-  // High conflict always wins
-if (input.disagreementType === "material_conflict") return "high";
+  if (input.promptClassification.risk === "high") return "high";
 
-// Strategic / decision prompts should default to moderate
-if (input.promptClassification.risk === "moderate") {
-  if (!input.finalConclusionAligned) return "high";
+  if (
+    input.promptClassification.risk === "low" &&
+    input.finalConclusionAligned &&
+    (input.disagreementType === "none" ||
+      input.disagreementType === "additive_nuance" ||
+      input.disagreementType === "explanation_variation")
+  ) {
+    return "low";
+  }
+
+  if (!input.finalConclusionAligned && input.agreementLevel === "low") {
+    return "high";
+  }
+
   return "moderate";
-}
-
-// High-risk domains stay high
-if (input.promptClassification.risk === "high") return "high";
-
-// Factual / best-practice (low risk classification)
-if (
-  input.promptClassification.risk === "low" &&
-  input.finalConclusionAligned &&
-  (input.disagreementType === "none" ||
-    input.disagreementType === "additive_nuance" ||
-    input.disagreementType === "explanation_variation")
-) {
-  return "low";
-}
-
-// Fallback safety
-if (!input.finalConclusionAligned && input.agreementLevel === "low") {
-  return "high";
-}
-
-return "moderate";
 }
 
 function getConfidenceReason(input: {
@@ -563,10 +539,6 @@ function getTrustLabel(score: number): "high" | "moderate" | "low" {
   if (score >= 55) return "moderate";
   return "low";
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
-// 🔁 MODIFY calculateTrustScore (ONLY THIS SECTION CHANGES)
-// ─────────────────────────────────────────────────────────────────────────────
 
 function calculateTrustScore(input: {
   agreementLevel: AgreementLevel;
@@ -632,7 +604,6 @@ function calculateTrustScore(input: {
     score = Math.min(score, 54);
   }
 
-  // Only factual-style certainty gets the 95 floor.
   if (
     input.disagreementType === "none" &&
     input.agreementLevel === "high" &&
@@ -643,12 +614,10 @@ function calculateTrustScore(input: {
     score = Math.max(score, 95);
   }
 
-  // Tradeoff / choice prompts should not score like objective facts
   if (explicitTradeoff) {
     score = Math.min(score, 90);
   }
 
-  // Speculative financial questions should never receive factual-grade trust
   if (speculativeHighRisk || input.riskLevel === "high") {
     score = Math.min(score, 70);
   }
@@ -696,20 +665,6 @@ function calculateTrustScore(input: {
   return { score: finalScore, label: getTrustLabel(finalScore), reason };
 }
 
-// ── Confidence weighting ──────────────────────────────────────────────────────
-
-/**
- * Derives a confidence weight for a provider from its raw Redis score record.
- *
- * Raw weight = avgQuality / DEFAULT_QUALITY, normalised around 7.0.
- * Final weight is clamped to keep the signal light:
- *   0.9 ≤ weight ≤ 1.1
- *
- * Returns DEFAULT_WEIGHT (1.0) when:
- *   - no score record exists
- *   - totalRuns < MINIMUM_SAMPLES_FOR_WEIGHTING (avoids miscalibrated early weights)
- *   - qualityRatings is 0 (no quality data yet)
- */
 function getConfidenceWeight(raw: unknown): number {
   if (!raw || typeof raw !== "object") return DEFAULT_WEIGHT;
   const r = raw as Record<string, unknown>;
@@ -721,18 +676,14 @@ function getConfidenceWeight(raw: unknown): number {
     typeof r.qualityRatings === "number" ? r.qualityRatings : 0;
   if (qualityRatings === 0) return DEFAULT_WEIGHT;
   const avgQuality = totalQuality / qualityRatings;
-  // Clamped to ±10% of baseline — keeps this as a nudge, not a steering wheel.
-  // A provider scoring 9.3 avg gets weight 1.10, not 1.33.
   return clamp(avgQuality / DEFAULT_QUALITY, 0.9, 1.1);
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
 
 async function incrementAnalytic(key: string): Promise<void> {
   try {
     await redis.incr(`zorelan:analytics:${key}`);
   } catch {
-    // Analytics errors are non-fatal
+    // non-fatal
   }
 }
 
@@ -903,7 +854,7 @@ async function buildDecisionVerdict(params: {
       {
         role: "system",
         content:
-          'You are a decision-verification engine. Return JSON only with this exact shape: {"verdict":"string","keyDisagreement":"string","recommendedAction":"string","finalConclusionAligned":boolean,"disagreementType":"none|additive_nuance|explanation_variation|conditional_alignment|material_conflict"}. Judge alignment from the ORIGINAL model responses first. The verified synthesis can help summarize the situation, but it is not evidence that the original answers aligned. finalConclusionAligned should be true only when both responses support the same main conclusion. Use none when both responses reach the same conclusion and any additional detail is purely reinforcing — extra facts, examples, or context that strengthen rather than qualify the conclusion. This includes cases where one response provides more scientific, technical, or contextual detail than the other — detail difference alone is never grounds for explanation_variation or additive_nuance. When both responses describe the same core physical, biological, or factual outcome but differ in emphasis — for example, one focusing on rapid harm and another on a brief survivability window — treat these as none or additive_nuance, not as disagreement. Descriptions of different time horizons or severity framings within the same factual event are complementary, not contradictory. Use additive_nuance only when one response introduces conditions, tradeoffs, or qualifications that are absent from the other and that affect how or when the conclusion should be applied. Use explanation_variation only when both responses support the same conclusion but frame it in meaningfully different ways that could lead a reader to apply it differently. Use explanation_variation when both responses support the same conclusion but differ in framing, emphasis, or supporting reasoning. Use conditional_alignment when both responses support the same primary recommendation but one adds meaningful caveats, conditions, or tradeoffs that qualify when or how to apply it — this is NOT material_conflict. Use material_conflict ONLY when the two responses give genuinely opposing primary recommendations where following one would contradict the other — for example, one says "always use X" and the other says "use Y instead". A softened or qualified version of the same recommendation is never material_conflict. If one response says "use X" and the other says "use X in most cases, but Y may work under specific conditions", that is conditional_alignment, not material_conflict. If both responses recommend the same main action, material_conflict is usually incorrect. When responses share the same strategic direction — for example, both recommend caution, diversification, limited exposure, or a conditional approach — but differ only in specific parameters such as percentages, timing, thresholds, or emphasis, do NOT classify as material_conflict. Treat these as explanation_variation or additive_nuance. material_conflict requires fundamentally opposed recommendations where following one would contradict the other, not merely different calibrations of the same recommendation. When both responses present conditional recommendations that follow the same decision logic — for example, both say "use A for structured data, use B for flexible data" or "choose X for this context, Y for that context" — treat this as agreement (none or additive_nuance), not disagreement. Tradeoff answers that converge on "it depends on context" are aligned, not conflicted. Each response carries a confidence score (1.0 = baseline, >1.0 = historically stronger on this task type). Treat this as a light secondary signal, not as a substitute for evaluating the actual content of the responses. Do not let it override a clearly stronger current response.',
+          'You are a decision-verification engine. Return JSON only with this exact shape: {"verdict":"string","keyDisagreement":"string","recommendedAction":"string","finalConclusionAligned":boolean,"disagreementType":"none|additive_nuance|explanation_variation|conditional_alignment|material_conflict"}. Judge alignment from the ORIGINAL model responses first. The verified synthesis can help summarize the situation, but it is not evidence that the original answers aligned. finalConclusionAligned should be true only when both responses support the same main conclusion. Use none when both responses reach the same conclusion and any additional detail is purely reinforcing. Use additive_nuance only when one response introduces conditions, tradeoffs, or qualifications that affect how or when the conclusion should be applied. Use explanation_variation only when both responses support the same conclusion but frame it in meaningfully different ways. Use conditional_alignment when both responses support the same primary recommendation but one adds meaningful caveats, conditions, or tradeoffs. Use material_conflict ONLY when the two responses give genuinely opposing primary recommendations where following one would contradict the other. Tradeoff answers that converge on context are aligned, not conflicted.',
       },
       {
         role: "user",
@@ -1090,29 +1041,33 @@ export async function POST(req: NextRequest) {
 
     const taskType = detectTaskType(prompt);
 
-    // Classify the prompt once — feeds risk floor and diagnostic logging.
     const initialPromptClassification = classifyPrompt(prompt);
-const lowerPrompt = prompt.toLowerCase();
+    const lowerPrompt = prompt.toLowerCase();
 
-const isHttpsBestPractice =
-  lowerPrompt.includes("https") ||
-  lowerPrompt.includes("should i use https") ||
-  lowerPrompt.includes("ssl") ||
-  lowerPrompt.includes("tls");
+    const isHttpsBestPractice =
+      lowerPrompt.includes("https") ||
+      lowerPrompt.includes("should i use https") ||
+      lowerPrompt.includes("ssl") ||
+      lowerPrompt.includes("tls");
 
-const promptClassification = isHttpsBestPractice
-  ? {
-      ...initialPromptClassification,
-      risk: "low" as const,
-    }
-  : initialPromptClassification;
-    console.log("[/api/decision] prompt_classification", JSON.stringify({
-      domain: promptClassification.domain,
-      drivers: promptClassification.drivers,
-      stakes: promptClassification.stakes,
-      risk: promptClassification.risk,
-      reasons: promptClassification.reasons,
-    }));
+    const promptClassification = isHttpsBestPractice
+      ? {
+          ...initialPromptClassification,
+          risk: "low" as const,
+        }
+      : initialPromptClassification;
+
+    console.log(
+      "[/api/decision] prompt_classification",
+      JSON.stringify({
+        domain: promptClassification.domain,
+        drivers: promptClassification.drivers,
+        stakes: promptClassification.stakes,
+        risk: promptClassification.risk,
+        reasons: promptClassification.reasons,
+      })
+    );
+
     const { selectedProviders, rankedProviders } =
       await adaptiveSelectProviders(prompt, taskType);
 
@@ -1132,8 +1087,8 @@ const promptClassification = isHttpsBestPractice
 
     void incrementAnalytic("arbitration:total");
 
-    // ── Cache lookup ──────────────────────────────────────────────────────
     const cacheKey = generateCacheKey(prompt, limitedProviders);
+
     try {
       const cached = !cacheBypass ? await redis.get(cacheKey) : null;
       if (cached) {
@@ -1149,18 +1104,14 @@ const promptClassification = isHttpsBestPractice
     } catch (cacheErr) {
       console.warn("[/api/decision] cache_lookup_error:", cacheErr);
     }
-    // ─────────────────────────────────────────────────────────────────────
 
-    // ── Confidence weight fetch (initial pair) ────────────────────────────
-    // Weights are fetched here for the initially selected pair. If arbitration
-    // later changes the active pair, weights are re-fetched below to match.
     const [rawScoreA, rawScoreB] = await Promise.all([
       redis.get(`zorelan:score:v2:${taskType}:${providerA}`),
       redis.get(`zorelan:score:v2:${taskType}:${providerB}`),
     ]);
+
     let weightA = getConfidenceWeight(rawScoreA);
     let weightB = getConfidenceWeight(rawScoreB);
-    // ─────────────────────────────────────────────────────────────────────
 
     const providerMap: Record<ProviderName, ProviderRunner> = {
       openai: runOpenAI,
@@ -1323,9 +1274,6 @@ const promptClassification = isHttpsBestPractice
         }
       }
 
-      // ── Re-fetch confidence weights if arbitration changed the active pair ──
-      // The winning pair may include the third provider, so weights from the
-      // initial fetch may no longer apply. Always re-fetch when arbitration ran.
       if (arbitrationUsed) {
         const [rawScoreActivePairA, rawScoreActivePairB] = await Promise.all([
           redis.get(`zorelan:score:v2:${taskType}:${activePair.providerA}`),
@@ -1334,7 +1282,6 @@ const promptClassification = isHttpsBestPractice
         weightA = getConfidenceWeight(rawScoreActivePairA);
         weightB = getConfidenceWeight(rawScoreActivePairB);
       }
-      // ───────────────────────────────────────────────────────────────────────
     }
 
     if (arbitrationPairStrengths !== null && !arbitrationUsed) {
@@ -1358,9 +1305,6 @@ const promptClassification = isHttpsBestPractice
       pairStrengths: arbitrationPairStrengths,
     });
 
-    // ── Synthesis (confidence-weighted) ──────────────────────────────────────
-    // Responses are labelled with their historical confidence scores so the
-    // synthesis model receives historical confidence scores as a light secondary signal.
     const synthesisCompletion = await openai.chat.completions.create({
       model: "gpt-4o-mini",
       max_tokens: 400,
@@ -1387,15 +1331,11 @@ const promptClassification = isHttpsBestPractice
         },
       ],
     });
-    // ─────────────────────────────────────────────────────────────────────────
 
     const verifiedAnswer = stripCodeFences(
       synthesisCompletion.choices[0]?.message?.content ?? ""
     );
 
-    // ── Verdict + quality scoring ─────────────────────────────────────────────
-    // buildDecisionVerdict depends on verifiedAnswer, so it runs after synthesis.
-    // scoreAnswerQuality is independent and runs in parallel with verdict generation.
     const [verdictPayloadRaw, qualityScores] = await Promise.all([
       buildDecisionVerdict({
         prompt,
@@ -1414,23 +1354,31 @@ const promptClassification = isHttpsBestPractice
         providerB: activePair.providerB,
       }),
     ]);
-    // ─────────────────────────────────────────────────────────────────────────
 
     const verdictPayload = normalizeVerdictWithSemantic({
       semanticAgreementLevel: activePair.semantic.agreementLevel,
       semanticLikelyConflict: activePair.semantic.likelyConflict,
       verdictPayload: verdictPayloadRaw,
+      promptClassification,
     });
 
     if (
-  verdictPayload.finalConclusionAligned &&
-  (verdictPayload.disagreementType === "none" ||
-    verdictPayload.disagreementType === "additive_nuance" ||
-    verdictPayload.disagreementType === "explanation_variation")
-) {
-  verdictPayload.verdict = "aligned";
-  verdictPayload.keyDisagreement = "none";
-}
+      verdictPayload.finalConclusionAligned &&
+      (verdictPayload.disagreementType === "none" ||
+        verdictPayload.disagreementType === "additive_nuance" ||
+        verdictPayload.disagreementType === "explanation_variation")
+    ) {
+      verdictPayload.verdict = "Models are aligned on the main conclusion";
+
+      if (verdictPayload.disagreementType === "none") {
+        verdictPayload.keyDisagreement = "No meaningful disagreement";
+      } else if (verdictPayload.disagreementType === "additive_nuance") {
+        verdictPayload.keyDisagreement =
+          "Minor differences in supporting detail";
+      } else {
+        verdictPayload.keyDisagreement = "Different framing or emphasis";
+      }
+    }
 
     await Promise.all([
       updateProviderQualityScore({
@@ -1463,40 +1411,40 @@ const promptClassification = isHttpsBestPractice
     );
 
     const riskLevel = getRiskLevel({
-  prompt,
-  agreementLevel: activePair.semantic.agreementLevel,
-  disagreementType: verdictPayload.disagreementType,
-  finalConclusionAligned: verdictPayload.finalConclusionAligned,
-  promptClassification,
-});
+      prompt,
+      agreementLevel: activePair.semantic.agreementLevel,
+      disagreementType: verdictPayload.disagreementType,
+      finalConclusionAligned: verdictPayload.finalConclusionAligned,
+      promptClassification,
+    });
 
     const averageQuality = (qualityScores.scoreA + qualityScores.scoreB) / 2;
 
     const trustScore = calculateTrustScore({
-  prompt,
-  agreementLevel: activePair.semantic.agreementLevel,
-  disagreementType: verdictPayload.disagreementType,
-  finalConclusionAligned: verdictPayload.finalConclusionAligned,
-  averageQuality,
-  riskLevel,
-});
+      prompt,
+      agreementLevel: activePair.semantic.agreementLevel,
+      disagreementType: verdictPayload.disagreementType,
+      finalConclusionAligned: verdictPayload.finalConclusionAligned,
+      averageQuality,
+      riskLevel,
+    });
 
     const responsePayload = {
       ok: true as const,
       verdict: verdictPayload.verdict,
-      consensus: { level: consensusLevel, models_aligned: modelsAligned },
+      consensus: {
+        level: consensusLevel,
+        models_aligned: modelsAligned,
+      },
       risk_level: riskLevel,
       key_disagreement: verdictPayload.keyDisagreement,
       recommended_action: verdictPayload.recommendedAction,
       analysis: verifiedAnswer,
       verified_answer: verifiedAnswer,
       confidence: (() => {
-        // Confidence should reflect domain risk, not just provider agreement.
-        // High agreement in an uncertain domain is not the same as certainty.
         if (riskLevel === "high") return "low" as AgreementLevel;
-        if (riskLevel === "moderate") {
-          // Cap at medium — never report high confidence in a moderate-risk domain
-          if (consensusLevel === "high") return "medium" as AgreementLevel;
+        if (riskLevel === "moderate" && consensusLevel === "high") {
+          return "medium" as AgreementLevel;
         }
         return consensusLevel;
       })(),
@@ -1510,6 +1458,30 @@ const promptClassification = isHttpsBestPractice
         label: trustScore.label,
         reason: trustScore.reason,
       },
+      answers: {
+        openai:
+          activePair.providerA === "openai"
+            ? activePair.answerA
+            : activePair.providerB === "openai"
+            ? activePair.answerB
+            : "",
+        anthropic:
+          activePair.providerA === "anthropic"
+            ? activePair.answerA
+            : activePair.providerB === "anthropic"
+            ? activePair.answerB
+            : "",
+        perplexity:
+          activePair.providerA === "perplexity"
+            ? activePair.answerA
+            : activePair.providerB === "perplexity"
+            ? activePair.answerB
+            : "",
+      },
+      selectedProviders: [activePair.providerA, activePair.providerB] as [
+        ProviderName,
+        ProviderName,
+      ],
       providers_used: invokedProviders,
       verification: {
         final_conclusion_aligned: verdictPayload.finalConclusionAligned,
@@ -1567,7 +1539,6 @@ const promptClassification = isHttpsBestPractice
       );
     }
 
-    // ── Cache write ───────────────────────────────────────────────────────
     try {
       const { usage: _usage, ...payloadWithoutUsage } = validation.data;
       await redis.set(cacheKey, JSON.stringify(payloadWithoutUsage), {
@@ -1577,7 +1548,6 @@ const promptClassification = isHttpsBestPractice
     } catch (cacheErr) {
       console.warn("[/api/decision] cache_write_error:", cacheErr);
     }
-    // ─────────────────────────────────────────────────────────────────────
 
     return NextResponse.json(validation.data);
   } catch (err) {

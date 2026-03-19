@@ -684,37 +684,31 @@ export default function Home() {
     try {
       const prompt = buildPolishedPrompt(intent, userAnswers);
 
-      const [runRes, verifyRes] = await Promise.all([
-        fetch("/api/run", {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ prompt }),
-        }),
-        fetch("/api/verify", {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ prompt, cache_bypass: true }),
-        }),
-      ]);
+      const verifyRes = await fetch("/api/verify", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ prompt, cache_bypass: true }),
+      });
 
-      const runJson = await runRes.json().catch(() => null);
       const verifyJson = await verifyRes.json().catch(() => null);
 
-      if (!runRes.ok || !runJson?.ok) {
-        setError(runJson?.error ?? "run_failed");
-        return;
-      }
-
-      if (!verifyRes.ok) {
+      if (!verifyRes.ok || !verifyJson?.ok) {
         setError(verifyJson?.error ?? "verify_failed");
         return;
       }
 
-      // Raw provider cards still come from /api/run
-      setAnswers(runJson.answers);
-      setSelectedProviders((runJson.selectedProviders ?? []).slice(0, 2));
+      setAnswers(
+        verifyJson?.answers ?? {
+          openai: "",
+          anthropic: "",
+          perplexity: "",
+        }
+      );
 
-      // Calibrated scoring and verified answer now come from /api/verify
+      setSelectedProviders(
+        (verifyJson?.selectedProviders ?? []).slice(0, 2) as ProviderName[]
+      );
+
       setComparison({
         agreementLevel: verifyJson?.consensus?.level ?? "medium",
         likelyConflict: verifyJson?.meta?.likely_conflict ?? false,
@@ -798,8 +792,6 @@ export default function Home() {
         return;
       }
 
-      // Keep synthesize additive-only. Do not let it overwrite
-      // calibrated trust/comparison/verification state from /api/verify.
       setSynthesis(json.synthesis);
       setStructuredSynthesis(json.structuredSynthesis ?? null);
 
