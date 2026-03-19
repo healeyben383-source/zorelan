@@ -1408,6 +1408,16 @@ export async function POST(req: NextRequest) {
       verdictPayload: verdictPayloadRaw,
     });
 
+    if (
+  verdictPayload.finalConclusionAligned &&
+  (verdictPayload.disagreementType === "none" ||
+    verdictPayload.disagreementType === "additive_nuance" ||
+    verdictPayload.disagreementType === "explanation_variation")
+) {
+  verdictPayload.verdict = "aligned";
+  verdictPayload.keyDisagreement = "none";
+}
+
     await Promise.all([
       updateProviderQualityScore({
         taskType,
