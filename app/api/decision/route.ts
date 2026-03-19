@@ -494,14 +494,18 @@ function getRiskLevel(input: {
 
   // Full alignment with no meaningful disagreement should be low risk
   // before prompt-classification floors are applied.
-  if (
-    input.finalConclusionAligned &&
-    (input.disagreementType === "none" ||
-      input.disagreementType === "additive_nuance" ||
-      input.disagreementType === "explanation_variation")
-  ) {
-    return "low";
-  }
+  const isFactualLike =
+  input.promptClassification.risk === "low";
+
+if (
+  isFactualLike &&
+  input.finalConclusionAligned &&
+  (input.disagreementType === "none" ||
+    input.disagreementType === "additive_nuance" ||
+    input.disagreementType === "explanation_variation")
+) {
+  return "low";
+}
 
   if (input.disagreementType === "conditional_alignment") {
     if (classifiedRisk === "high") return "high";
@@ -1091,7 +1095,21 @@ export async function POST(req: NextRequest) {
     const taskType = detectTaskType(prompt);
 
     // Classify the prompt once — feeds risk floor and diagnostic logging.
-    const promptClassification = classifyPrompt(prompt);
+    const initialPromptClassification = classifyPrompt(prompt);
+const lowerPrompt = prompt.toLowerCase();
+
+const isHttpsBestPractice =
+  lowerPrompt.includes("https") ||
+  lowerPrompt.includes("should i use https") ||
+  lowerPrompt.includes("ssl") ||
+  lowerPrompt.includes("tls");
+
+const promptClassification = isHttpsBestPractice
+  ? {
+      ...initialPromptClassification,
+      risk: "low" as const,
+    }
+  : initialPromptClassification;
     console.log("[/api/decision] prompt_classification", JSON.stringify({
       domain: promptClassification.domain,
       drivers: promptClassification.drivers,
