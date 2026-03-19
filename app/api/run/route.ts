@@ -800,20 +800,7 @@ export async function POST(req: NextRequest) {
 
     // ── Cache lookup ──────────────────────────────────────────────────────
     const cacheKey = generateCacheKey(body.prompt, selectedProviders);
-    try {
-      const cached = await redis.get(cacheKey);
-      if (cached) {
-        const cachedPayload =
-          typeof cached === "string" ? JSON.parse(cached) : cached;
-        if (cachedPayload && typeof cachedPayload === "object") {
-          cachedPayload.cached = true;
-          console.log("[/api/run] cache_hit", { cacheKey });
-          return NextResponse.json(cachedPayload);
-        }
-      }
-    } catch (cacheErr) {
-      console.warn("[/api/run] cache_lookup_error:", cacheErr);
-    }
+// cache temporarily bypassed for debugging
     // ─────────────────────────────────────────────────────────────────────
 
     const { results, diagnostics } = await routeProviders(
