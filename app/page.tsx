@@ -386,12 +386,20 @@ const unselectedStyle = {
   border: "1px solid rgba(255,255,255,0.1)",
 };
 
+function StreamingCursor() {
+  return (
+    <span className="inline-block ml-1 w-2 animate-pulse opacity-60">▋</span>
+  );
+}
+
 function ProviderAnswerCard({
   provider,
   answer,
+  isStreaming,
 }: {
   provider: ProviderName;
   answer: string;
+  isStreaming?: boolean;
 }) {
   return (
     <div className="rounded-2xl border border-black/10 p-5 dark:border-white/10 space-y-2 min-w-0 overflow-hidden">
@@ -405,7 +413,16 @@ function ProviderAnswerCard({
       </div>
 
       <div className="min-w-0 max-w-full overflow-x-auto overflow-y-hidden [&_*]:max-w-full [&_pre]:max-w-full [&_pre]:overflow-x-auto [&_pre]:whitespace-pre-wrap [&_pre]:break-words [&_code]:break-words">
-        {renderMarkdown(answer || "No response returned.")}
+        {answer?.trim() ? (
+          <>
+            {renderMarkdown(answer)}
+            {isStreaming ? <StreamingCursor /> : null}
+          </>
+        ) : (
+          <div className="text-sm opacity-40">
+            {isStreaming ? "Starting response…" : "No response returned."}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -416,10 +433,10 @@ function LoadingProviderCard() {
     <div className="rounded-2xl border border-white/10 p-5 space-y-3">
       <div className="space-y-0.5">
         <div className="text-xs uppercase tracking-wide opacity-50">
-          Selecting AI models…
+          Getting answers from multiple AIs…
         </div>
         <div className="text-[11px] uppercase tracking-wide opacity-35">
-          Zorelan is routing the best providers for this task
+          Zorelan is choosing the best models for this task
         </div>
       </div>
       <PulsePlaceholder />
@@ -488,6 +505,8 @@ export default function Home() {
   const [selectedProviders, setSelectedProviders] = useState<ProviderName[]>(
     []
   );
+  const [streamingAnswers, setStreamingAnswers] = useState<Answers | null>(null);
+  const [isStreamingAnswers, setIsStreamingAnswers] = useState(false);
   const [synthesis, setSynthesis] = useState<string | null>(null);
   const [structuredSynthesis, setStructuredSynthesis] =
     useState<StructuredSynthesis | null>(null);
@@ -512,6 +531,7 @@ export default function Home() {
   const [highlighted, setHighlighted] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [history, setHistory] = useState<HistoryEntry[]>([]);
+  const streamingTimersRef = useRef<number[]>([]);
 
   const synthesisRef = useRef<HTMLDivElement>(null);
   const resultsRef = useRef<HTMLDivElement>(null);
@@ -524,7 +544,7 @@ export default function Home() {
   useEffect(() => {
     if (!intent) return;
     setHighlighted(true);
-    const t = setTimeout(() => setHighlighted(false), 600);
+    const t = window.setTimeout(() => setHighlighted(false), 600);
     return () => clearTimeout(t);
   }, [userAnswers, intent]);
 
@@ -568,18 +588,36 @@ export default function Home() {
     }
   }, [input]);
 
+  useEffect(() => {
+    return () => {
+      streamingTimersRef.current.forEach((id) => clearTimeout(id));
+    };
+  }, []);
+
   const canRun = useMemo(() => input.trim().length > 0 && !busy, [input, busy]);
   const canAnalyse = useMemo(() => !!intent && !running, [intent, running]);
   const canSynthesize = useMemo(
-    () => !!answers && selectedProviders.length === 2 && !synthesizing,
-    [answers, selectedProviders, synthesizing]
+    () =>
+      !!answers &&
+      selectedProviders.length === 2 &&
+      !synthesizing &&
+      !isStreamingAnswers,
+    [answers, selectedProviders, synthesizing, isStreamingAnswers]
   );
 
   const showPlaceholder = input.trim().length === 0;
 
+  function clearStreamingTimers() {
+    streamingTimersRef.current.forEach((id) => clearTimeout(id));
+    streamingTimersRef.current = [];
+  }
+
   function resetAnalysisState() {
+    clearStreamingTimers();
     setIntent(null);
     setAnswers(null);
+    setStreamingAnswers(null);
+    setIsStreamingAnswers(false);
     setSelectedProviders([]);
     setSynthesis(null);
     setStructuredSynthesis(null);
@@ -610,10 +648,13 @@ export default function Home() {
   }
 
   function loadEntry(entry: HistoryEntry) {
+    clearStreamingTimers();
     setInput(entry.input);
     setIntent(entry.intent);
     setUserAnswers(entry.userAnswers);
     setAnswers(entry.answers);
+    setStreamingAnswers(entry.answers);
+    setIsStreamingAnswers(false);
     setSelectedProviders(entry.selectedProviders ?? ["openai", "anthropic"]);
     setSynthesis(entry.synthesis);
     setStructuredSynthesis(entry.structuredSynthesis ?? null);
@@ -641,6 +682,73 @@ export default function Home() {
   function clearHistory() {
     saveHistory([]);
     setHistory([]);
+  }
+
+  function streamText(
+    fullText: string,
+    onChunk: (text: string) => void,
+    onDone?: () => void,
+    speed = 8
+  ) {
+    let index = 0;
+
+    const step = () => {
+      index = Math.min(index + speed, fullText.length);
+      onChunk(fullText.slice(0, index));
+
+      if (index < fullText.length) {
+        const timeout = window.setTimeout(step, 12);
+        streamingTimersRef.current.push(timeout);
+      } else {
+        onDone?.();
+      }
+    };
+
+    step();
+  }
+
+  function streamProviderAnswers(
+    fullAnswers: Answers,
+    providers: ProviderName[]
+  ) {
+    clearStreamingTimers();
+
+    setIsStreamingAnswers(true);
+    setStreamingAnswers({
+      openai: "",
+      anthropic: "",
+      perplexity: "",
+    });
+
+    let finishedCount = 0;
+
+    const markDone = () => {
+      finishedCount += 1;
+      if (finishedCount >= providers.length) {
+        setIsStreamingAnswers(false);
+      }
+    };
+
+    providers.forEach((provider, providerIndex) => {
+      const fullText = fullAnswers[provider] ?? "";
+      const starterDelay = providerIndex * 400;
+
+      const starter = window.setTimeout(() => {
+        streamText(
+          fullText,
+          (chunk) => {
+            setStreamingAnswers((prev) => ({
+              ...(prev ?? { openai: "", anthropic: "", perplexity: "" }),
+              [provider]: chunk,
+            }));
+          },
+          markDone,
+          10
+        );
+      }, starterDelay);
+
+      streamingTimersRef.current.push(starter);
+    });
   }
 
   async function onPreframe() {
@@ -672,8 +780,11 @@ export default function Home() {
   async function onRunAnalysis() {
     if (!intent) return;
 
+    clearStreamingTimers();
     setRunning(true);
     setAnswers(null);
+    setStreamingAnswers(null);
+    setIsStreamingAnswers(false);
     setSelectedProviders([]);
     setSynthesis(null);
     setStructuredSynthesis(null);
@@ -704,17 +815,20 @@ export default function Home() {
         return;
       }
 
-      setAnswers(
+      const fullAnswers: Answers =
         verifyJson?.answers ?? {
           openai: "",
           anthropic: "",
           perplexity: "",
-        }
-      );
+        };
 
-      setSelectedProviders(
-        (verifyJson?.selectedProviders ?? []).slice(0, 2) as ProviderName[]
-      );
+      const providerPair = (verifyJson?.selectedProviders ?? []).slice(
+        0,
+        2
+      ) as ProviderName[];
+
+      setAnswers(fullAnswers);
+      setSelectedProviders(providerPair);
 
       setComparison({
         agreementLevel: verifyJson?.consensus?.level ?? "medium",
@@ -752,7 +866,10 @@ export default function Home() {
           : null
       );
 
-      setSynthesis(verifyJson?.verified_answer ?? null);
+      // Restore manual synthesis flow.
+      setSynthesis(null);
+      setStructuredSynthesis(null);
+
       setCached(verifyJson?.cached ?? false);
 
       setTimeout(() => {
@@ -761,6 +878,13 @@ export default function Home() {
           block: "start",
         });
       }, 100);
+
+      setStreamingAnswers({
+        openai: "",
+        anthropic: "",
+        perplexity: "",
+      });
+      streamProviderAnswers(fullAnswers, providerPair);
     } finally {
       setRunning(false);
     }
@@ -865,6 +989,8 @@ export default function Home() {
     selectedProviders.length === 2
       ? selectedProviders
       : ["openai", "anthropic"];
+
+  const displayedAnswers = streamingAnswers ?? answers;
 
   const SynthesizeButton = () => (
     <SecondaryActionButton onClick={onSynthesize} disabled={!canSynthesize}>
@@ -1050,20 +1176,21 @@ export default function Home() {
 
           <div className="space-y-2">
             <p className="text-base md:text-sm opacity-80">
-              Verify AI before you trust it.
+              Get clearer answers by asking better questions.
             </p>
             <p className="mx-auto max-w-2xl text-base md:text-sm opacity-55 leading-relaxed">
-              Zorelan compares multiple models and returns a verified answer with
-              calibrated trust — not just agreement.
+              Zorelan helps you structure your question, add missing context,
+              and create a stronger prompt for AI. When it matters, you can also
+              compare answers across multiple models.
             </p>
           </div>
 
           <div className="flex flex-wrap items-center justify-center gap-3 text-sm md:text-xs opacity-45">
-            <span>Consensus</span>
+            <span>Better Prompts</span>
             <span>•</span>
-            <span>Risk</span>
+            <span>Clearer Answers</span>
             <span>•</span>
-            <span>Trust Score</span>
+            <span>Optional Verification</span>
           </div>
 
           <div className="inline-flex rounded-xl border border-black/10 p-1 dark:border-white/10">
@@ -1141,9 +1268,13 @@ export default function Home() {
               >
                 <div className="mb-5">What are you trying to figure out?</div>
                 <div>
-                  Type any question, decision, or problem and Zorelan will
-                  structure it, verify it across multiple models, and return a
-                  trust-aware answer.
+                  Type any question, decision, or problem. Zorelan will turn it
+                  into a clearer prompt, help you fill in missing context, and
+                  make it easier to get a better answer from AI.
+                </div>
+                <div className="mt-4">
+                  You can also compare how multiple AI models respond when the
+                  answer really matters.
                 </div>
               </div>
             )}
@@ -1271,7 +1402,7 @@ export default function Home() {
               </div>
 
               <div className="text-xs uppercase tracking-wide opacity-50 mb-2">
-                Ready to use
+                Your improved prompt
               </div>
               <p className="text-sm leading-relaxed whitespace-pre-wrap break-words">
                 {buildPolishedPrompt(intent, userAnswers)}
@@ -1297,10 +1428,10 @@ export default function Home() {
               {running ? (
                 <>
                   <Spinner />
-                  Running analysis…
+                  Getting answers from multiple AIs…
                 </>
               ) : (
-                "Run Analysis"
+                "See how different AIs answer this"
               )}
             </PrimaryActionButton>
 
@@ -1315,7 +1446,7 @@ export default function Home() {
         {running && (
           <section className="space-y-4">
             <div className="text-xs uppercase tracking-wide opacity-50 text-center">
-              Querying AI models…
+              Getting answers from multiple AIs…
             </div>
 
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
@@ -1431,24 +1562,28 @@ export default function Home() {
             )}
 
             <div className="text-xs uppercase tracking-wide opacity-50 text-center">
-              AI Comparison
+              Different AI answers
             </div>
 
-            <div className="md:hidden">
-              <SynthesizeButton />
-            </div>
+            <p className="text-sm md:text-xs text-center opacity-55">
+              These models do not always agree — compare before deciding.
+            </p>
 
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
               {comparisonProviders.map((provider) => (
                 <ProviderAnswerCard
                   key={provider}
                   provider={provider}
-                  answer={answers[provider] || "No response returned."}
+                  answer={displayedAnswers?.[provider] || ""}
+                  isStreaming={isStreamingAnswers}
                 />
               ))}
             </div>
 
-            <div className="hidden md:block">
+            <div className="space-y-2">
+              <p className="text-sm md:text-xs text-center opacity-55">
+                Now combine the strongest parts into one answer.
+              </p>
               <SynthesizeButton />
             </div>
           </section>
@@ -1470,7 +1605,7 @@ export default function Home() {
           >
             <div className="flex items-center justify-between gap-3 flex-wrap">
               <div className="text-xs uppercase tracking-wide opacity-50">
-                Verified Decision
+                Verified Answer
               </div>
               {(comparison || decisionVerification) && (
                 <div
@@ -1626,7 +1761,7 @@ export default function Home() {
               </div>
 
               <div className="text-xs uppercase tracking-wide opacity-50">
-                Explanation
+                Why
               </div>
               <div className="min-w-0 max-w-full overflow-x-auto [&_*]:max-w-full [&_pre]:max-w-full [&_pre]:overflow-x-auto [&_pre]:whitespace-pre-wrap [&_pre]:break-words [&_code]:break-words">
                 {renderMarkdown(synthesis)}
