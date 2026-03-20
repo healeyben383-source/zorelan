@@ -28,6 +28,15 @@ const curlExample = `curl -X POST https://zorelan.com/v1/decision \\
   -H "Content-Type: application/json" \\
   -d '{"prompt": "Should I use HTTPS for my web application?"}'`;
 
+const advancedCurlExample = `curl -X POST https://zorelan.com/v1/decision \\
+  -H "Authorization: Bearer YOUR_API_KEY" \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "prompt": "Determine whether HTTPS should be used for a production web application. Include security, SEO, and compliance considerations.",
+    "raw_prompt": "Should I use HTTPS for my web application?",
+    "cache_bypass": true
+  }'`;
+
 const nodeExample = `import { Zorelan } from "@zorelan/sdk";
 
 const zorelan = new Zorelan(process.env.ZORELAN_API_KEY!);
@@ -61,10 +70,16 @@ print(data["trust_score"]["score"])
 print(data["consensus"]["level"])
 print(data["cached"])  # True if result was cached`;
 
+const advancedJsonExample = `{
+  "prompt": "Determine whether HTTPS should be used for a production web application. Include security, SEO, and compliance considerations.",
+  "raw_prompt": "Should I use HTTPS for my web application?",
+  "cache_bypass": true
+}`;
+
 const responseExample = `{
   "ok": true,
   "verified_answer": "Yes — you should use HTTPS for your web application. The providers agree that HTTPS is standard practice for protecting user data, securing sessions, and establishing trust.",
-  "verdict": "Both responses recommend using HTTPS for a web application.",
+  "verdict": "Models are aligned on the main conclusion",
   "consensus": {
     "level": "high",
     "models_aligned": 2
@@ -72,12 +87,12 @@ const responseExample = `{
   "trust_score": {
     "score": 94,
     "label": "high",
-    "reason": "The providers reached the same core conclusion on a low-risk best-practice question."
+    "reason": "The original answers support the same main conclusion, Models strongly agree on the core conclusion, provider output quality is strong, with no meaningful disagreement; overall risk is low."
   },
   "risk_level": "low",
   "confidence": "high",
-  "confidence_reason": "Both models reached the same core conclusion with no meaningful conflict.",
-  "key_disagreement": "No meaningful difference in conclusion.",
+  "confidence_reason": "Both models reached the same core conclusion with no meaningful disagreement.",
+  "key_disagreement": "No meaningful disagreement",
   "recommended_action": "Use the shared conclusion as the answer.",
   "cached": false,
   "providers_used": ["anthropic", "perplexity"],
@@ -96,22 +111,24 @@ const responseExample = `{
     "pair_strengths": null
   },
   "model_diagnostics": {
-    "anthropic": { "quality_score": 9, "duration_ms": 4571, "timed_out": false },
-    "perplexity": { "quality_score": 8, "duration_ms": 5158, "timed_out": false }
+    "anthropic": { "quality_score": 9, "duration_ms": 4571, "timed_out": false, "used_fallback": false },
+    "perplexity": { "quality_score": 8, "duration_ms": 5158, "timed_out": false, "used_fallback": false }
   },
   "meta": {
     "task_type": "general",
     "overlap_ratio": 0.42,
     "agreement_summary": "The two model outputs support the same main conclusion.",
-    "prompt_chars": 44,
+    "prompt_chars": 42,
+    "execution_prompt_chars": 118,
     "likely_conflict": false,
-    "disagreement_type": "none"
+    "disagreement_type": "none",
+    "initial_pair": ["anthropic", "perplexity"]
   },
   "usage": {
     "plan": "pro",
-    "calls_limit": 1000,
-    "calls_used": 42,
-    "calls_remaining": 958,
+    "callsLimit": 1000,
+    "callsUsed": 42,
+    "callsRemaining": 958,
     "status": "active"
   }
 }`;
@@ -139,7 +156,7 @@ const feedbackPostExample = `curl -X POST https://zorelan.com/api/feedback \\
   -H "Content-Type: application/json" \\
   -d '{
     "prompt": "Should I use HTTPS for my web application?",
-    "verdict": "Both models recommend using HTTPS.",
+    "verdict": "Models are aligned on the main conclusion",
     "issue": "incorrect_verdict",
     "correct_answer": "HTTPS should be used by default for production web applications.",
     "request_id": "req_abc123",
@@ -153,12 +170,12 @@ const responseFields = [
   {
     field: "verified_answer",
     type: "string",
-    desc: "The synthesized final answer combining the best insights from all models.",
+    desc: "The synthesized final answer combining the best insights from the active provider pair.",
   },
   {
     field: "verdict",
     type: "string",
-    desc: "A concise one-sentence decision verdict.",
+    desc: "A concise decision verdict describing the overall result.",
   },
   {
     field: "consensus.level",
@@ -203,7 +220,7 @@ const responseFields = [
   {
     field: "cached",
     type: "boolean",
-    desc: 'false on a fresh live verification. true when the result was served from cache — meaning this exact prompt was verified within the last 6 hours and the stored result is being returned. Use cache_bypass: true to force a fresh verification.',
+    desc: 'false on a fresh live verification. true when the result was served from cache — meaning this calibrated prompt path was verified within the last 6 hours and the stored result is being returned. Use cache_bypass: true to force a fresh verification.',
   },
   {
     field: "providers_used",
@@ -233,7 +250,17 @@ const responseFields = [
   {
     field: "meta.task_type",
     type: "string",
-    desc: '"technical" · "strategy" · "creative" · "general" — detected category of the prompt.',
+    desc: '"technical" · "strategy" · "creative" · "general" — detected category of the calibrated prompt.',
+  },
+  {
+    field: "meta.prompt_chars",
+    type: "number",
+    desc: "Character count of the calibrated prompt path. When raw_prompt is provided, this reflects raw_prompt.",
+  },
+  {
+    field: "meta.execution_prompt_chars",
+    type: "number",
+    desc: "Character count of the execution prompt sent to providers. Present when execution and calibration prompts differ.",
   },
   {
     field: "usage",
@@ -247,6 +274,11 @@ const errorCodes = [
     status: "400",
     code: "missing_prompt",
     desc: 'The request body is missing the required "prompt" field.',
+  },
+  {
+    status: "400",
+    code: "invalid_raw_prompt",
+    desc: 'The optional "raw_prompt" field was provided but is not a string.',
   },
   {
     status: "400",
@@ -299,7 +331,7 @@ const disagreementTypes = [
   {
     type: "conditional_alignment",
     impact: "−12 pts",
-    desc: "A usable answer exists only by adding context or conditions. Models didn't cleanly agree.",
+    desc: "A usable answer exists only by adding context or conditions. Models did not cleanly agree.",
   },
   {
     type: "material_conflict",
@@ -418,7 +450,6 @@ export default function ApiDocsPage() {
         <CheckoutStatusBanner />
       </Suspense>
 
-      {/* Hero */}
       <div className="mb-14">
         <SectionLabel>Developer API</SectionLabel>
         <h1 className="text-4xl font-semibold tracking-tight mb-4">
@@ -465,7 +496,6 @@ export default function ApiDocsPage() {
         </div>
       </div>
 
-      {/* 2-second understanding block */}
       <section className="mb-12">
         <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-6">
           <div className="grid gap-6 md:grid-cols-2">
@@ -500,7 +530,6 @@ Verified answer + trust score`}
         </div>
       </section>
 
-      {/* SDK Quickstart */}
       <section className="mb-12">
         <SectionLabel>Quickstart</SectionLabel>
         <h2 className="text-xl font-semibold mb-4">Install the SDK</h2>
@@ -516,7 +545,6 @@ Verified answer + trust score`}
         </div>
       </section>
 
-      {/* Quick outcome block */}
       <section className="mb-12">
         <SectionLabel>Outputs</SectionLabel>
         <h2 className="text-xl font-semibold mb-4">What you get back</h2>
@@ -536,7 +564,6 @@ Verified answer + trust score`}
         </div>
       </section>
 
-      {/* Use cases */}
       <section className="mb-12">
         <SectionLabel>Use Cases</SectionLabel>
         <h2 className="text-xl font-semibold mb-4">Where to use Zorelan</h2>
@@ -569,7 +596,6 @@ Verified answer + trust score`}
         </div>
       </section>
 
-      {/* Integration example */}
       <section className="mb-12">
         <SectionLabel>Example</SectionLabel>
         <h2 className="text-xl font-semibold mb-4">
@@ -599,7 +625,6 @@ Verified answer + trust score`}
         </div>
       </section>
 
-      {/* Why not just use one model */}
       <section className="mb-12">
         <SectionLabel>Positioning</SectionLabel>
         <h2 className="text-xl font-semibold mb-4">
@@ -608,7 +633,7 @@ Verified answer + trust score`}
 
         <p className="text-white/60 leading-relaxed mb-6 max-w-2xl">
           A single model can give you a fast answer — but it gives you no
-          built-in verification layer. You don’t know if it’s correct,
+          built-in verification layer. You do not know if it is correct,
           partially correct, or confidently wrong. Zorelan compares multiple
           model outputs and returns a structured confidence signal you can use
           in your product. Crucially, it does not treat model agreement as
@@ -635,7 +660,6 @@ Verified answer + trust score`}
 
       <Divider />
 
-      {/* How it works */}
       <section className="mb-12">
         <SectionLabel>Overview</SectionLabel>
         <h2 className="text-xl font-semibold mb-4">How it works</h2>
@@ -668,9 +692,58 @@ Trust score + verified answer`}
         </p>
       </section>
 
+      <section className="mb-12">
+        <SectionLabel>Execution vs Calibration</SectionLabel>
+        <h2 className="text-xl font-semibold mb-4">
+          Prompt optimization without distorting trust
+        </h2>
+
+        <p className="text-white/60 leading-relaxed mb-6">
+          Zorelan supports both a provider-facing execution prompt and an
+          original raw prompt for calibration. This allows you to optimize model
+          performance without inflating confidence on inherently uncertain
+          questions.
+        </p>
+
+        <div className="grid gap-4 md:grid-cols-2 mb-6">
+          <FeatureCard title="prompt">
+            The execution prompt sent to providers. Use this when you want to
+            structure or optimize how the models answer.
+          </FeatureCard>
+          <FeatureCard title="raw_prompt">
+            The original human question used for task detection, risk
+            classification, and trust scoring. Use this when prompt engineering
+            would otherwise distort confidence.
+          </FeatureCard>
+        </div>
+
+        <CodeBlock
+          label="dual-prompt model"
+          code={`raw_prompt
+    ↓
+Task detection + risk classification + trust calibration
+
+prompt
+    ↓
+Provider execution + synthesis
+
+Result
+    ↓
+Better answers, honest trust scoring`}
+        />
+
+        <div className="mt-4">
+          <InfoBox>
+            If <InlineCode>raw_prompt</InlineCode> is omitted, Zorelan falls
+            back to using <InlineCode>prompt</InlineCode> for both execution and
+            calibration. This preserves backward compatibility with the original
+            API contract.
+          </InfoBox>
+        </div>
+      </section>
+
       <Divider />
 
-      {/* Authentication */}
       <section className="mb-12">
         <SectionLabel>Authentication</SectionLabel>
         <h2 className="text-xl font-semibold mb-4">Authentication</h2>
@@ -691,7 +764,6 @@ Content-Type: application/json`}
 
       <Divider />
 
-      {/* Endpoint */}
       <section className="mb-12">
         <SectionLabel>API Reference</SectionLabel>
         <h2 className="text-xl font-semibold mb-4">POST /v1/decision</h2>
@@ -712,7 +784,6 @@ Content-Type: application/json`}
         </p>
       </section>
 
-      {/* Request */}
       <section className="mb-12">
         <h2 className="text-xl font-semibold mb-4">Request body</h2>
         <Table
@@ -726,7 +797,12 @@ Content-Type: application/json`}
                 </span>
               </>,
               "string",
-              "The question or decision you want verified. Plain natural language. Max 10,000 characters.",
+              "The execution prompt sent to AI providers. Plain natural language or a structured prompt. Max 10,000 characters.",
+            ],
+            [
+              "raw_prompt",
+              "string",
+              "Optional. The original human question used for task detection, risk classification, and trust calibration. When omitted, Zorelan uses prompt for both execution and calibration.",
             ],
             [
               "cache_bypass",
@@ -735,27 +811,30 @@ Content-Type: application/json`}
             ],
           ]}
         />
-        <div className="mt-4">
+        <div className="mt-4 space-y-4">
           <CodeBlock
-            label="json · request"
+            label="json · simple request"
             code={`{
   "prompt": "Should I use HTTPS for my web application?"
 }`}
           />
+          <CodeBlock
+            label="json · advanced request"
+            code={advancedJsonExample}
+          />
         </div>
       </section>
 
-      {/* Quickstart examples */}
       <section className="mb-12">
         <h2 className="text-xl font-semibold mb-6">Quickstart examples</h2>
         <div className="space-y-4">
           <CodeBlock label="curl" code={curlExample} />
+          <CodeBlock label="curl · advanced dual-prompt" code={advancedCurlExample} />
           <CodeBlock label="node.js / typescript SDK" code={nodeExample} />
           <CodeBlock label="python" code={pythonExample} />
         </div>
       </section>
 
-      {/* Response */}
       <section className="mb-12">
         <h2 className="text-xl font-semibold mb-4">Response</h2>
         <p className="text-white/60 leading-relaxed mb-6">
@@ -765,7 +844,6 @@ Content-Type: application/json`}
         <CodeBlock label="json · response" code={responseExample} />
       </section>
 
-      {/* Response fields */}
       <section className="mb-12">
         <h2 className="text-xl font-semibold mb-4">Response fields</h2>
         <Table
@@ -780,16 +858,15 @@ Content-Type: application/json`}
 
       <Divider />
 
-      {/* Caching */}
       <section className="mb-12">
         <SectionLabel>Caching</SectionLabel>
         <h2 className="text-xl font-semibold mb-4">Verified result caching</h2>
         <p className="text-white/60 leading-relaxed mb-6">
           Zorelan caches verified results for 6 hours. The first request for a
-          given prompt runs the full verification pipeline — querying multiple
-          AI providers, running the semantic agreement judge, and producing a
-          trust score. Subsequent identical requests within the cache window
-          return the stored verified result instantly.
+          given calibrated prompt path runs the full verification pipeline —
+          querying multiple AI providers, running the semantic agreement judge,
+          and producing a trust score. Subsequent identical requests within the
+          cache window return the stored verified result instantly.
         </p>
         <InfoBox>
           A cached response is not an unverified response. It is a previously
@@ -825,8 +902,9 @@ Content-Type: application/json`}
           Every response includes a <InlineCode>cached</InlineCode> field so
           your application always knows whether it received a fresh live
           verification or a recently verified cached result. Cache keys are
-          scoped to the prompt and provider pair — different provider
-          combinations produce separate cache entries.
+          scoped to the calibrated prompt path and provider pair. When{" "}
+          <InlineCode>raw_prompt</InlineCode> is provided, caching is anchored to
+          that trust-calibration input.
         </p>
         <h3 className="text-base font-semibold mt-8 mb-3">
           Bypassing the cache
@@ -847,7 +925,6 @@ Content-Type: application/json`}
 
       <Divider />
 
-      {/* Errors */}
       <section className="mb-12">
         <SectionLabel>Errors</SectionLabel>
         <h2 className="text-xl font-semibold mb-4">Error codes</h2>
@@ -880,7 +957,6 @@ Content-Type: application/json`}
 
       <Divider />
 
-      {/* Trust scoring */}
       <section className="mb-12">
         <SectionLabel>Concepts</SectionLabel>
         <h2 className="text-xl font-semibold mb-4">How trust scoring works</h2>
@@ -917,20 +993,26 @@ Content-Type: application/json`}
 
         <div className="mt-6 mb-6">
           <Table
-            headers={["Prompt", "Consensus", "Risk", "Trust score", "Interpretation"]}
+            headers={[
+              "Prompt",
+              "Consensus",
+              "Risk",
+              "Trust score",
+              "Interpretation",
+            ]}
             rows={[
               [
                 "Is water made of hydrogen and oxygen?",
                 "High",
                 "Low",
-                "94",
+                "94–95",
                 "Objective fact with strong provider alignment.",
               ],
               [
                 "Should I use TypeScript or JavaScript for a new project?",
                 "High",
                 "Moderate",
-                "~85",
+                "~85–88",
                 "Strong aligned reasoning, but still a context-dependent tradeoff.",
               ],
               [
@@ -981,10 +1063,16 @@ Content-Type: application/json`}
             Zorelan is designed to avoid presenting aligned speculation as hard
             certainty.
           </p>
+          <p>
+            When <InlineCode>raw_prompt</InlineCode> is provided, trust scoring
+            is calibrated against the original human question, not just the
+            optimized execution prompt sent to providers. This helps preserve
+            honest confidence even when you use prompt engineering to improve
+            answer quality.
+          </p>
         </div>
       </section>
 
-      {/* Disagreement types */}
       <section className="mb-12">
         <h2 className="text-xl font-semibold mb-4">Disagreement types</h2>
         <p className="text-white/60 leading-relaxed mb-6">
@@ -1002,7 +1090,6 @@ Content-Type: application/json`}
         />
       </section>
 
-      {/* Arbitration */}
       <section className="mb-12">
         <h2 className="text-xl font-semibold mb-4">Arbitration</h2>
         <p className="text-white/60 leading-relaxed mb-6">
@@ -1039,7 +1126,6 @@ Trust score recalculated on winning pair`}
 
       <Divider />
 
-      {/* Rate limits */}
       <section className="mb-12">
         <SectionLabel>Account</SectionLabel>
         <h2 className="text-xl font-semibold mb-4">Rate limits</h2>
@@ -1060,7 +1146,6 @@ Trust score recalculated on winning pair`}
 
       <Divider />
 
-      {/* Feedback API */}
       <section className="mb-12">
         <SectionLabel>Feedback API</SectionLabel>
         <h2 className="text-xl font-semibold mb-4">Submit feedback</h2>
@@ -1193,7 +1278,6 @@ Trust score recalculated on winning pair`}
 
       <Divider />
 
-      {/* Access */}
       <section className="mb-12">
         <SectionLabel>Access</SectionLabel>
         <h2 className="text-xl font-semibold mb-4">Get your API key</h2>
@@ -1209,7 +1293,6 @@ Trust score recalculated on winning pair`}
 
       <Divider />
 
-      {/* CTA */}
       <section>
         <div className="rounded-2xl border border-white/10 p-8 text-center space-y-4">
           <h2 className="text-xl font-semibold">Ready to integrate?</h2>

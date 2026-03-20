@@ -485,7 +485,9 @@ export default function Home() {
   const [intent, setIntent] = useState<Intent | null>(null);
   const [userAnswers, setUserAnswers] = useState<string[]>(["", "", ""]);
   const [answers, setAnswers] = useState<Answers | null>(null);
-  const [selectedProviders, setSelectedProviders] = useState<ProviderName[]>([]);
+  const [selectedProviders, setSelectedProviders] = useState<ProviderName[]>(
+    []
+  );
   const [synthesis, setSynthesis] = useState<string | null>(null);
   const [structuredSynthesis, setStructuredSynthesis] =
     useState<StructuredSynthesis | null>(null);
@@ -682,12 +684,17 @@ export default function Home() {
     setError(null);
 
     try {
-      const prompt = buildPolishedPrompt(intent, userAnswers);
+      const rawPrompt = input.trim();
+      const executionPrompt = buildPolishedPrompt(intent, userAnswers);
 
       const verifyRes = await fetch("/api/verify", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ prompt, cache_bypass: true }),
+        body: JSON.stringify({
+          prompt: executionPrompt,
+          raw_prompt: rawPrompt,
+          cache_bypass: true,
+        }),
       });
 
       const verifyJson = await verifyRes.json().catch(() => null);
@@ -917,7 +924,9 @@ export default function Home() {
       ? "medium"
       : decisionVerification?.riskLevel === "high"
       ? "low"
-      : decisionVerification?.consensus.level ?? comparison?.agreementLevel ?? "medium";
+      : decisionVerification?.consensus.level ??
+        comparison?.agreementLevel ??
+        "medium";
 
   const displayedConsensusLevel: "high" | "medium" | "low" =
     decisionVerification?.consensus.level ??

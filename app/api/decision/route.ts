@@ -44,7 +44,7 @@ const VERIFICATION_TIMEOUT_MS = 20_000;
 const MAX_PROMPT_CHARS = 10_000;
 const MAX_PROVIDERS = 2;
 const CACHE_TTL_SECONDS = 21_600; // 6 hours
-const CACHE_VERSION = "v3-single-source-ui-2026-03-19";
+const CACHE_VERSION = "v4-raw-truth-execution-split-2026-03-20";
 
 const QUALITY_JUDGE_MODEL = "claude-haiku-4-5-20251001";
 const ENABLE_API_RATE_LIMIT = process.env.ENABLE_API_RATE_LIMIT === "true";
@@ -196,6 +196,7 @@ const DecisionResponseSchema = z.object({
     overlap_ratio: z.number(),
     agreement_summary: z.string(),
     prompt_chars: z.number(),
+    execution_prompt_chars: z.number().optional(),
     likely_conflict: z.boolean(),
     disagreement_type: DisagreementTypeSchema,
     initial_pair: z.array(z.string()),
@@ -340,6 +341,28 @@ function stripCodeFences(text: string): string {
     .trim();
 }
 
+function cleanEncoding(text: string): string {
+  return text
+    .replace(/â€™|â€˜/g, "'")
+    .replace(/â€œ|â€/g, '"')
+    .replace(/â€“|â€”/g, "-")
+    .replace(/Â°/g, "°")
+    .replace(/â†’/g, "→")
+    .replace(/â‰¥/g, "≥")
+    .replace(/â‰¤/g, "≤")
+    .replace(/âˆ’/g, "-")
+    .replace(/â‚‚/g, "₂")
+    .replace(/â‚ƒ/g, "₃")
+    .replace(/â‚„/g, "₄")
+    .replace(/â‚…/g, "₅")
+    .replace(/â‚†/g, "₆")
+    .replace(/â‚‡/g, "₇")
+    .replace(/â‚ˆ/g, "₈")
+    .replace(/â‚‰/g, "₉")
+    .replace(/â‚€/g, "₀")
+    .replace(/Â/g, "");
+}
+
 function isDisagreementType(value: unknown): value is DisagreementType {
   return (
     value === "none" ||
@@ -381,6 +404,19 @@ function normalizeVerdictWithSemantic(input: {
   verdictPayload: VerdictPayload;
   promptClassification: PromptClassification;
 }): VerdictPayload {
+
+  // 🔥 HARD FIX: force absolute alignment for low-risk factual prompts
+  if (
+    input.promptClassification.risk === "low" &&
+    input.semanticAgreementLevel === "high"
+  ) {
+    return {
+      ...input.verdictPayload,
+      finalConclusionAligned: true,
+      disagreementType: "none",
+    };
+  }
+
   const normalized: VerdictPayload = { ...input.verdictPayload };
 
   if (input.semanticAgreementLevel === "high") {
@@ -1008,13 +1044,23 @@ export async function POST(req: NextRequest) {
     }
 
     const body = await req.json().catch(() => null);
-    const prompt = body?.prompt;
+    const executionPrompt = body?.prompt;
+    const rawPrompt =
+      typeof body?.raw_prompt === "string" && body.raw_prompt.trim()
+        ? body.raw_prompt.trim()
+        : executionPrompt;
     const cacheBypass = body?.cache_bypass === true;
 
-    if (!prompt || typeof prompt !== "string") {
+    if (!executionPrompt || typeof executionPrompt !== "string") {
       return badRequest("missing_prompt");
     }
-    if (prompt.length > MAX_PROMPT_CHARS) {
+    if (executionPrompt.length > MAX_PROMPT_CHARS) {
+      return badRequest("prompt_too_large");
+    }
+    if (!rawPrompt || typeof rawPrompt !== "string") {
+      return badRequest("missing_prompt");
+    }
+    if (rawPrompt.length > MAX_PROMPT_CHARS) {
       return badRequest("prompt_too_large");
     }
 
@@ -1039,10 +1085,10 @@ export async function POST(req: NextRequest) {
       };
     }
 
-    const taskType = detectTaskType(prompt);
+    const taskType = detectTaskType(rawPrompt);
 
-    const initialPromptClassification = classifyPrompt(prompt);
-    const lowerPrompt = prompt.toLowerCase();
+    const initialPromptClassification = classifyPrompt(rawPrompt);
+    const lowerPrompt = rawPrompt.toLowerCase();
 
     const isHttpsBestPractice =
       lowerPrompt.includes("https") ||
@@ -1058,6 +1104,16 @@ export async function POST(req: NextRequest) {
       : initialPromptClassification;
 
     console.log(
+      "[/api/decision] prompt_split",
+      JSON.stringify({
+        raw_prompt_preview: rawPrompt.slice(0, 120),
+        execution_prompt_preview: executionPrompt.slice(0, 120),
+        raw_prompt_chars: rawPrompt.length,
+        execution_prompt_chars: executionPrompt.length,
+      })
+    );
+
+    console.log(
       "[/api/decision] prompt_classification",
       JSON.stringify({
         domain: promptClassification.domain,
@@ -1069,7 +1125,7 @@ export async function POST(req: NextRequest) {
     );
 
     const { selectedProviders, rankedProviders } =
-      await adaptiveSelectProviders(prompt, taskType);
+      await adaptiveSelectProviders(rawPrompt, taskType);
 
     const limitedProviders = selectedProviders.slice(
       0,
@@ -1087,7 +1143,7 @@ export async function POST(req: NextRequest) {
 
     void incrementAnalytic("arbitration:total");
 
-    const cacheKey = generateCacheKey(prompt, limitedProviders);
+    const cacheKey = generateCacheKey(rawPrompt, limitedProviders);
 
     try {
       const cached = !cacheBypass ? await redis.get(cacheKey) : null;
@@ -1123,12 +1179,12 @@ export async function POST(req: NextRequest) {
 
     const [resultA, resultB] = await Promise.all([
       withTimeout(
-        (signal) => providerMap[providerA](prompt, signal),
+        (signal) => providerMap[providerA](executionPrompt, signal),
         TIMEOUT_MS,
         `${providerA} timed out.`
       ),
       withTimeout(
-        (signal) => providerMap[providerB](prompt, signal),
+        (signal) => providerMap[providerB](executionPrompt, signal),
         TIMEOUT_MS,
         `${providerB} timed out.`
       ),
@@ -1168,7 +1224,7 @@ export async function POST(req: NextRequest) {
     ]);
 
     const initialPair = await evaluatePair({
-      prompt,
+      prompt: rawPrompt,
       providerA,
       providerB,
       answerA: executionMap[providerA]!.answer,
@@ -1206,7 +1262,7 @@ export async function POST(req: NextRequest) {
       void incrementAnalytic("arbitration:triggered");
 
       const thirdResult = await withTimeout(
-        (signal) => providerMap[thirdProvider](prompt, signal),
+        (signal) => providerMap[thirdProvider](executionPrompt, signal),
         TIMEOUT_MS,
         `${thirdProvider} timed out.`
       );
@@ -1229,14 +1285,14 @@ export async function POST(req: NextRequest) {
 
       const [pairWithAThird, pairWithBThird] = await Promise.all([
         evaluatePair({
-          prompt,
+          prompt: rawPrompt,
           providerA,
           providerB: thirdProvider,
           answerA: executionMap[providerA]!.answer,
           answerB: executionMap[thirdProvider]!.answer,
         }),
         evaluatePair({
-          prompt,
+          prompt: rawPrompt,
           providerA: providerB,
           providerB: thirdProvider,
           answerA: executionMap[providerB]!.answer,
@@ -1289,7 +1345,7 @@ export async function POST(req: NextRequest) {
     }
 
     logArbitrationDiagnostic({
-      prompt,
+      prompt: rawPrompt,
       taskType,
       initialPair: [initialPair.providerA, initialPair.providerB],
       thirdProvider: thirdProvider ?? null,
@@ -1322,7 +1378,7 @@ export async function POST(req: NextRequest) {
         {
           role: "user",
           content: [
-            `Question: ${prompt}`,
+            `Question: ${executionPrompt}`,
             "",
             `Response A (${activePair.providerA}, confidence: ${weightA.toFixed(2)}): ${activePair.answerA}`,
             "",
@@ -1332,13 +1388,15 @@ export async function POST(req: NextRequest) {
       ],
     });
 
-    const verifiedAnswer = stripCodeFences(
-      synthesisCompletion.choices[0]?.message?.content ?? ""
-    );
+    const verifiedAnswerRaw = stripCodeFences(
+  synthesisCompletion.choices[0]?.message?.content ?? ""
+);
+
+const verifiedAnswer = cleanEncoding(verifiedAnswerRaw);
 
     const [verdictPayloadRaw, qualityScores] = await Promise.all([
       buildDecisionVerdict({
-        prompt,
+        prompt: rawPrompt,
         answerA: activePair.answerA,
         answerB: activePair.answerB,
         weightA,
@@ -1411,7 +1469,7 @@ export async function POST(req: NextRequest) {
     );
 
     const riskLevel = getRiskLevel({
-      prompt,
+      prompt: rawPrompt,
       agreementLevel: activePair.semantic.agreementLevel,
       disagreementType: verdictPayload.disagreementType,
       finalConclusionAligned: verdictPayload.finalConclusionAligned,
@@ -1421,7 +1479,7 @@ export async function POST(req: NextRequest) {
     const averageQuality = (qualityScores.scoreA + qualityScores.scoreB) / 2;
 
     const trustScore = calculateTrustScore({
-      prompt,
+      prompt: rawPrompt,
       agreementLevel: activePair.semantic.agreementLevel,
       disagreementType: verdictPayload.disagreementType,
       finalConclusionAligned: verdictPayload.finalConclusionAligned,
@@ -1459,25 +1517,28 @@ export async function POST(req: NextRequest) {
         reason: trustScore.reason,
       },
       answers: {
-        openai:
-          activePair.providerA === "openai"
-            ? activePair.answerA
-            : activePair.providerB === "openai"
-            ? activePair.answerB
-            : "",
-        anthropic:
-          activePair.providerA === "anthropic"
-            ? activePair.answerA
-            : activePair.providerB === "anthropic"
-            ? activePair.answerB
-            : "",
-        perplexity:
-          activePair.providerA === "perplexity"
-            ? activePair.answerA
-            : activePair.providerB === "perplexity"
-            ? activePair.answerB
-            : "",
-      },
+  openai: cleanEncoding(
+    activePair.providerA === "openai"
+      ? activePair.answerA
+      : activePair.providerB === "openai"
+      ? activePair.answerB
+      : ""
+  ),
+  anthropic: cleanEncoding(
+    activePair.providerA === "anthropic"
+      ? activePair.answerA
+      : activePair.providerB === "anthropic"
+      ? activePair.answerB
+      : ""
+  ),
+  perplexity: cleanEncoding(
+    activePair.providerA === "perplexity"
+      ? activePair.answerA
+      : activePair.providerB === "perplexity"
+      ? activePair.answerB
+      : ""
+  ),
+},
       selectedProviders: [activePair.providerA, activePair.providerB] as [
         ProviderName,
         ProviderName,
@@ -1517,7 +1578,8 @@ export async function POST(req: NextRequest) {
         task_type: taskType,
         overlap_ratio: activePair.comparison.overlapRatio,
         agreement_summary: activePair.comparison.summary,
-        prompt_chars: prompt.length,
+        prompt_chars: rawPrompt.length,
+        execution_prompt_chars: executionPrompt.length,
         likely_conflict: activePair.semantic.likelyConflict,
         disagreement_type: verdictPayload.disagreementType,
         initial_pair: [initialPair.providerA, initialPair.providerB],

@@ -11,7 +11,7 @@ import { NextRequest, NextResponse } from "next/server";
  *
  * Request shape (from UI):
  *   POST /api/verify
- *   { prompt: string, cache_bypass?: boolean }
+ *   { prompt: string, raw_prompt?: string, cache_bypass?: boolean }
  *
  * Response shape:
  *   Passes through the /api/decision response unchanged.
@@ -30,6 +30,16 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    if (
+      body.raw_prompt !== undefined &&
+      typeof body.raw_prompt !== "string"
+    ) {
+      return NextResponse.json(
+        { ok: false, error: "invalid_raw_prompt" },
+        { status: 400 }
+      );
+    }
+
     const masterKey = process.env.DECISION_API_KEY;
 
     if (!masterKey) {
@@ -40,7 +50,6 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Build the internal URL — works in both local and Vercel environments
     const baseUrl =
       process.env.NEXT_PUBLIC_BASE_URL ??
       (process.env.VERCEL_URL
@@ -55,6 +64,7 @@ export async function POST(req: NextRequest) {
       },
       body: JSON.stringify({
         prompt: body.prompt,
+        raw_prompt: body.raw_prompt,
         cache_bypass: body.cache_bypass ?? false,
       }),
     });
