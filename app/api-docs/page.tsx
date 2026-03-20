@@ -6,7 +6,7 @@ import CheckoutStatusBanner from "./CheckoutStatusBanner";
 export const metadata: Metadata = {
   title: "API Docs — Zorelan",
   description:
-    "Zorelan is an AI verification engine and consensus layer for production systems. Compare multiple model responses and return a verified answer with trust scoring and disagreement analysis.",
+    "Verify AI before it reaches your users. Zorelan compares multiple model responses and returns a verified answer with trust scoring, risk signals, and disagreement analysis.",
 };
 
 const sdkInstallExample = `npm install @zorelan/sdk`;
@@ -21,7 +21,8 @@ const result = await zorelan.verify(
 
 console.log(result.verified_answer);
 console.log(result.trust_score.score);
-console.log(result.consensus.level);`;
+console.log(result.risk_level);
+console.log(result.recommended_action);`;
 
 const curlExample = `curl -X POST https://zorelan.com/v1/decision \\
   -H "Authorization: Bearer YOUR_API_KEY" \\
@@ -74,6 +75,22 @@ const advancedJsonExample = `{
   "prompt": "Determine whether HTTPS should be used for a production web application. Include security, SEO, and compliance considerations.",
   "raw_prompt": "Should I use HTTPS for my web application?",
   "cache_bypass": true
+}`;
+
+const minimalResponseExample = `{
+  "ok": true,
+  "verified_answer": "Yes — you should use HTTPS for your web application.",
+  "trust_score": {
+    "score": 94,
+    "label": "high",
+    "reason": "The providers strongly agree on a low-risk best-practice conclusion."
+  },
+  "risk_level": "low",
+  "consensus": {
+    "level": "high",
+    "models_aligned": 2
+  },
+  "recommended_action": "Use the shared conclusion as the answer."
 }`;
 
 const responseExample = `{
@@ -145,7 +162,7 @@ const zorelan = new Zorelan(process.env.ZORELAN_API_KEY!);
 const result = await zorelan.verify(userInput);
 
 // Gate behaviour based on trust score
-if (result.trust_score.score >= 75) {
+if (result.trust_score.score >= 75 && result.risk_level !== "high") {
   showAnswer(result.verified_answer);
 } else {
   showWarning("Low confidence. Review before acting.");
@@ -453,46 +470,37 @@ export default function ApiDocsPage() {
       <div className="mb-14">
         <SectionLabel>Developer API</SectionLabel>
         <h1 className="text-4xl font-semibold tracking-tight mb-4">
-          Zorelan API
+          Verify AI before it reaches your users
         </h1>
 
-        <p className="text-white text-2xl leading-tight tracking-tight mb-2 max-w-3xl">
-          Zorelan is an AI verification engine.
+        <p className="text-white text-2xl leading-tight tracking-tight mb-3 max-w-3xl">
+          Zorelan compares multiple model outputs and returns a trust-calibrated
+          answer you can use in production.
         </p>
 
-        <p className="text-white/40 text-sm mb-5">
-          AI verification infrastructure for production systems.
+        <p className="text-white/65 text-lg leading-relaxed mb-5 max-w-3xl">
+          Add a verification layer between your app and AI providers. In one API
+          call, Zorelan returns a verified answer, trust score, risk level,
+          consensus signal, disagreement analysis, and recommended action.
         </p>
 
-        <p className="text-white/70 text-lg leading-relaxed mb-4 max-w-3xl">
-          It compares multiple model responses and returns a verified answer with
-          calibrated trust scoring, consensus signals, and disagreement analysis
-          in a single API call.
+        <p className="text-white/50 text-sm leading-relaxed mb-8 max-w-3xl">
+          Use it to decide when to show an answer directly, when to warn the
+          user, and when to route a response into fallback or human review.
         </p>
 
-        <p className="text-white/55 text-base leading-relaxed mb-8 max-w-3xl">
-          Most AI applications rely on a single model output. Zorelan adds a{" "}
-          <span className="text-white font-medium">verification layer</span>{" "}
-          between your app and AI providers, helping reduce hallucinations,
-          expose disagreement, and increase confidence before you act on an
-          answer.
-        </p>
-
-        <div className="flex flex-wrap gap-8">
-          {[
-            { value: "3", label: "AI providers compared" },
-            { value: "0–100", label: "Trust score range" },
-            { value: "5", label: "Disagreement types" },
-            {
-              value: "89%",
-              label: "Agreement classification accuracy",
-            },
-          ].map(({ value, label }) => (
-            <div key={label}>
-              <div className="text-2xl font-semibold font-mono">{value}</div>
-              <div className="text-xs text-white/40 mt-0.5">{label}</div>
-            </div>
-          ))}
+        <div className="grid gap-4 md:grid-cols-3">
+          <FeatureCard title="Show answer">
+            High trust, acceptable risk, and clean alignment across providers.
+          </FeatureCard>
+          <FeatureCard title="Show with warning">
+            Moderate trust or elevated uncertainty where the answer is useful
+            but should not be presented as hard certainty.
+          </FeatureCard>
+          <FeatureCard title="Block or escalate">
+            Low trust, high risk, or material disagreement where your product
+            should fall back, ask for review, or avoid acting automatically.
+          </FeatureCard>
         </div>
       </div>
 
@@ -500,31 +508,25 @@ export default function ApiDocsPage() {
         <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-6">
           <div className="grid gap-6 md:grid-cols-2">
             <div>
-              <h2 className="text-lg font-semibold mb-3">What Zorelan does</h2>
+              <h2 className="text-lg font-semibold mb-3">
+                Use this in production
+              </h2>
               <p className="text-white/60 leading-relaxed mb-4">
-                Send one prompt to Zorelan. It queries multiple AI models,
-                compares their outputs, and returns a verified answer with
-                machine-readable confidence signals.
+                Zorelan is built for AI products that need more than a raw model
+                answer. Instead of trusting a single output, you get a decision
+                signal your application can act on.
               </p>
               <div className="space-y-2 text-sm text-white/55">
-                <div>• Reduces single-model failure risk</div>
-                <div>• Surfaces model agreement and disagreement</div>
-                <div>• Returns a trust score you can use in product logic</div>
-                <div>• Adds a verification layer to AI-powered apps</div>
+                <div>• Verify answers before showing them in your UI</div>
+                <div>• Gate workflows using trust score thresholds</div>
+                <div>• Surface uncertainty instead of hiding it</div>
+                <div>• Reduce single-model failure risk in production</div>
               </div>
             </div>
 
             <CodeBlock
-              label="mental model"
-              code={`Your App
-    ↓
-Zorelan (verification layer)
-    ↓
-Multiple AI models
-    ↓
-Agreement + arbitration
-    ↓
-Verified answer + trust score`}
+              label="node.js · gate behaviour"
+              code={integrationExample}
             />
           </div>
         </div>
@@ -532,11 +534,11 @@ Verified answer + trust score`}
 
       <section className="mb-12">
         <SectionLabel>Quickstart</SectionLabel>
-        <h2 className="text-xl font-semibold mb-4">Install the SDK</h2>
+        <h2 className="text-xl font-semibold mb-4">Make your first call</h2>
         <p className="text-white/60 leading-relaxed mb-6">
-          Zorelan verifies AI responses by comparing multiple models and
-          returning confidence signals you can use in your product. The fastest
-          way to integrate is through the TypeScript SDK.
+          The fastest path is simple mode: send one prompt, get back a verified
+          answer plus the confidence signals needed to decide how your product
+          should use it.
         </p>
 
         <div className="space-y-4">
@@ -546,32 +548,75 @@ Verified answer + trust score`}
       </section>
 
       <section className="mb-12">
-        <SectionLabel>Outputs</SectionLabel>
+        <SectionLabel>Returned signals</SectionLabel>
         <h2 className="text-xl font-semibold mb-4">What you get back</h2>
         <div className="grid gap-4 md:grid-cols-3">
           <FeatureCard title="Verified answer">
-            A synthesized final answer based on the strongest aligned model
+            A synthesized final answer based on the strongest aligned provider
             outputs.
           </FeatureCard>
           <FeatureCard title="Trust score">
-            A calibrated 0–100 confidence signal based on consensus,
+            A calibrated 0–100 signal that reflects agreement strength,
             disagreement severity, and domain risk.
           </FeatureCard>
-          <FeatureCard title="Structured analysis">
-            Consensus level, risk level, disagreement type, arbitration usage,
-            provider diagnostics, and usage metadata.
+          <FeatureCard title="Decision metadata">
+            Risk level, consensus, disagreement type, recommended action,
+            arbitration usage, provider diagnostics, and usage metadata.
           </FeatureCard>
         </div>
       </section>
 
       <section className="mb-12">
-        <SectionLabel>Use Cases</SectionLabel>
+        <SectionLabel>Minimal response</SectionLabel>
+        <h2 className="text-xl font-semibold mb-4">
+          The core fields most apps use
+        </h2>
+        <p className="text-white/60 leading-relaxed mb-6">
+          Most products do not need the full payload to get started. In many
+          cases, these fields are enough to drive UI and routing decisions.
+        </p>
+        <CodeBlock label="json · minimal useful response" code={minimalResponseExample} />
+      </section>
+
+      <section className="mb-12">
+        <SectionLabel>Why this exists</SectionLabel>
+        <h2 className="text-xl font-semibold mb-4">
+          Why not just use one model?
+        </h2>
+
+        <p className="text-white/60 leading-relaxed mb-6 max-w-2xl">
+          A single model can generate an answer, but it does not tell you
+          whether that answer deserves confidence. Zorelan compares multiple
+          model outputs and returns a structured verification signal you can use
+          to show, warn, block, or escalate responses in production.
+        </p>
+
+        <div className="grid gap-4 md:grid-cols-3">
+          <FeatureCard title="Single model">
+            One answer, no cross-check, no disagreement signal, and no reliable
+            way to decide whether the output should drive product behaviour.
+          </FeatureCard>
+
+          <FeatureCard title="Zorelan">
+            Multiple model outputs compared through semantic agreement analysis,
+            with arbitration when disagreement matters.
+          </FeatureCard>
+
+          <FeatureCard title="Result">
+            A trust-aware output your application can actually use: answer,
+            score, risk, disagreement, and recommended action.
+          </FeatureCard>
+        </div>
+      </section>
+
+      <section className="mb-12">
+        <SectionLabel>Use cases</SectionLabel>
         <h2 className="text-xl font-semibold mb-4">Where to use Zorelan</h2>
         <div className="grid gap-4 md:grid-cols-2">
           <FeatureCard title="Validate AI before showing users">
             Verify responses before displaying them in your UI. Use trust score
-            and consensus level to decide whether to present an answer directly
-            or show uncertainty.
+            and risk level to decide whether to present an answer directly or
+            expose uncertainty.
           </FeatureCard>
           <FeatureCard title="Gate actions based on confidence">
             Only trigger workflows, automations, notifications, or downstream
@@ -583,7 +628,7 @@ Verified answer + trust score`}
           </FeatureCard>
           <FeatureCard title="Compare model behaviour">
             Inspect agreement, disagreement type, and arbitration results to
-            understand how different providers respond to the same prompt.
+            understand how providers respond to the same prompt.
           </FeatureCard>
           <FeatureCard title="Add explainability to AI features">
             Return confidence and disagreement metadata alongside the answer so
@@ -593,152 +638,6 @@ Verified answer + trust score`}
             Use trust score, risk level, and cached status as inputs into your
             application state, routing, or review flows.
           </FeatureCard>
-        </div>
-      </section>
-
-      <section className="mb-12">
-        <SectionLabel>Example</SectionLabel>
-        <h2 className="text-xl font-semibold mb-4">
-          Using Zorelan in a product
-        </h2>
-
-        <p className="text-white/60 leading-relaxed mb-6">
-          A common pattern is to verify AI responses before showing them to
-          users or triggering actions. Zorelan acts as a verification layer
-          between your app and AI models, allowing you to gate behaviour based
-          on confidence.
-        </p>
-
-        <CodeBlock
-          label="node.js · verify before display"
-          code={integrationExample}
-        />
-
-        <div className="mt-6 grid gap-4 md:grid-cols-2">
-          <FeatureCard title="High confidence">
-            Show the verified answer directly when models strongly agree.
-          </FeatureCard>
-
-          <FeatureCard title="Low confidence">
-            Flag uncertainty, request confirmation, or trigger fallback logic.
-          </FeatureCard>
-        </div>
-      </section>
-
-      <section className="mb-12">
-        <SectionLabel>Positioning</SectionLabel>
-        <h2 className="text-xl font-semibold mb-4">
-          Why not just use one model?
-        </h2>
-
-        <p className="text-white/60 leading-relaxed mb-6 max-w-2xl">
-          A single model can give you a fast answer — but it gives you no
-          built-in verification layer. You do not know if it is correct,
-          partially correct, or confidently wrong. Zorelan compares multiple
-          model outputs and returns a structured confidence signal you can use
-          in your product. Crucially, it does not treat model agreement as
-          automatic certainty.
-        </p>
-
-        <div className="grid gap-4 md:grid-cols-3">
-          <FeatureCard title="Single model">
-            One answer. No cross-check. No visibility into agreement or
-            disagreement.
-          </FeatureCard>
-
-          <FeatureCard title="Zorelan">
-            Multiple model outputs compared and verified using a semantic
-            agreement engine.
-          </FeatureCard>
-
-          <FeatureCard title="Result">
-            Trust-aware outputs with scores, consensus signals, and structured
-            disagreement analysis.
-          </FeatureCard>
-        </div>
-      </section>
-
-      <Divider />
-
-      <section className="mb-12">
-        <SectionLabel>Overview</SectionLabel>
-        <h2 className="text-xl font-semibold mb-4">How it works</h2>
-        <p className="text-white/60 leading-relaxed mb-6">
-          Zorelan sits between your application and AI providers. When you call
-          the API, Zorelan routes your prompt to multiple models
-          simultaneously, compares their outputs using a semantic agreement
-          engine, and returns a verified answer alongside a structured analysis
-          of how the models agreed or disagreed.
-        </p>
-        <CodeBlock
-          label="pipeline"
-          code={`Your prompt
-    ↓
-Adaptive provider selection
-    ↓
-Parallel model queries (Claude · Perplexity · GPT)
-    ↓
-Semantic agreement judge (neutral cross-model)
-    ↓
-Arbitration if disagreement detected
-    ↓
-Trust score + verified answer`}
-        />
-        <p className="text-white/50 text-sm leading-relaxed mt-4">
-          The semantic judge is always a different model family from the
-          providers being compared — Claude judges OpenAI outputs, OpenAI
-          judges Claude outputs. This eliminates self-scoring bias from the
-          verification layer.
-        </p>
-      </section>
-
-      <section className="mb-12">
-        <SectionLabel>Execution vs Calibration</SectionLabel>
-        <h2 className="text-xl font-semibold mb-4">
-          Prompt optimization without distorting trust
-        </h2>
-
-        <p className="text-white/60 leading-relaxed mb-6">
-          Zorelan supports both a provider-facing execution prompt and an
-          original raw prompt for calibration. This allows you to optimize model
-          performance without inflating confidence on inherently uncertain
-          questions.
-        </p>
-
-        <div className="grid gap-4 md:grid-cols-2 mb-6">
-          <FeatureCard title="prompt">
-            The execution prompt sent to providers. Use this when you want to
-            structure or optimize how the models answer.
-          </FeatureCard>
-          <FeatureCard title="raw_prompt">
-            The original human question used for task detection, risk
-            classification, and trust scoring. Use this when prompt engineering
-            would otherwise distort confidence.
-          </FeatureCard>
-        </div>
-
-        <CodeBlock
-          label="dual-prompt model"
-          code={`raw_prompt
-    ↓
-Task detection + risk classification + trust calibration
-
-prompt
-    ↓
-Provider execution + synthesis
-
-Result
-    ↓
-Better answers, honest trust scoring`}
-        />
-
-        <div className="mt-4">
-          <InfoBox>
-            If <InlineCode>raw_prompt</InlineCode> is omitted, Zorelan falls
-            back to using <InlineCode>prompt</InlineCode> for both execution and
-            calibration. This preserves backward compatibility with the original
-            API contract.
-          </InfoBox>
         </div>
       </section>
 
@@ -779,9 +678,43 @@ Content-Type: application/json`}
         </div>
         <p className="text-white/60 leading-relaxed">
           Submit a prompt for multi-model verification. Zorelan queries
-          multiple AI providers, semantically compares their responses, and
-          returns a verified answer with full analysis.
+          multiple AI providers, compares their responses, and returns a
+          trust-calibrated result your application can act on.
         </p>
+      </section>
+
+      <section className="mb-12">
+        <SectionLabel>Request modes</SectionLabel>
+        <h2 className="text-xl font-semibold mb-4">
+          Simple mode and advanced mode
+        </h2>
+        <p className="text-white/60 leading-relaxed mb-6">
+          Most developers should start with simple mode. Advanced mode is useful
+          when you want to optimize the provider-facing prompt without
+          distorting trust calibration.
+        </p>
+
+        <div className="grid gap-4 md:grid-cols-2 mb-6">
+          <FeatureCard title="Simple mode">
+            Send one <InlineCode>prompt</InlineCode>. Zorelan uses it for both
+            provider execution and calibration. This is the fastest way to get
+            started and matches the original API contract.
+          </FeatureCard>
+          <FeatureCard title="Advanced mode">
+            Send both <InlineCode>prompt</InlineCode> and{" "}
+            <InlineCode>raw_prompt</InlineCode>. Use{" "}
+            <InlineCode>prompt</InlineCode> as the execution prompt sent to
+            providers, and <InlineCode>raw_prompt</InlineCode> as the original
+            human question for task detection, risk classification, and trust
+            scoring.
+          </FeatureCard>
+        </div>
+
+        <InfoBox>
+          Think of <InlineCode>prompt</InlineCode> as the execution prompt and{" "}
+          <InlineCode>raw_prompt</InlineCode> as the original question used to
+          keep confidence honest.
+        </InfoBox>
       </section>
 
       <section className="mb-12">
@@ -836,12 +769,12 @@ Content-Type: application/json`}
       </section>
 
       <section className="mb-12">
-        <h2 className="text-xl font-semibold mb-4">Response</h2>
+        <h2 className="text-xl font-semibold mb-4">Full response</h2>
         <p className="text-white/60 leading-relaxed mb-6">
           All responses are JSON. A successful call returns{" "}
           <InlineCode>ok: true</InlineCode> with the full verification payload.
         </p>
-        <CodeBlock label="json · response" code={responseExample} />
+        <CodeBlock label="json · full response" code={responseExample} />
       </section>
 
       <section className="mb-12">
@@ -859,106 +792,36 @@ Content-Type: application/json`}
       <Divider />
 
       <section className="mb-12">
-        <SectionLabel>Caching</SectionLabel>
-        <h2 className="text-xl font-semibold mb-4">Verified result caching</h2>
+        <SectionLabel>Decision layer</SectionLabel>
+        <h2 className="text-xl font-semibold mb-4">
+          A practical way to use the score
+        </h2>
+
         <p className="text-white/60 leading-relaxed mb-6">
-          Zorelan caches verified results for 6 hours. The first request for a
-          given calibrated prompt path runs the full verification pipeline —
-          querying multiple AI providers, running the semantic agreement judge,
-          and producing a trust score. Subsequent identical requests within the
-          cache window return the stored verified result instantly.
+          Zorelan is most useful when its output drives product behaviour. A
+          simple pattern is to map trust and risk into three states.
         </p>
-        <InfoBox>
-          A cached response is not an unverified response. It is a previously
-          verified result being replayed. The full verification pipeline ran on
-          the first request — the cache stores that output, not a shortcut
-          around it.
-        </InfoBox>
-        <div className="mt-6">
-          <Table
-            headers={["Request", "Latency", "cached field"]}
-            rows={[
-              [
-                "First request (live verification)",
-                "~12–20s",
-                <span className="font-mono text-white/50 text-xs" key="live">
-                  false
-                </span>,
-              ],
-              [
-                "Repeat request within 6 hours (cached)",
-                "~1–2s",
-                <span
-                  className="font-mono text-emerald-400 text-xs"
-                  key="cached"
-                >
-                  true
-                </span>,
-              ],
-            ]}
-          />
-        </div>
-        <p className="text-white/50 text-sm leading-relaxed mt-4">
-          Every response includes a <InlineCode>cached</InlineCode> field so
-          your application always knows whether it received a fresh live
-          verification or a recently verified cached result. Cache keys are
-          scoped to the calibrated prompt path and provider pair. When{" "}
-          <InlineCode>raw_prompt</InlineCode> is provided, caching is anchored to
-          that trust-calibration input.
-        </p>
-        <h3 className="text-base font-semibold mt-8 mb-3">
-          Bypassing the cache
-        </h3>
-        <p className="text-white/60 leading-relaxed mb-4">
-          To force a fresh live verification regardless of cache state, pass{" "}
-          <InlineCode>cache_bypass: true</InlineCode> in the request body. This
-          is useful when you need the most current provider outputs — for
-          example, on time-sensitive prompts or after a known change in
-          underlying facts.
-        </p>
-        <CodeBlock label="json · cache bypass" code={cacheBypassExample} />
-        <div className="mt-4 rounded-xl border border-yellow-500/20 bg-yellow-500/5 px-5 py-4 text-sm text-white/60 leading-relaxed">
-          ⚠ Cache bypass requests count against your monthly quota and run the
-          full pipeline — expect normal verification latency.
+
+        <div className="grid gap-4 md:grid-cols-3">
+          <FeatureCard title="Show answer">
+            High trust and acceptable risk. Safe to rely on directly in normal
+            product flows.
+          </FeatureCard>
+          <FeatureCard title="Show with warning">
+            Useful answer, but with enough uncertainty that your UI should
+            signal caution or context.
+          </FeatureCard>
+          <FeatureCard title="Block or escalate">
+            Low trust, high risk, or material conflict. Use fallback logic,
+            human review, or avoid acting automatically.
+          </FeatureCard>
         </div>
       </section>
 
       <Divider />
 
       <section className="mb-12">
-        <SectionLabel>Errors</SectionLabel>
-        <h2 className="text-xl font-semibold mb-4">Error codes</h2>
-        <p className="text-white/60 leading-relaxed mb-6">
-          Zorelan uses standard HTTP status codes. All error responses include{" "}
-          <InlineCode>ok: false</InlineCode> and an error code string.
-        </p>
-        <Table
-          headers={["Status", "Error code", "Description"]}
-          rows={errorCodes.map(({ status, code, desc }) => [
-            status,
-            code,
-            desc,
-          ])}
-        />
-        <div className="mt-4">
-          <CodeBlock
-            label="json · error response"
-            code={`{
-  "ok": false,
-  "error": "rate_limit_exceeded",
-  "plan": "starter",
-  "calls_limit": 200,
-  "calls_used": 200,
-  "calls_remaining": 0
-}`}
-          />
-        </div>
-      </section>
-
-      <Divider />
-
-      <section className="mb-12">
-        <SectionLabel>Concepts</SectionLabel>
+        <SectionLabel>How trust works</SectionLabel>
         <h2 className="text-xl font-semibold mb-4">How trust scoring works</h2>
 
         <p className="text-white/60 leading-relaxed mb-6">
@@ -1121,6 +984,189 @@ Trust score recalculated on winning pair`}
             consume extra calls from your monthly quota — each request counts as
             one call regardless of whether arbitration is triggered.
           </InfoBox>
+        </div>
+      </section>
+
+      <Divider />
+
+      <section className="mb-12">
+        <SectionLabel>Overview</SectionLabel>
+        <h2 className="text-xl font-semibold mb-4">How it works</h2>
+        <p className="text-white/60 leading-relaxed mb-6">
+          Zorelan sits between your application and AI providers. When you call
+          the API, Zorelan routes your prompt to multiple models
+          simultaneously, compares their outputs using a semantic agreement
+          engine, and returns a verified answer alongside a structured analysis
+          of how the models agreed or disagreed.
+        </p>
+        <CodeBlock
+          label="pipeline"
+          code={`Your prompt
+    ↓
+Adaptive provider selection
+    ↓
+Parallel model queries (Claude · Perplexity · GPT)
+    ↓
+Semantic agreement judge (neutral cross-model)
+    ↓
+Arbitration if disagreement detected
+    ↓
+Trust score + verified answer`}
+        />
+        <p className="text-white/50 text-sm leading-relaxed mt-4">
+          The semantic judge is always a different model family from the
+          providers being compared — Claude judges OpenAI outputs, OpenAI
+          judges Claude outputs. This eliminates self-scoring bias from the
+          verification layer.
+        </p>
+      </section>
+
+      <section className="mb-12">
+        <SectionLabel>Execution vs Calibration</SectionLabel>
+        <h2 className="text-xl font-semibold mb-4">
+          Prompt optimization without distorting trust
+        </h2>
+
+        <p className="text-white/60 leading-relaxed mb-6">
+          Zorelan supports both a provider-facing execution prompt and an
+          original raw prompt for calibration. This allows you to optimize model
+          performance without inflating confidence on inherently uncertain
+          questions.
+        </p>
+
+        <div className="grid gap-4 md:grid-cols-2 mb-6">
+          <FeatureCard title="prompt">
+            The execution prompt sent to providers. Use this when you want to
+            structure or optimize how the models answer.
+          </FeatureCard>
+          <FeatureCard title="raw_prompt">
+            The original human question used for task detection, risk
+            classification, and trust scoring. Use this when prompt engineering
+            would otherwise distort confidence.
+          </FeatureCard>
+        </div>
+
+        <CodeBlock
+          label="dual-prompt model"
+          code={`raw_prompt
+    ↓
+Task detection + risk classification + trust calibration
+
+prompt
+    ↓
+Provider execution + synthesis
+
+Result
+    ↓
+Better answers, honest trust scoring`}
+        />
+
+        <div className="mt-4">
+          <InfoBox>
+            If <InlineCode>raw_prompt</InlineCode> is omitted, Zorelan falls
+            back to using <InlineCode>prompt</InlineCode> for both execution and
+            calibration. This preserves backward compatibility with the original
+            API contract.
+          </InfoBox>
+        </div>
+      </section>
+
+      <Divider />
+
+      <section className="mb-12">
+        <SectionLabel>Caching</SectionLabel>
+        <h2 className="text-xl font-semibold mb-4">Verified result caching</h2>
+        <p className="text-white/60 leading-relaxed mb-6">
+          Zorelan caches verified results for 6 hours. The first request for a
+          given calibrated prompt path runs the full verification pipeline —
+          querying multiple AI providers, running the semantic agreement judge,
+          and producing a trust score. Subsequent identical requests within the
+          cache window return the stored verified result instantly.
+        </p>
+        <InfoBox>
+          A cached response is not an unverified response. It is a previously
+          verified result being replayed. The full verification pipeline ran on
+          the first request — the cache stores that output, not a shortcut
+          around it.
+        </InfoBox>
+        <div className="mt-6">
+          <Table
+            headers={["Request", "Latency", "cached field"]}
+            rows={[
+              [
+                "First request (live verification)",
+                "~12–20s",
+                <span className="font-mono text-white/50 text-xs" key="live">
+                  false
+                </span>,
+              ],
+              [
+                "Repeat request within 6 hours (cached)",
+                "~1–2s",
+                <span
+                  className="font-mono text-emerald-400 text-xs"
+                  key="cached"
+                >
+                  true
+                </span>,
+              ],
+            ]}
+          />
+        </div>
+        <p className="text-white/50 text-sm leading-relaxed mt-4">
+          Every response includes a <InlineCode>cached</InlineCode> field so
+          your application always knows whether it received a fresh live
+          verification or a recently verified cached result. Cache keys are
+          scoped to the calibrated prompt path and provider pair. When{" "}
+          <InlineCode>raw_prompt</InlineCode> is provided, caching is anchored to
+          that trust-calibration input.
+        </p>
+        <h3 className="text-base font-semibold mt-8 mb-3">
+          Bypassing the cache
+        </h3>
+        <p className="text-white/60 leading-relaxed mb-4">
+          To force a fresh live verification regardless of cache state, pass{" "}
+          <InlineCode>cache_bypass: true</InlineCode> in the request body. This
+          is useful when you need the most current provider outputs — for
+          example, on time-sensitive prompts or after a known change in
+          underlying facts.
+        </p>
+        <CodeBlock label="json · cache bypass" code={cacheBypassExample} />
+        <div className="mt-4 rounded-xl border border-yellow-500/20 bg-yellow-500/5 px-5 py-4 text-sm text-white/60 leading-relaxed">
+          ⚠ Cache bypass requests count against your monthly quota and run the
+          full pipeline — expect normal verification latency.
+        </div>
+      </section>
+
+      <Divider />
+
+      <section className="mb-12">
+        <SectionLabel>Errors</SectionLabel>
+        <h2 className="text-xl font-semibold mb-4">Error codes</h2>
+        <p className="text-white/60 leading-relaxed mb-6">
+          Zorelan uses standard HTTP status codes. All error responses include{" "}
+          <InlineCode>ok: false</InlineCode> and an error code string.
+        </p>
+        <Table
+          headers={["Status", "Error code", "Description"]}
+          rows={errorCodes.map(({ status, code, desc }) => [
+            status,
+            code,
+            desc,
+          ])}
+        />
+        <div className="mt-4">
+          <CodeBlock
+            label="json · error response"
+            code={`{
+  "ok": false,
+  "error": "rate_limit_exceeded",
+  "plan": "starter",
+  "calls_limit": 200,
+  "calls_used": 200,
+  "calls_remaining": 0
+}`}
+          />
         </div>
       </section>
 
@@ -1297,7 +1343,7 @@ Trust score recalculated on winning pair`}
         <div className="rounded-2xl border border-white/10 p-8 text-center space-y-4">
           <h2 className="text-xl font-semibold">Ready to integrate?</h2>
           <p className="text-white/50">
-            Choose a plan and start building in minutes.
+            Add verification before AI output reaches your product.
           </p>
           <PricingButtons />
         </div>
