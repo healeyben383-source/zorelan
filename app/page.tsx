@@ -74,6 +74,61 @@ interface HistoryEntry {
   trustScore?: TrustScore | null;
 }
 
+type StreamEvent =
+  | {
+      type: "selected_providers";
+      selectedProviders: [ProviderName, ProviderName];
+    }
+  | {
+      type: "provider_delta";
+      provider: ProviderName;
+      delta: string;
+    }
+  | {
+      type: "provider_answer";
+      provider: ProviderName;
+      answer: string;
+      duration_ms: number;
+      timed_out: boolean;
+      used_fallback: boolean;
+      selectedProviders: [ProviderName, ProviderName];
+    }
+  | {
+      type: "final";
+      payload: {
+        ok: true;
+        verdict: string;
+        consensus: {
+          level: "high" | "medium" | "low";
+          models_aligned: number;
+        };
+        risk_level: "low" | "moderate" | "high";
+        key_disagreement: string;
+        recommended_action: string;
+        trust_score?: {
+          score: number;
+          label: "high" | "moderate" | "low";
+          reason: string;
+        };
+        answers: Answers;
+        selectedProviders: ProviderName[];
+        cached?: boolean;
+        verification?: {
+          final_conclusion_aligned?: boolean;
+          disagreement_type?: DisagreementType;
+        };
+        meta?: {
+          likely_conflict?: boolean;
+          overlap_ratio?: number;
+          agreement_summary?: string;
+        };
+      };
+    }
+  | {
+      type: "error";
+      error: string;
+    };
+
 const MODE_LABEL: Record<Mode, string> = {
   execution: "Action",
   strategy: "Strategy",
@@ -121,7 +176,7 @@ function saveHistory(entries: HistoryEntry[]) {
       JSON.stringify(entries.slice(0, MAX_HISTORY))
     );
   } catch {
-    // localStorage full or unavailable
+    // ignore storage issues
   }
 }
 
@@ -386,42 +441,29 @@ const unselectedStyle = {
   border: "1px solid rgba(255,255,255,0.1)",
 };
 
-function StreamingCursor() {
-  return (
-    <span className="inline-block ml-1 w-2 animate-pulse opacity-60">▋</span>
-  );
-}
-
 function ProviderAnswerCard({
   provider,
   answer,
-  isStreaming,
 }: {
   provider: ProviderName;
   answer: string;
-  isStreaming?: boolean;
 }) {
   return (
-    <div className="rounded-2xl border border-black/10 p-5 dark:border-white/10 space-y-2 min-w-0 overflow-hidden">
+    <div className="rounded-2xl border border-black/10 p-5 dark:border-white/10 space-y-2 min-w-0 overflow-hidden transition-all">
       <div className="space-y-0.5">
         <div className="text-xs uppercase tracking-wide opacity-50">
           {getProviderLabel(provider)}
         </div>
         <div className="text-[11px] uppercase tracking-wide opacity-35">
-          Selected by Zorelan
+          Included in verification
         </div>
       </div>
 
       <div className="min-w-0 max-w-full overflow-x-auto overflow-y-hidden [&_*]:max-w-full [&_pre]:max-w-full [&_pre]:overflow-x-auto [&_pre]:whitespace-pre-wrap [&_pre]:break-words [&_code]:break-words">
         {answer?.trim() ? (
-          <>
-            {renderMarkdown(answer)}
-            {isStreaming ? <StreamingCursor /> : null}
-          </>
+          renderMarkdown(answer)
         ) : (
-          <div className="text-sm opacity-40">
-            {isStreaming ? "Starting response…" : "No response returned."}
-          </div>
+          <div className="text-sm opacity-40 animate-pulse">Thinking…</div>
         )}
       </div>
     </div>
@@ -433,10 +475,10 @@ function LoadingProviderCard() {
     <div className="rounded-2xl border border-white/10 p-5 space-y-3">
       <div className="space-y-0.5">
         <div className="text-xs uppercase tracking-wide opacity-50">
-          Getting answers from multiple AIs…
+          Verifying across multiple models…
         </div>
         <div className="text-[11px] uppercase tracking-wide opacity-35">
-          Zorelan is choosing the best models for this task
+          Zorelan is selecting providers and checking agreement
         </div>
       </div>
       <PulsePlaceholder />
@@ -506,7 +548,8 @@ export default function Home() {
     []
   );
   const [streamingAnswers, setStreamingAnswers] = useState<Answers | null>(null);
-  const [isStreamingAnswers, setIsStreamingAnswers] = useState(false);
+  const [hasStreamedAnyAnswer, setHasStreamedAnyAnswer] = useState(false);
+  const [isWaitingForFinal, setIsWaitingForFinal] = useState(false);
   const [synthesis, setSynthesis] = useState<string | null>(null);
   const [structuredSynthesis, setStructuredSynthesis] =
     useState<StructuredSynthesis | null>(null);
@@ -531,7 +574,6 @@ export default function Home() {
   const [highlighted, setHighlighted] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [history, setHistory] = useState<HistoryEntry[]>([]);
-  const streamingTimersRef = useRef<number[]>([]);
 
   const synthesisRef = useRef<HTMLDivElement>(null);
   const resultsRef = useRef<HTMLDivElement>(null);
@@ -588,12 +630,6 @@ export default function Home() {
     }
   }, [input]);
 
-  useEffect(() => {
-    return () => {
-      streamingTimersRef.current.forEach((id) => clearTimeout(id));
-    };
-  }, []);
-
   const canRun = useMemo(() => input.trim().length > 0 && !busy, [input, busy]);
   const canAnalyse = useMemo(() => !!intent && !running, [intent, running]);
   const canSynthesize = useMemo(
@@ -601,23 +637,18 @@ export default function Home() {
       !!answers &&
       selectedProviders.length === 2 &&
       !synthesizing &&
-      !isStreamingAnswers,
-    [answers, selectedProviders, synthesizing, isStreamingAnswers]
+      !isWaitingForFinal,
+    [answers, selectedProviders, synthesizing, isWaitingForFinal]
   );
 
   const showPlaceholder = input.trim().length === 0;
 
-  function clearStreamingTimers() {
-    streamingTimersRef.current.forEach((id) => clearTimeout(id));
-    streamingTimersRef.current = [];
-  }
-
   function resetAnalysisState() {
-    clearStreamingTimers();
     setIntent(null);
     setAnswers(null);
     setStreamingAnswers(null);
-    setIsStreamingAnswers(false);
+    setHasStreamedAnyAnswer(false);
+    setIsWaitingForFinal(false);
     setSelectedProviders([]);
     setSynthesis(null);
     setStructuredSynthesis(null);
@@ -641,20 +672,21 @@ export default function Home() {
       synthesis ||
       structuredSynthesis ||
       comparison ||
-      trustScore
+      trustScore ||
+      streamingAnswers
     ) {
       resetAnalysisState();
     }
   }
 
   function loadEntry(entry: HistoryEntry) {
-    clearStreamingTimers();
     setInput(entry.input);
     setIntent(entry.intent);
     setUserAnswers(entry.userAnswers);
     setAnswers(entry.answers);
     setStreamingAnswers(entry.answers);
-    setIsStreamingAnswers(false);
+    setHasStreamedAnyAnswer(!!entry.answers);
+    setIsWaitingForFinal(false);
     setSelectedProviders(entry.selectedProviders ?? ["openai", "anthropic"]);
     setSynthesis(entry.synthesis);
     setStructuredSynthesis(entry.structuredSynthesis ?? null);
@@ -666,6 +698,7 @@ export default function Home() {
     setHistoryOpen(false);
     setPromptCopied(false);
     setInsightCopied(false);
+    setRunning(false);
 
     if (editableRef.current) {
       editableRef.current.innerText = entry.input;
@@ -682,73 +715,6 @@ export default function Home() {
   function clearHistory() {
     saveHistory([]);
     setHistory([]);
-  }
-
-  function streamText(
-    fullText: string,
-    onChunk: (text: string) => void,
-    onDone?: () => void,
-    speed = 8
-  ) {
-    let index = 0;
-
-    const step = () => {
-      index = Math.min(index + speed, fullText.length);
-      onChunk(fullText.slice(0, index));
-
-      if (index < fullText.length) {
-        const timeout = window.setTimeout(step, 12);
-        streamingTimersRef.current.push(timeout);
-      } else {
-        onDone?.();
-      }
-    };
-
-    step();
-  }
-
-  function streamProviderAnswers(
-    fullAnswers: Answers,
-    providers: ProviderName[]
-  ) {
-    clearStreamingTimers();
-
-    setIsStreamingAnswers(true);
-    setStreamingAnswers({
-      openai: "",
-      anthropic: "",
-      perplexity: "",
-    });
-
-    let finishedCount = 0;
-
-    const markDone = () => {
-      finishedCount += 1;
-      if (finishedCount >= providers.length) {
-        setIsStreamingAnswers(false);
-      }
-    };
-
-    providers.forEach((provider, providerIndex) => {
-      const fullText = fullAnswers[provider] ?? "";
-      const starterDelay = providerIndex * 400;
-
-      const starter = window.setTimeout(() => {
-        streamText(
-          fullText,
-          (chunk) => {
-            setStreamingAnswers((prev) => ({
-              ...(prev ?? { openai: "", anthropic: "", perplexity: "" }),
-              [provider]: chunk,
-            }));
-          },
-          markDone,
-          10
-        );
-      }, starterDelay);
-
-      streamingTimersRef.current.push(starter);
-    });
   }
 
   async function onPreframe() {
@@ -780,11 +746,15 @@ export default function Home() {
   async function onRunAnalysis() {
     if (!intent) return;
 
-    clearStreamingTimers();
     setRunning(true);
     setAnswers(null);
-    setStreamingAnswers(null);
-    setIsStreamingAnswers(false);
+    setStreamingAnswers({
+      openai: "",
+      anthropic: "",
+      perplexity: "",
+    });
+    setHasStreamedAnyAnswer(false);
+    setIsWaitingForFinal(true);
     setSelectedProviders([]);
     setSynthesis(null);
     setStructuredSynthesis(null);
@@ -805,72 +775,23 @@ export default function Home() {
           prompt: executionPrompt,
           raw_prompt: rawPrompt,
           cache_bypass: true,
+          stream: true,
         }),
       });
 
-      const verifyJson = await verifyRes.json().catch(() => null);
-
-      if (!verifyRes.ok || !verifyJson?.ok) {
-        setError(verifyJson?.error ?? "verify_failed");
+      if (!verifyRes.ok || !verifyRes.body) {
+        const fallbackJson = await verifyRes.json().catch(() => null);
+        setError(fallbackJson?.error ?? "verify_failed");
+        setRunning(false);
+        setIsWaitingForFinal(false);
         return;
       }
 
-      const fullAnswers: Answers =
-        verifyJson?.answers ?? {
-          openai: "",
-          anthropic: "",
-          perplexity: "",
-        };
-
-      const providerPair = (verifyJson?.selectedProviders ?? []).slice(
-        0,
-        2
-      ) as ProviderName[];
-
-      setAnswers(fullAnswers);
-      setSelectedProviders(providerPair);
-
-      setComparison({
-        agreementLevel: verifyJson?.consensus?.level ?? "medium",
-        likelyConflict: verifyJson?.meta?.likely_conflict ?? false,
-        overlapRatio: verifyJson?.meta?.overlap_ratio,
-        summary: verifyJson?.meta?.agreement_summary ?? "",
-        finalConclusionAligned:
-          verifyJson?.verification?.final_conclusion_aligned ?? undefined,
-        disagreementType:
-          verifyJson?.verification?.disagreement_type ?? undefined,
-      });
-
-      setDecisionVerification({
-        verdict: verifyJson?.verdict ?? "",
-        consensus: {
-          level: verifyJson?.consensus?.level ?? "medium",
-          modelsAligned: verifyJson?.consensus?.models_aligned ?? 0,
-        },
-        riskLevel: verifyJson?.risk_level ?? "moderate",
-        keyDisagreement: verifyJson?.key_disagreement ?? "",
-        recommendedAction: verifyJson?.recommended_action ?? "",
-        finalConclusionAligned:
-          verifyJson?.verification?.final_conclusion_aligned ?? undefined,
-        disagreementType:
-          verifyJson?.verification?.disagreement_type ?? undefined,
-      });
-
-      setTrustScore(
-        verifyJson?.trust_score
-          ? {
-              score: verifyJson.trust_score.score,
-              label: verifyJson.trust_score.label,
-              reason: verifyJson.trust_score.reason,
-            }
-          : null
-      );
-
-      // Restore manual synthesis flow.
-      setSynthesis(null);
-      setStructuredSynthesis(null);
-
-      setCached(verifyJson?.cached ?? false);
+      const reader = verifyRes.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      let finalReceived = false;
+      let streamErrored = false;
 
       setTimeout(() => {
         resultsRef.current?.scrollIntoView({
@@ -879,13 +800,184 @@ export default function Home() {
         });
       }, 100);
 
-      setStreamingAnswers({
-        openai: "",
-        anthropic: "",
-        perplexity: "",
-      });
-      streamProviderAnswers(fullAnswers, providerPair);
-    } finally {
+      const handleStreamEvent = (parsed: StreamEvent) => {
+        if (parsed.type === "selected_providers") {
+          setSelectedProviders(parsed.selectedProviders);
+          setStreamingAnswers((prev) => ({
+            ...(prev ?? {
+              openai: "",
+              anthropic: "",
+              perplexity: "",
+            }),
+          }));
+          return;
+        }
+
+        if (parsed.type === "provider_delta") {
+          setStreamingAnswers((prev) => {
+            const current = prev ?? {
+              openai: "",
+              anthropic: "",
+              perplexity: "",
+            };
+
+            return {
+              ...current,
+              [parsed.provider]: (current[parsed.provider] ?? "") + parsed.delta,
+            };
+          });
+
+          setHasStreamedAnyAnswer(true);
+          return;
+        }
+
+        if (parsed.type === "provider_answer") {
+          setSelectedProviders(parsed.selectedProviders);
+          setHasStreamedAnyAnswer(true);
+          setStreamingAnswers((prev) => ({
+            ...(prev ?? {
+              openai: "",
+              anthropic: "",
+              perplexity: "",
+            }),
+            [parsed.provider]: parsed.answer,
+          }));
+          return;
+        }
+
+        if (parsed.type === "final") {
+          finalReceived = true;
+          const verifyJson = parsed.payload;
+
+          const fullAnswers: Answers = verifyJson?.answers ?? {
+            openai: "",
+            anthropic: "",
+            perplexity: "",
+          };
+
+          const providerPair = (verifyJson?.selectedProviders ?? []).slice(
+            0,
+            2
+          ) as ProviderName[];
+
+          setAnswers(fullAnswers);
+          setStreamingAnswers(fullAnswers);
+          setSelectedProviders(providerPair);
+
+          setComparison({
+            agreementLevel: verifyJson?.consensus?.level ?? "medium",
+            likelyConflict: verifyJson?.meta?.likely_conflict ?? false,
+            overlapRatio: verifyJson?.meta?.overlap_ratio,
+            summary: verifyJson?.meta?.agreement_summary ?? "",
+            finalConclusionAligned:
+              verifyJson?.verification?.final_conclusion_aligned ?? undefined,
+            disagreementType:
+              verifyJson?.verification?.disagreement_type ?? undefined,
+          });
+
+          setDecisionVerification({
+            verdict: verifyJson?.verdict ?? "",
+            consensus: {
+              level: verifyJson?.consensus?.level ?? "medium",
+              modelsAligned: verifyJson?.consensus?.models_aligned ?? 0,
+            },
+            riskLevel: verifyJson?.risk_level ?? "moderate",
+            keyDisagreement: verifyJson?.key_disagreement ?? "",
+            recommendedAction: verifyJson?.recommended_action ?? "",
+            finalConclusionAligned:
+              verifyJson?.verification?.final_conclusion_aligned ?? undefined,
+            disagreementType:
+              verifyJson?.verification?.disagreement_type ?? undefined,
+          });
+
+          setTrustScore(
+            verifyJson?.trust_score
+              ? {
+                  score: verifyJson.trust_score.score,
+                  label: verifyJson.trust_score.label,
+                  reason: verifyJson.trust_score.reason,
+                }
+              : null
+          );
+
+          setSynthesis(null);
+          setStructuredSynthesis(null);
+          setCached(verifyJson?.cached ?? false);
+          setIsWaitingForFinal(false);
+          setRunning(false);
+          return;
+        }
+
+        if (parsed.type === "error") {
+          streamErrored = true;
+          setError(parsed.error ?? "stream_error");
+          setIsWaitingForFinal(false);
+          setRunning(false);
+        }
+      };
+
+      while (true) {
+        const { done, value } = await reader.read();
+
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true }).replace(/\r\n/g, "\n");
+
+        const events = buffer.split("\n\n");
+        buffer = events.pop() ?? "";
+
+        for (const eventBlock of events) {
+          const lines = eventBlock
+            .split("\n")
+            .map((line) => line.trim())
+            .filter(Boolean);
+
+          const dataLines = lines
+            .filter((line) => line.startsWith("data:"))
+            .map((line) => line.replace(/^data:\s*/, ""));
+
+          if (dataLines.length === 0) continue;
+
+          const dataText = dataLines.join("\n");
+
+          try {
+            const parsed = JSON.parse(dataText) as StreamEvent;
+            handleStreamEvent(parsed);
+          } catch {
+            // ignore partial fragments
+          }
+        }
+      }
+
+      const leftover = buffer.trim();
+      if (leftover) {
+        const lines = leftover
+          .split("\n")
+          .map((line) => line.trim())
+          .filter(Boolean);
+
+        const dataLines = lines
+          .filter((line) => line.startsWith("data:"))
+          .map((line) => line.replace(/^data:\s*/, ""));
+
+        if (dataLines.length > 0) {
+          try {
+            const parsed = JSON.parse(dataLines.join("\n")) as StreamEvent;
+            handleStreamEvent(parsed);
+          } catch {
+            // ignore
+          }
+        }
+      }
+
+      if (!finalReceived && !streamErrored) {
+        setError("stream_incomplete");
+        setIsWaitingForFinal(false);
+        setRunning(false);
+      }
+    } catch {
+      setError("verify_failed");
+      setIsWaitingForFinal(false);
       setRunning(false);
     }
   }
@@ -992,15 +1084,22 @@ export default function Home() {
 
   const displayedAnswers = streamingAnswers ?? answers;
 
+  const showComparisonSection =
+    selectedProviders.length === 2 &&
+    (hasStreamedAnyAnswer ||
+      !!displayedAnswers?.openai ||
+      !!displayedAnswers?.anthropic ||
+      !!displayedAnswers?.perplexity);
+
   const SynthesizeButton = () => (
     <SecondaryActionButton onClick={onSynthesize} disabled={!canSynthesize}>
       {synthesizing ? (
         <>
           <Spinner />
-          Combining insights…
+          Generating verified answer…
         </>
       ) : (
-        "Combine Best Insights"
+        "Generate Verified Answer"
       )}
     </SecondaryActionButton>
   );
@@ -1008,7 +1107,7 @@ export default function Home() {
   const HistoryList = () =>
     history.length === 0 ? (
       <div className="px-5 py-8 text-center text-xs opacity-40">
-        No history yet. Run an analysis to save it here.
+        No history yet. Run a verification to save it here.
       </div>
     ) : (
       <>
@@ -1025,10 +1124,10 @@ export default function Home() {
                   {formatTime(entry.timestamp)}
                 </span>
                 {entry.synthesis && (
-                  <span className="text-xs opacity-40">· synthesized</span>
+                  <span className="text-xs opacity-40">· verified answer</span>
                 )}
                 {entry.answers && !entry.synthesis && (
-                  <span className="text-xs opacity-40">· analysed</span>
+                  <span className="text-xs opacity-40">· verified</span>
                 )}
               </div>
             </div>
@@ -1047,12 +1146,12 @@ export default function Home() {
     decisionVerification?.riskLevel === "low"
       ? "high"
       : decisionVerification?.riskLevel === "moderate"
-      ? "medium"
-      : decisionVerification?.riskLevel === "high"
-      ? "low"
-      : decisionVerification?.consensus.level ??
-        comparison?.agreementLevel ??
-        "medium";
+        ? "medium"
+        : decisionVerification?.riskLevel === "high"
+          ? "low"
+          : decisionVerification?.consensus.level ??
+            comparison?.agreementLevel ??
+            "medium";
 
   const displayedConsensusLevel: "high" | "medium" | "low" =
     decisionVerification?.consensus.level ??
@@ -1138,7 +1237,7 @@ export default function Home() {
       </div>
 
       <div className="mx-auto w-full max-w-5xl space-y-6">
-        <header className="space-y-3 text-center">
+        <header className="space-y-4 text-center">
           <div className="flex items-center justify-between">
             <div className="w-16" />
             <h1 className="text-4xl md:text-5xl font-semibold tracking-tight">
@@ -1174,23 +1273,61 @@ export default function Home() {
             </div>
           </div>
 
-          <div className="space-y-2">
-            <p className="text-base md:text-sm opacity-80">
-              Get clearer answers by asking better questions.
+          <div className="space-y-3">
+            <p className="text-xl md:text-2xl font-medium tracking-tight">
+              Verify AI before you trust it.
             </p>
-            <p className="mx-auto max-w-2xl text-base md:text-sm opacity-55 leading-relaxed">
-              Zorelan helps you structure your question, add missing context,
-              and create a stronger prompt for AI. When it matters, you can also
-              compare answers across multiple models.
+            <p className="mx-auto max-w-3xl text-sm md:text-base opacity-65 leading-relaxed">
+              Zorelan compares multiple models, detects disagreement, and
+              returns a trust score so you can see when an answer is strong
+              enough to use — and when it needs caution, review, or escalation.
+            </p>
+            <p className="mx-auto max-w-2xl text-xs md:text-sm opacity-45 leading-relaxed">
+              Test the workflow below in real time. For production systems, the
+              API is the product.
             </p>
           </div>
 
           <div className="flex flex-wrap items-center justify-center gap-3 text-sm md:text-xs opacity-45">
-            <span>Better Prompts</span>
+            <span>Multi-Model Verification</span>
             <span>•</span>
-            <span>Clearer Answers</span>
+            <span>Trust Scoring</span>
             <span>•</span>
-            <span>Optional Verification</span>
+            <span>Risk-Aware Output</span>
+          </div>
+
+          <div className="mx-auto max-w-4xl">
+            <div className="grid gap-3 md:grid-cols-3 text-left">
+              <div className="rounded-2xl border border-black/10 dark:border-white/10 p-4">
+                <div className="text-xs uppercase tracking-wide opacity-45 mb-1">
+                  Problem
+                </div>
+                <p className="text-sm opacity-75 leading-relaxed">
+                  AI can sound confident while being wrong, incomplete, or
+                  misaligned with other models.
+                </p>
+              </div>
+
+              <div className="rounded-2xl border border-black/10 dark:border-white/10 p-4">
+                <div className="text-xs uppercase tracking-wide opacity-45 mb-1">
+                  What Zorelan does
+                </div>
+                <p className="text-sm opacity-75 leading-relaxed">
+                  Zorelan checks multiple model outputs, measures agreement, and
+                  adds trust and risk signals before you act on the result.
+                </p>
+              </div>
+
+              <div className="rounded-2xl border border-black/10 dark:border-white/10 p-4">
+                <div className="text-xs uppercase tracking-wide opacity-45 mb-1">
+                  Why it matters
+                </div>
+                <p className="text-sm opacity-75 leading-relaxed">
+                  Developers can use Zorelan to decide when to show, warn,
+                  block, or escalate AI-driven behaviour in production.
+                </p>
+              </div>
+            </div>
           </div>
 
           <div className="inline-flex rounded-xl border border-black/10 p-1 dark:border-white/10">
@@ -1203,7 +1340,7 @@ export default function Home() {
                   : "opacity-55 hover:opacity-85"
               )}
             >
-              Simple
+              Quick Verify
             </button>
             <button
               onClick={() => setAppMode("pro")}
@@ -1214,7 +1351,7 @@ export default function Home() {
                   : "opacity-55 hover:opacity-85"
               )}
             >
-              Pro
+              Advanced
             </button>
           </div>
         </header>
@@ -1224,7 +1361,7 @@ export default function Home() {
             <>
               <div className="space-y-4">
                 <div className="text-lg md:text-base font-medium opacity-90">
-                  I am asking about
+                  Context
                 </div>
                 <div className="grid grid-cols-3 gap-3">
                   {(Object.keys(CONTEXT_LABEL) as Context[]).map((c) => (
@@ -1242,7 +1379,7 @@ export default function Home() {
 
               <div className="space-y-4">
                 <div className="text-lg md:text-base font-medium opacity-90">
-                  I need help with
+                  Verification Type
                 </div>
                 <div className="grid grid-cols-3 gap-3">
                   {(Object.keys(MODE_LABEL) as Mode[]).map((m) => (
@@ -1260,21 +1397,24 @@ export default function Home() {
             </>
           )}
 
+          <div className="space-y-2">
+            <div className="text-sm text-left opacity-75">Raw Question</div>
+            <p className="text-xs text-left opacity-40">
+              This is what AI sees without verification.
+            </p>
+          </div>
+
           <div className="relative">
             {showPlaceholder && (
               <div
                 className="absolute top-0 left-0 w-full p-4 text-base md:text-sm pointer-events-none select-none opacity-30 leading-relaxed"
                 aria-hidden="true"
               >
-                <div className="mb-5">What are you trying to figure out?</div>
+                <div className="mb-5">What do you want to verify?</div>
                 <div>
-                  Type any question, decision, or problem. Zorelan will turn it
-                  into a clearer prompt, help you fill in missing context, and
-                  make it easier to get a better answer from AI.
-                </div>
-                <div className="mt-4">
-                  You can also compare how multiple AI models respond when the
-                  answer really matters.
+                  Type any question, decision, or problem. Zorelan will prepare
+                  it for verification, compare multiple AI answers, and show you
+                  how much trust the result deserves before you rely on it.
                 </div>
               </div>
             )}
@@ -1297,12 +1437,19 @@ export default function Home() {
             {busy ? (
               <>
                 <Spinner />
-                Structuring…
+                Preparing for verification…
               </>
             ) : (
-              "Structure My Question"
+              "Prepare for Verification"
             )}
           </PrimaryActionButton>
+
+          {!intent && !busy && (
+            <p className="text-center text-xs opacity-45 leading-relaxed">
+              Zorelan rewrites your input into a form that produces more
+              reliable outputs across multiple models.
+            </p>
+          )}
         </section>
 
         {error && (
@@ -1315,7 +1462,7 @@ export default function Home() {
         {busy && (
           <section className="rounded-2xl border border-white/10 p-5 space-y-4">
             <div className="text-xs uppercase tracking-wide opacity-50">
-              Structuring your question…
+              Preparing verification…
             </div>
             <PulsePlaceholder />
           </section>
@@ -1326,7 +1473,7 @@ export default function Home() {
             {appMode === "pro" && (
               <>
                 <div className="text-xs uppercase tracking-wide opacity-50">
-                  How we structured it
+                  How Zorelan structured the request
                 </div>
 
                 <div className="space-y-1">
@@ -1363,7 +1510,7 @@ export default function Home() {
 
             <div className="space-y-3">
               <div className="text-xs uppercase tracking-wide opacity-50">
-                Answer these to get better results{" "}
+                Add context for stronger verification{" "}
                 <span className="opacity-50 normal-case">(optional)</span>
               </div>
 
@@ -1402,7 +1549,7 @@ export default function Home() {
               </div>
 
               <div className="text-xs uppercase tracking-wide opacity-50 mb-2">
-                Your improved prompt
+                Verification-ready prompt
               </div>
               <p className="text-sm leading-relaxed whitespace-pre-wrap break-words">
                 {buildPolishedPrompt(intent, userAnswers)}
@@ -1428,12 +1575,20 @@ export default function Home() {
               {running ? (
                 <>
                   <Spinner />
-                  Getting answers from multiple AIs…
+                  Running verification across multiple AIs…
                 </>
               ) : (
-                "See how different AIs answer this"
+                "Run Verification"
               )}
             </PrimaryActionButton>
+
+            <div className="mt-3">
+              <p className="text-center text-xs opacity-50 leading-relaxed max-w-3xl mx-auto">
+                This interface shows how Zorelan works. In production,
+                developers use the API to gate AI with trust scores,
+                disagreement checks, and risk signals.
+              </p>
+            </div>
 
             {!running && !answers && (
               <p className="text-sm md:text-xs text-center opacity-60 mt-1">
@@ -1443,10 +1598,10 @@ export default function Home() {
           </section>
         )}
 
-        {running && (
+        {running && !showComparisonSection && (
           <section className="space-y-4">
             <div className="text-xs uppercase tracking-wide opacity-50 text-center">
-              Getting answers from multiple AIs…
+              Running verification across multiple AIs…
             </div>
 
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
@@ -1456,15 +1611,21 @@ export default function Home() {
           </section>
         )}
 
-        {answers && !running && (
+        {showComparisonSection && (
           <section ref={resultsRef} className="space-y-4">
             {(trustScore || decisionVerification) && (
               <div className="rounded-2xl border border-black/10 p-5 dark:border-white/10 space-y-4 bg-black/[0.02] dark:bg-white/[0.02]">
+                <div className="space-y-1 text-center md:text-left">
+                  <div className="text-xs uppercase tracking-wide opacity-50">
+                    Verification Result
+                  </div>
+                  <p className="text-sm opacity-55">
+                    Can this answer be trusted?
+                  </p>
+                </div>
+
                 <div className="flex items-center justify-between gap-3 flex-wrap">
                   <div className="flex items-center gap-3 flex-wrap">
-                    <div className="text-xs uppercase tracking-wide opacity-50">
-                      Analysis Summary
-                    </div>
                     {cached && (
                       <div className="text-xs px-2.5 py-1 rounded-full bg-white/5 border border-white/10 text-white/40">
                         ⚡ Cached result · verified earlier
@@ -1488,7 +1649,9 @@ export default function Home() {
                     </div>
                     <div className="text-2xl font-semibold leading-none">
                       {trustScore?.score ?? "—"}
-                      <span className="text-sm font-normal opacity-40">/100</span>
+                      <span className="text-sm font-normal opacity-40">
+                        /100
+                      </span>
                     </div>
                     {trustScore && (
                       <div
@@ -1548,6 +1711,19 @@ export default function Home() {
                   </div>
                 </div>
 
+                {decisionVerification && (
+                  <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                    <InsightBlock
+                      title="Verification Verdict"
+                      value={decisionVerification.verdict}
+                    />
+                    <InsightBlock
+                      title="Suggested Handling"
+                      value={decisionVerification.recommendedAction}
+                    />
+                  </div>
+                )}
+
                 {trustScore?.reason && (
                   <div className="rounded-xl border border-black/10 dark:border-white/10 p-4">
                     <div className="text-xs uppercase tracking-wide opacity-50 mb-2">
@@ -1562,11 +1738,12 @@ export default function Home() {
             )}
 
             <div className="text-xs uppercase tracking-wide opacity-50 text-center">
-              Different AI answers
+              Compared Model Outputs
             </div>
 
             <p className="text-sm md:text-xs text-center opacity-55">
-              These models do not always agree — compare before deciding.
+              These models do not always agree. Zorelan compares them before you
+              decide what to trust.
             </p>
 
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
@@ -1575,14 +1752,20 @@ export default function Home() {
                   key={provider}
                   provider={provider}
                   answer={displayedAnswers?.[provider] || ""}
-                  isStreaming={isStreamingAnswers}
                 />
               ))}
             </div>
 
+            {isWaitingForFinal && (
+              <div className="rounded-xl border border-black/10 dark:border-white/10 p-4 text-center text-sm opacity-55">
+                Comparing the answers and calculating trust…
+              </div>
+            )}
+
             <div className="space-y-2">
               <p className="text-sm md:text-xs text-center opacity-55">
-                Now combine the strongest parts into one answer.
+                Resolve into a final, verified answer once the model comparison
+                is complete.
               </p>
               <SynthesizeButton />
             </div>
@@ -1592,7 +1775,7 @@ export default function Home() {
         {synthesizing && (
           <section className="rounded-2xl border border-white/10 p-5 space-y-3">
             <div className="text-xs uppercase tracking-wide opacity-50">
-              Combining insights…
+              Generating verified answer…
             </div>
             <PulsePlaceholder />
           </section>
@@ -1604,8 +1787,13 @@ export default function Home() {
             className="rounded-2xl border border-black/10 p-5 dark:border-white/10 space-y-4"
           >
             <div className="flex items-center justify-between gap-3 flex-wrap">
-              <div className="text-xs uppercase tracking-wide opacity-50">
-                Verified Answer
+              <div className="space-y-1">
+                <div className="text-xs uppercase tracking-wide opacity-50">
+                  Verified Output
+                </div>
+                <p className="text-sm opacity-55">
+                  Synthesized from multiple models with agreement weighting.
+                </p>
               </div>
               {(comparison || decisionVerification) && (
                 <div
@@ -1619,149 +1807,17 @@ export default function Home() {
               )}
             </div>
 
-            {trustScore && (
-              <div className="rounded-xl border border-black/10 dark:border-white/10 p-5 space-y-4 bg-black/[0.02] dark:bg-white/[0.02]">
-                <div className="text-xs uppercase tracking-wide opacity-50">
-                  Trust Score
-                </div>
-
-                <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
-                  <div className="space-y-3">
-                    <div className="flex items-end gap-1.5">
-                      <div className="text-6xl md:text-7xl font-semibold tracking-tight leading-none">
-                        {trustScore.score}
-                      </div>
-                      <div className="text-base md:text-lg opacity-40 pb-1.5">
-                        /100
-                      </div>
-                    </div>
-
-                    <div
-                      className={cx(
-                        "inline-flex rounded-full px-3 py-1 text-xs font-medium",
-                        getTrustBadgeClasses(trustScore.label)
-                      )}
-                    >
-                      {getTrustLabel(trustScore.label)}
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:w-[360px]">
-                    <div className="rounded-xl border border-black/10 dark:border-white/10 p-4 space-y-1">
-                      <div className="text-xs uppercase tracking-wide opacity-50">
-                        Confidence
-                      </div>
-                      <div className="text-sm font-medium">
-                        {getConfidenceLabel(displayedConfidenceLevel)}
-                      </div>
-                    </div>
-
-                    <div className="rounded-xl border border-black/10 dark:border-white/10 p-4 space-y-1">
-                      <div className="text-xs uppercase tracking-wide opacity-50">
-                        Risk
-                      </div>
-                      <div className="text-sm font-medium capitalize">
-                        {decisionVerification?.riskLevel ?? "—"}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="rounded-xl border border-black/10 dark:border-white/10 p-4">
-                  <div className="text-xs uppercase tracking-wide opacity-50 mb-2">
-                    Why this score
-                  </div>
-                  <div className="text-sm leading-relaxed whitespace-pre-wrap break-words">
-                    {trustScore.reason}
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {decisionVerification && (
-              <div className="rounded-xl border border-black/10 dark:border-white/10 p-4 space-y-4 bg-black/[0.02] dark:bg-white/[0.02]">
-                <div className="text-xs uppercase tracking-wide opacity-50">
-                  Verification Summary
-                </div>
-
-                <InsightBlock
-                  title="Decision Verdict"
-                  value={decisionVerification.verdict}
-                />
-
-                <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-                  <InsightBlock
-                    title="Recommended Action"
-                    value={decisionVerification.recommendedAction}
-                  />
-                  <InsightBlock
-                    title="Key Disagreement"
-                    value={decisionVerification.keyDisagreement}
-                  />
-                </div>
-
-                <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-                  <div className="rounded-xl border border-black/10 dark:border-white/10 p-4 space-y-1">
-                    <div className="text-xs uppercase tracking-wide opacity-50">
-                      Consensus
-                    </div>
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="text-sm font-medium capitalize">
-                        {displayedConsensusLevel}
-                      </div>
-                      <div
-                        className={cx(
-                          "text-xs font-medium px-2.5 py-1 rounded-full",
-                          getConfidenceBadgeClasses(displayedConsensusLevel)
-                        )}
-                      >
-                        {decisionVerification.consensus.modelsAligned}/2 aligned
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="rounded-xl border border-black/10 dark:border-white/10 p-4 space-y-1">
-                    <div className="text-xs uppercase tracking-wide opacity-50">
-                      Risk Level
-                    </div>
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="text-sm font-medium capitalize">
-                        {decisionVerification.riskLevel}
-                      </div>
-                      <div
-                        className={cx(
-                          "text-xs font-medium px-2.5 py-1 rounded-full capitalize",
-                          getRiskBadgeClasses(decisionVerification.riskLevel)
-                        )}
-                      >
-                        {decisionVerification.riskLevel}
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="rounded-xl border border-black/10 dark:border-white/10 p-4 space-y-1">
-                    <div className="text-xs uppercase tracking-wide opacity-50">
-                      Model Disagreement
-                    </div>
-                    <div className="text-sm font-medium">
-                      {displayedDisagreementLabel}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-
             <div className="relative space-y-2 rounded-xl border border-black/10 dark:border-white/10 p-4 pr-16 overflow-hidden">
               <div className="absolute top-3 right-3">
                 <CopyIconButton
                   copied={insightCopied}
                   onClick={onCopyInsight}
-                  label="Copy insight"
+                  label="Copy verified output"
                 />
               </div>
 
               <div className="text-xs uppercase tracking-wide opacity-50">
-                Why
+                Final verified answer
               </div>
               <div className="min-w-0 max-w-full overflow-x-auto [&_*]:max-w-full [&_pre]:max-w-full [&_pre]:overflow-x-auto [&_pre]:whitespace-pre-wrap [&_pre]:break-words [&_code]:break-words">
                 {renderMarkdown(synthesis)}
@@ -1783,7 +1839,7 @@ export default function Home() {
             {structuredSynthesis && (
               <div className="space-y-3">
                 <div className="text-xs uppercase tracking-wide opacity-50">
-                  Key Takeaways
+                  Structured decision output
                 </div>
                 <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
                   <InsightBlock

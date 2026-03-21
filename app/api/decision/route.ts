@@ -95,9 +95,14 @@ type WithTimeoutResult<T> = {
   usedFallback: boolean;
 };
 
+type ProviderStreamOptions = {
+  onDelta?: (delta: string) => void;
+};
+
 type ProviderRunner = (
   prompt: string,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  options?: ProviderStreamOptions
 ) => Promise<string>;
 
 type VerdictPayload = {
@@ -404,8 +409,6 @@ function normalizeVerdictWithSemantic(input: {
   verdictPayload: VerdictPayload;
   promptClassification: PromptClassification;
 }): VerdictPayload {
-
-  // 🔥 HARD FIX: force absolute alignment for low-risk factual prompts
   if (
     input.promptClassification.risk === "low" &&
     input.semanticAgreementLevel === "high"
@@ -476,8 +479,9 @@ function getModelsAligned(input: {
     case "additive_nuance":
     case "explanation_variation":
       if (input.agreementLevel === "low") return 0;
-      if (input.agreementLevel === "medium")
+      if (input.agreementLevel === "medium") {
         return Math.max(1, input.totalProviders - 1);
+      }
       return input.totalProviders;
     case "conditional_alignment":
       return Math.max(1, input.totalProviders - 1);
@@ -485,8 +489,9 @@ function getModelsAligned(input: {
       return 0;
     default:
       if (input.finalConclusionAligned) return input.totalProviders;
-      if (input.agreementLevel === "medium")
+      if (input.agreementLevel === "medium") {
         return Math.max(1, input.totalProviders - 1);
+      }
       return 0;
   }
 }
@@ -743,9 +748,12 @@ function getPairStrength(
   semantic: Awaited<ReturnType<typeof judgeSemanticAgreementOrFallback>>
 ): number {
   if (semantic.agreementLevel === "high") return 3;
-  if (semantic.agreementLevel === "medium" && !semantic.likelyConflict)
+  if (semantic.agreementLevel === "medium" && !semantic.likelyConflict) {
     return 2;
-  if (semantic.agreementLevel === "medium" && semantic.likelyConflict) return 1;
+  }
+  if (semantic.agreementLevel === "medium" && semantic.likelyConflict) {
+    return 1;
+  }
   return 0;
 }
 
@@ -970,6 +978,89 @@ async function buildDecisionVerdict(params: {
   }
 }
 
+function sseEvent(data: unknown): string {
+  return `data: ${JSON.stringify(data)}\n\n`;
+}
+
+function sseHeaders(): HeadersInit {
+  return {
+    "Content-Type": "text/event-stream; charset=utf-8",
+    "Cache-Control": "no-cache, no-transform",
+    Connection: "keep-alive",
+    "X-Accel-Buffering": "no",
+  };
+}
+
+function streamCachedPayload(payload: unknown) {
+  const encoder = new TextEncoder();
+
+  const stream = new ReadableStream<Uint8Array>({
+    start(controller) {
+      const send = (event: unknown) => {
+        controller.enqueue(encoder.encode(sseEvent(event)));
+      };
+
+      try {
+        const maybePayload = payload as
+          | {
+              answers?: Record<string, string>;
+              selectedProviders?: ProviderName[];
+            }
+          | undefined;
+
+        const selectedProviders = Array.isArray(maybePayload?.selectedProviders)
+          ? (maybePayload?.selectedProviders.slice(0, 2) as [
+              ProviderName,
+              ProviderName,
+            ])
+          : undefined;
+
+        if (selectedProviders && selectedProviders.length === 2) {
+          send({
+            type: "selected_providers",
+            selectedProviders,
+          });
+
+          for (const provider of selectedProviders) {
+            const answer =
+              typeof maybePayload?.answers?.[provider] === "string"
+                ? maybePayload.answers[provider]
+                : "";
+
+            send({
+              type: "provider_answer",
+              provider,
+              answer,
+              duration_ms: 0,
+              timed_out: false,
+              used_fallback: false,
+              selectedProviders,
+            });
+          }
+        }
+
+        send({
+          type: "final",
+          payload,
+        });
+
+        controller.close();
+      } catch {
+        send({
+          type: "error",
+          error: "cached_stream_error",
+        });
+        controller.close();
+      }
+    },
+  });
+
+  return new Response(stream, {
+    status: 200,
+    headers: sseHeaders(),
+  });
+}
+
 export async function POST(req: NextRequest) {
   try {
     const token = extractBearerToken(req);
@@ -1050,6 +1141,7 @@ export async function POST(req: NextRequest) {
         ? body.raw_prompt.trim()
         : executionPrompt;
     const cacheBypass = body?.cache_bypass === true;
+    const streamMode = body?.stream === true;
 
     if (!executionPrompt || typeof executionPrompt !== "string") {
       return badRequest("missing_prompt");
@@ -1150,10 +1242,18 @@ export async function POST(req: NextRequest) {
       if (cached) {
         const cachedPayload =
           typeof cached === "string" ? JSON.parse(cached) : cached;
+
         if (cachedPayload && typeof cachedPayload === "object") {
-          cachedPayload.usage = customerKeyMeta ?? null;
-          cachedPayload.cached = true;
+          (cachedPayload as Record<string, unknown>).usage =
+            customerKeyMeta ?? null;
+          (cachedPayload as Record<string, unknown>).cached = true;
+
           console.log("[/api/decision] cache_hit", { cacheKey });
+
+          if (streamMode) {
+            return streamCachedPayload(cachedPayload);
+          }
+
           return NextResponse.json(cachedPayload);
         }
       }
@@ -1177,17 +1277,531 @@ export async function POST(req: NextRequest) {
 
     const executionMap: Partial<Record<ProviderName, ProviderExecution>> = {};
 
+    const runProvider = (
+  provider: ProviderName,
+  options?: ProviderStreamOptions
+) =>
+  withTimeout(
+    (signal) => providerMap[provider](executionPrompt, signal, options),
+    TIMEOUT_MS,
+    `${provider} timed out.`
+  );
+
+    const savePayloadToCache = async (
+      validatedPayload: z.infer<typeof DecisionResponseSchema>
+    ) => {
+      try {
+        const { usage: _usage, ...payloadWithoutUsage } = validatedPayload;
+        await redis.set(cacheKey, JSON.stringify(payloadWithoutUsage), {
+          ex: CACHE_TTL_SECONDS,
+        });
+        console.log("[/api/decision] cache_write", { cacheKey });
+      } catch (cacheErr) {
+        console.warn("[/api/decision] cache_write_error:", cacheErr);
+      }
+    };
+
+    const buildValidatedResponse = async (): Promise<
+      z.infer<typeof DecisionResponseSchema>
+    > => {
+      const initialPair = await evaluatePair({
+        prompt: rawPrompt,
+        providerA,
+        providerB,
+        answerA: executionMap[providerA]!.answer,
+        answerB: executionMap[providerB]!.answer,
+      });
+
+      let activePair = initialPair;
+      let arbitrationUsed = false;
+      let arbitrationProvider: ProviderName | null = null;
+      let arbitrationPairStrengths: {
+        initial: number;
+        withAThird: number | null;
+        withBThird: number | null;
+      } | null = null;
+
+      const thirdProvider = rankedProviders.find(
+        (provider) => !limitedProviders.includes(provider)
+      );
+
+      const initialFallbackClassification = inferFallbackClassification({
+        agreementLevel: initialPair.semantic.agreementLevel,
+        likelyConflict: initialPair.semantic.likelyConflict,
+      });
+
+      const arbitrationTriggered =
+        !!thirdProvider &&
+        shouldTriggerArbitration({
+          agreementLevel: initialPair.semantic.agreementLevel,
+          likelyConflict: initialPair.semantic.likelyConflict,
+          finalConclusionAligned:
+            initialFallbackClassification.finalConclusionAligned,
+        });
+
+      if (arbitrationTriggered && thirdProvider) {
+        void incrementAnalytic("arbitration:triggered");
+
+        const thirdResult = await runProvider(thirdProvider);
+
+        executionMap[thirdProvider] = {
+          provider: thirdProvider,
+          answer: thirdResult.value,
+          durationMs: thirdResult.durationMs,
+          timedOut: thirdResult.timedOut,
+          usedFallback: thirdResult.usedFallback,
+        };
+
+        await updateProviderScore({
+          taskType,
+          provider: thirdProvider,
+          durationMs: thirdResult.durationMs,
+          timedOut: thirdResult.timedOut,
+          usedFallback: thirdResult.usedFallback,
+        });
+
+        const [pairWithAThird, pairWithBThird] = await Promise.all([
+          evaluatePair({
+            prompt: rawPrompt,
+            providerA,
+            providerB: thirdProvider,
+            answerA: executionMap[providerA]!.answer,
+            answerB: executionMap[thirdProvider]!.answer,
+          }),
+          evaluatePair({
+            prompt: rawPrompt,
+            providerA: providerB,
+            providerB: thirdProvider,
+            answerA: executionMap[providerB]!.answer,
+            answerB: executionMap[thirdProvider]!.answer,
+          }),
+        ]);
+
+        const initialStrength = getPairStrength(initialPair.semantic);
+        const aThirdStrength = getPairStrength(pairWithAThird.semantic);
+        const bThirdStrength = getPairStrength(pairWithBThird.semantic);
+
+        arbitrationPairStrengths = {
+          initial: initialStrength,
+          withAThird: aThirdStrength,
+          withBThird: bThirdStrength,
+        };
+
+        if (
+          aThirdStrength > initialStrength ||
+          bThirdStrength > initialStrength
+        ) {
+          arbitrationUsed = true;
+          arbitrationProvider = thirdProvider;
+          void incrementAnalytic("arbitration:changed");
+
+          if (aThirdStrength > bThirdStrength) {
+            activePair = pairWithAThird;
+          } else if (bThirdStrength > aThirdStrength) {
+            activePair = pairWithBThird;
+          } else if (aThirdStrength >= initialStrength) {
+            const prefersPairWithA =
+              pairWithAThird.semantic.agreementLevel === "high" &&
+              pairWithBThird.semantic.agreementLevel !== "high";
+            activePair = prefersPairWithA ? pairWithAThird : pairWithBThird;
+          }
+        }
+
+        if (arbitrationUsed) {
+          const [rawScoreActivePairA, rawScoreActivePairB] = await Promise.all([
+            redis.get(`zorelan:score:v2:${taskType}:${activePair.providerA}`),
+            redis.get(`zorelan:score:v2:${taskType}:${activePair.providerB}`),
+          ]);
+          weightA = getConfidenceWeight(rawScoreActivePairA);
+          weightB = getConfidenceWeight(rawScoreActivePairB);
+        }
+      }
+
+      if (arbitrationPairStrengths !== null && !arbitrationUsed) {
+        void incrementAnalytic("arbitration:confirmed");
+      }
+
+      logArbitrationDiagnostic({
+        prompt: rawPrompt,
+        taskType,
+        initialPair: [initialPair.providerA, initialPair.providerB],
+        thirdProvider: thirdProvider ?? null,
+        initialAgreementLevel: initialPair.semantic.agreementLevel,
+        initialLikelyConflict: initialPair.semantic.likelyConflict,
+        initialSemanticLabel: initialPair.semantic.label,
+        initialSemanticRationale: initialPair.semantic.rationale,
+        initialUsedFallback: initialPair.semantic.usedFallback,
+        arbitrationTriggered,
+        arbitrationUsed,
+        arbitrationProvider,
+        winningPair: [activePair.providerA, activePair.providerB],
+        pairStrengths: arbitrationPairStrengths,
+      });
+
+      const synthesisCompletion = await openai.chat.completions.create({
+        model: "gpt-4o-mini",
+        max_tokens: 400,
+        temperature: 0.3,
+        messages: [
+          {
+            role: "system",
+            content:
+              "You are a synthesis engine. Combine the two AI responses into one superior final answer. " +
+              "Be concise and direct. Preserve important caveats and tradeoffs. " +
+              "Do not mention that you are combining two answers. " +
+              "Each response carries a confidence score (1.0 = baseline, >1.0 = historically stronger on this task type). " +
+              "When responses differ, consider this as a secondary weighting signal, but prioritise the quality, accuracy, and relevance of the current responses.",
+          },
+          {
+            role: "user",
+            content: [
+              `Question: ${executionPrompt}`,
+              "",
+              `Response A (${activePair.providerA}, confidence: ${weightA.toFixed(2)}): ${activePair.answerA}`,
+              "",
+              `Response B (${activePair.providerB}, confidence: ${weightB.toFixed(2)}): ${activePair.answerB}`,
+            ].join("\n"),
+          },
+        ],
+      });
+
+      const verifiedAnswerRaw = stripCodeFences(
+        synthesisCompletion.choices[0]?.message?.content ?? ""
+      );
+      const verifiedAnswer = cleanEncoding(verifiedAnswerRaw);
+
+      const [verdictPayloadRaw, qualityScores] = await Promise.all([
+        buildDecisionVerdict({
+          prompt: rawPrompt,
+          answerA: activePair.answerA,
+          answerB: activePair.answerB,
+          weightA,
+          weightB,
+          agreementLevel: activePair.semantic.agreementLevel,
+          likelyConflict: activePair.semantic.likelyConflict,
+          verifiedAnswer,
+        }),
+        scoreAnswerQuality({
+          answerA: activePair.answerA,
+          answerB: activePair.answerB,
+          providerA: activePair.providerA,
+          providerB: activePair.providerB,
+        }),
+      ]);
+
+      const verdictPayload = normalizeVerdictWithSemantic({
+        semanticAgreementLevel: activePair.semantic.agreementLevel,
+        semanticLikelyConflict: activePair.semantic.likelyConflict,
+        verdictPayload: verdictPayloadRaw,
+        promptClassification,
+      });
+
+      if (
+        verdictPayload.finalConclusionAligned &&
+        (verdictPayload.disagreementType === "none" ||
+          verdictPayload.disagreementType === "additive_nuance" ||
+          verdictPayload.disagreementType === "explanation_variation")
+      ) {
+        verdictPayload.verdict = "Models are aligned on the main conclusion";
+
+        if (verdictPayload.disagreementType === "none") {
+          verdictPayload.keyDisagreement = "No meaningful disagreement";
+        } else if (verdictPayload.disagreementType === "additive_nuance") {
+          verdictPayload.keyDisagreement =
+            "Minor differences in supporting detail";
+        } else {
+          verdictPayload.keyDisagreement = "Different framing or emphasis";
+        }
+      }
+
+      await Promise.all([
+        updateProviderQualityScore({
+          taskType,
+          provider: activePair.providerA,
+          qualityScore: qualityScores.scoreA,
+        }),
+        updateProviderQualityScore({
+          taskType,
+          provider: activePair.providerB,
+          qualityScore: qualityScores.scoreB,
+        }),
+      ]);
+
+      const invokedProviders = Object.keys(executionMap) as ProviderName[];
+      const consensusProviderCount = arbitrationUsed
+        ? invokedProviders.length
+        : limitedProviders.length;
+
+      const modelsAligned = getModelsAligned({
+        totalProviders: consensusProviderCount,
+        agreementLevel: activePair.semantic.agreementLevel,
+        finalConclusionAligned: verdictPayload.finalConclusionAligned,
+        disagreementType: verdictPayload.disagreementType,
+      });
+
+      const consensusLevel = getConsensusLevelFromAligned(
+        modelsAligned,
+        consensusProviderCount
+      );
+
+      const riskLevel = getRiskLevel({
+        prompt: rawPrompt,
+        agreementLevel: activePair.semantic.agreementLevel,
+        disagreementType: verdictPayload.disagreementType,
+        finalConclusionAligned: verdictPayload.finalConclusionAligned,
+        promptClassification,
+      });
+
+      const averageQuality = (qualityScores.scoreA + qualityScores.scoreB) / 2;
+
+      const trustScore = calculateTrustScore({
+        prompt: rawPrompt,
+        agreementLevel: activePair.semantic.agreementLevel,
+        disagreementType: verdictPayload.disagreementType,
+        finalConclusionAligned: verdictPayload.finalConclusionAligned,
+        averageQuality,
+        riskLevel,
+      });
+
+      const responsePayload = {
+        ok: true as const,
+        verdict: verdictPayload.verdict,
+        consensus: {
+          level: consensusLevel,
+          models_aligned: modelsAligned,
+        },
+        risk_level: riskLevel,
+        key_disagreement: verdictPayload.keyDisagreement,
+        recommended_action: verdictPayload.recommendedAction,
+        analysis: verifiedAnswer,
+        verified_answer: verifiedAnswer,
+        confidence: (() => {
+          if (riskLevel === "high") return "low" as AgreementLevel;
+          if (riskLevel === "moderate" && consensusLevel === "high") {
+            return "medium" as AgreementLevel;
+          }
+          return consensusLevel;
+        })(),
+        confidence_reason: getConfidenceReason({
+          agreementLevel: activePair.semantic.agreementLevel,
+          disagreementType: verdictPayload.disagreementType,
+          finalConclusionAligned: verdictPayload.finalConclusionAligned,
+        }),
+        trust_score: {
+          score: trustScore.score,
+          label: trustScore.label,
+          reason: trustScore.reason,
+        },
+        answers: {
+          openai: cleanEncoding(
+            activePair.providerA === "openai"
+              ? activePair.answerA
+              : activePair.providerB === "openai"
+              ? activePair.answerB
+              : ""
+          ),
+          anthropic: cleanEncoding(
+            activePair.providerA === "anthropic"
+              ? activePair.answerA
+              : activePair.providerB === "anthropic"
+              ? activePair.answerB
+              : ""
+          ),
+          perplexity: cleanEncoding(
+            activePair.providerA === "perplexity"
+              ? activePair.answerA
+              : activePair.providerB === "perplexity"
+              ? activePair.answerB
+              : ""
+          ),
+        },
+        selectedProviders: [activePair.providerA, activePair.providerB] as [
+          ProviderName,
+          ProviderName,
+        ],
+        providers_used: invokedProviders,
+        verification: {
+          final_conclusion_aligned: verdictPayload.finalConclusionAligned,
+          disagreement_type: verdictPayload.disagreementType,
+          semantic_label: activePair.semantic.label,
+          semantic_rationale: activePair.semantic.rationale,
+          semantic_judge_model: activePair.semantic.judgeModel,
+          semantic_used_fallback: activePair.semantic.usedFallback,
+        },
+        arbitration: {
+          used: arbitrationUsed,
+          provider: arbitrationProvider,
+          winning_pair: [activePair.providerA, activePair.providerB],
+          pair_strengths: arbitrationPairStrengths,
+        },
+        model_diagnostics: Object.fromEntries(
+          invokedProviders.map((provider) => [
+            provider,
+            {
+              quality_score:
+                provider === activePair.providerA
+                  ? qualityScores.scoreA
+                  : provider === activePair.providerB
+                  ? qualityScores.scoreB
+                  : null,
+              duration_ms: executionMap[provider]!.durationMs,
+              timed_out: executionMap[provider]!.timedOut,
+              used_fallback: executionMap[provider]!.usedFallback,
+            },
+          ])
+        ),
+        meta: {
+          task_type: taskType,
+          overlap_ratio: activePair.comparison.overlapRatio,
+          agreement_summary: activePair.comparison.summary,
+          prompt_chars: rawPrompt.length,
+          execution_prompt_chars: executionPrompt.length,
+          likely_conflict: activePair.semantic.likelyConflict,
+          disagreement_type: verdictPayload.disagreementType,
+          initial_pair: [initialPair.providerA, initialPair.providerB],
+        },
+        usage: customerKeyMeta ?? null,
+        cached: false,
+      };
+
+      const validation = DecisionResponseSchema.safeParse(responsePayload);
+
+      if (!validation.success) {
+        console.error(
+          "[/api/decision] response_validation_failed:",
+          JSON.stringify(validation.error.issues)
+        );
+        throw new Error("response_validation_failed");
+      }
+
+      await savePayloadToCache(validation.data);
+      return validation.data;
+    };
+
+    if (streamMode) {
+      const encoder = new TextEncoder();
+
+      const stream = new ReadableStream<Uint8Array>({
+        async start(controller) {
+          const send = (event: unknown) => {
+            controller.enqueue(encoder.encode(sseEvent(event)));
+          };
+
+          try {
+            send({
+              type: "selected_providers",
+              selectedProviders: [providerA, providerB],
+            });
+
+            const pending = new Map<
+  ProviderName,
+  Promise<WithTimeoutResult<string>>
+>([
+  [
+    providerA,
+    runProvider(providerA, {
+      onDelta: (delta) => {
+        const cleaned = cleanEncoding(delta);
+        if (!cleaned) return;
+
+        send({
+          type: "provider_delta",
+          provider: providerA,
+          delta: cleaned,
+        });
+      },
+    }),
+  ],
+  [
+    providerB,
+    runProvider(providerB, {
+      onDelta: (delta) => {
+        const cleaned = cleanEncoding(delta);
+        if (!cleaned) return;
+
+        send({
+          type: "provider_delta",
+          provider: providerB,
+          delta: cleaned,
+        });
+      },
+    }),
+  ],
+]);
+
+            while (pending.size > 0) {
+              const tagged = Array.from(pending.entries()).map(
+                ([provider, promise]) =>
+                  promise.then((result) => ({ provider, result }))
+              );
+
+              const settled = await Promise.race(tagged);
+              pending.delete(settled.provider);
+
+              const { provider, result } = settled;
+
+              executionMap[provider] = {
+                provider,
+                answer: result.value,
+                durationMs: result.durationMs,
+                timedOut: result.timedOut,
+                usedFallback: result.usedFallback,
+              };
+
+              await updateProviderScore({
+                taskType,
+                provider,
+                durationMs: result.durationMs,
+                timedOut: result.timedOut,
+                usedFallback: result.usedFallback,
+              });
+
+              send({
+                type: "provider_answer",
+                provider,
+                answer: cleanEncoding(result.value),
+                duration_ms: result.durationMs,
+                timed_out: result.timedOut,
+                used_fallback: result.usedFallback,
+                selectedProviders: [providerA, providerB],
+              });
+            }
+
+            const finalPayload = await buildValidatedResponse();
+
+            send({
+              type: "final",
+              payload: finalPayload,
+            });
+
+            controller.close();
+          } catch (err) {
+            console.error("[/api/decision] stream_error:", err);
+
+            const message =
+              err instanceof Error && err.message === "response_validation_failed"
+                ? "response_validation_failed"
+                : "internal_error";
+
+            send({
+              type: "error",
+              error: message,
+            });
+
+            controller.close();
+          }
+        },
+      });
+
+      return new Response(stream, {
+        status: 200,
+        headers: sseHeaders(),
+      });
+    }
+
     const [resultA, resultB] = await Promise.all([
-      withTimeout(
-        (signal) => providerMap[providerA](executionPrompt, signal),
-        TIMEOUT_MS,
-        `${providerA} timed out.`
-      ),
-      withTimeout(
-        (signal) => providerMap[providerB](executionPrompt, signal),
-        TIMEOUT_MS,
-        `${providerB} timed out.`
-      ),
+      runProvider(providerA),
+      runProvider(providerB),
     ]);
 
     executionMap[providerA] = {
@@ -1223,395 +1837,8 @@ export async function POST(req: NextRequest) {
       }),
     ]);
 
-    const initialPair = await evaluatePair({
-      prompt: rawPrompt,
-      providerA,
-      providerB,
-      answerA: executionMap[providerA]!.answer,
-      answerB: executionMap[providerB]!.answer,
-    });
-
-    let activePair = initialPair;
-    let arbitrationUsed = false;
-    let arbitrationProvider: ProviderName | null = null;
-    let arbitrationPairStrengths: {
-      initial: number;
-      withAThird: number | null;
-      withBThird: number | null;
-    } | null = null;
-
-    const thirdProvider = rankedProviders.find(
-      (provider) => !limitedProviders.includes(provider)
-    );
-
-    const initialFallbackClassification = inferFallbackClassification({
-      agreementLevel: initialPair.semantic.agreementLevel,
-      likelyConflict: initialPair.semantic.likelyConflict,
-    });
-
-    const arbitrationTriggered =
-      !!thirdProvider &&
-      shouldTriggerArbitration({
-        agreementLevel: initialPair.semantic.agreementLevel,
-        likelyConflict: initialPair.semantic.likelyConflict,
-        finalConclusionAligned:
-          initialFallbackClassification.finalConclusionAligned,
-      });
-
-    if (arbitrationTriggered && thirdProvider) {
-      void incrementAnalytic("arbitration:triggered");
-
-      const thirdResult = await withTimeout(
-        (signal) => providerMap[thirdProvider](executionPrompt, signal),
-        TIMEOUT_MS,
-        `${thirdProvider} timed out.`
-      );
-
-      executionMap[thirdProvider] = {
-        provider: thirdProvider,
-        answer: thirdResult.value,
-        durationMs: thirdResult.durationMs,
-        timedOut: thirdResult.timedOut,
-        usedFallback: thirdResult.usedFallback,
-      };
-
-      await updateProviderScore({
-        taskType,
-        provider: thirdProvider,
-        durationMs: thirdResult.durationMs,
-        timedOut: thirdResult.timedOut,
-        usedFallback: thirdResult.usedFallback,
-      });
-
-      const [pairWithAThird, pairWithBThird] = await Promise.all([
-        evaluatePair({
-          prompt: rawPrompt,
-          providerA,
-          providerB: thirdProvider,
-          answerA: executionMap[providerA]!.answer,
-          answerB: executionMap[thirdProvider]!.answer,
-        }),
-        evaluatePair({
-          prompt: rawPrompt,
-          providerA: providerB,
-          providerB: thirdProvider,
-          answerA: executionMap[providerB]!.answer,
-          answerB: executionMap[thirdProvider]!.answer,
-        }),
-      ]);
-
-      const initialStrength = getPairStrength(initialPair.semantic);
-      const aThirdStrength = getPairStrength(pairWithAThird.semantic);
-      const bThirdStrength = getPairStrength(pairWithBThird.semantic);
-
-      arbitrationPairStrengths = {
-        initial: initialStrength,
-        withAThird: aThirdStrength,
-        withBThird: bThirdStrength,
-      };
-
-      if (
-        aThirdStrength > initialStrength ||
-        bThirdStrength > initialStrength
-      ) {
-        arbitrationUsed = true;
-        arbitrationProvider = thirdProvider;
-        void incrementAnalytic("arbitration:changed");
-
-        if (aThirdStrength > bThirdStrength) {
-          activePair = pairWithAThird;
-        } else if (bThirdStrength > aThirdStrength) {
-          activePair = pairWithBThird;
-        } else if (aThirdStrength >= initialStrength) {
-          const prefersPairWithA =
-            pairWithAThird.semantic.agreementLevel === "high" &&
-            pairWithBThird.semantic.agreementLevel !== "high";
-          activePair = prefersPairWithA ? pairWithAThird : pairWithBThird;
-        }
-      }
-
-      if (arbitrationUsed) {
-        const [rawScoreActivePairA, rawScoreActivePairB] = await Promise.all([
-          redis.get(`zorelan:score:v2:${taskType}:${activePair.providerA}`),
-          redis.get(`zorelan:score:v2:${taskType}:${activePair.providerB}`),
-        ]);
-        weightA = getConfidenceWeight(rawScoreActivePairA);
-        weightB = getConfidenceWeight(rawScoreActivePairB);
-      }
-    }
-
-    if (arbitrationPairStrengths !== null && !arbitrationUsed) {
-      void incrementAnalytic("arbitration:confirmed");
-    }
-
-    logArbitrationDiagnostic({
-      prompt: rawPrompt,
-      taskType,
-      initialPair: [initialPair.providerA, initialPair.providerB],
-      thirdProvider: thirdProvider ?? null,
-      initialAgreementLevel: initialPair.semantic.agreementLevel,
-      initialLikelyConflict: initialPair.semantic.likelyConflict,
-      initialSemanticLabel: initialPair.semantic.label,
-      initialSemanticRationale: initialPair.semantic.rationale,
-      initialUsedFallback: initialPair.semantic.usedFallback,
-      arbitrationTriggered,
-      arbitrationUsed,
-      arbitrationProvider,
-      winningPair: [activePair.providerA, activePair.providerB],
-      pairStrengths: arbitrationPairStrengths,
-    });
-
-    const synthesisCompletion = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
-      max_tokens: 400,
-      temperature: 0.3,
-      messages: [
-        {
-          role: "system",
-          content:
-            "You are a synthesis engine. Combine the two AI responses into one superior final answer. " +
-            "Be concise and direct. Preserve important caveats and tradeoffs. " +
-            "Do not mention that you are combining two answers. " +
-            "Each response carries a confidence score (1.0 = baseline, >1.0 = historically stronger on this task type). " +
-            "When responses differ, consider this as a secondary weighting signal, but prioritise the quality, accuracy, and relevance of the current responses.",
-        },
-        {
-          role: "user",
-          content: [
-            `Question: ${executionPrompt}`,
-            "",
-            `Response A (${activePair.providerA}, confidence: ${weightA.toFixed(2)}): ${activePair.answerA}`,
-            "",
-            `Response B (${activePair.providerB}, confidence: ${weightB.toFixed(2)}): ${activePair.answerB}`,
-          ].join("\n"),
-        },
-      ],
-    });
-
-    const verifiedAnswerRaw = stripCodeFences(
-  synthesisCompletion.choices[0]?.message?.content ?? ""
-);
-
-const verifiedAnswer = cleanEncoding(verifiedAnswerRaw);
-
-    const [verdictPayloadRaw, qualityScores] = await Promise.all([
-      buildDecisionVerdict({
-        prompt: rawPrompt,
-        answerA: activePair.answerA,
-        answerB: activePair.answerB,
-        weightA,
-        weightB,
-        agreementLevel: activePair.semantic.agreementLevel,
-        likelyConflict: activePair.semantic.likelyConflict,
-        verifiedAnswer,
-      }),
-      scoreAnswerQuality({
-        answerA: activePair.answerA,
-        answerB: activePair.answerB,
-        providerA: activePair.providerA,
-        providerB: activePair.providerB,
-      }),
-    ]);
-
-    const verdictPayload = normalizeVerdictWithSemantic({
-      semanticAgreementLevel: activePair.semantic.agreementLevel,
-      semanticLikelyConflict: activePair.semantic.likelyConflict,
-      verdictPayload: verdictPayloadRaw,
-      promptClassification,
-    });
-
-    if (
-      verdictPayload.finalConclusionAligned &&
-      (verdictPayload.disagreementType === "none" ||
-        verdictPayload.disagreementType === "additive_nuance" ||
-        verdictPayload.disagreementType === "explanation_variation")
-    ) {
-      verdictPayload.verdict = "Models are aligned on the main conclusion";
-
-      if (verdictPayload.disagreementType === "none") {
-        verdictPayload.keyDisagreement = "No meaningful disagreement";
-      } else if (verdictPayload.disagreementType === "additive_nuance") {
-        verdictPayload.keyDisagreement =
-          "Minor differences in supporting detail";
-      } else {
-        verdictPayload.keyDisagreement = "Different framing or emphasis";
-      }
-    }
-
-    await Promise.all([
-      updateProviderQualityScore({
-        taskType,
-        provider: activePair.providerA,
-        qualityScore: qualityScores.scoreA,
-      }),
-      updateProviderQualityScore({
-        taskType,
-        provider: activePair.providerB,
-        qualityScore: qualityScores.scoreB,
-      }),
-    ]);
-
-    const invokedProviders = Object.keys(executionMap) as ProviderName[];
-    const consensusProviderCount = arbitrationUsed
-      ? invokedProviders.length
-      : limitedProviders.length;
-
-    const modelsAligned = getModelsAligned({
-      totalProviders: consensusProviderCount,
-      agreementLevel: activePair.semantic.agreementLevel,
-      finalConclusionAligned: verdictPayload.finalConclusionAligned,
-      disagreementType: verdictPayload.disagreementType,
-    });
-
-    const consensusLevel = getConsensusLevelFromAligned(
-      modelsAligned,
-      consensusProviderCount
-    );
-
-    const riskLevel = getRiskLevel({
-      prompt: rawPrompt,
-      agreementLevel: activePair.semantic.agreementLevel,
-      disagreementType: verdictPayload.disagreementType,
-      finalConclusionAligned: verdictPayload.finalConclusionAligned,
-      promptClassification,
-    });
-
-    const averageQuality = (qualityScores.scoreA + qualityScores.scoreB) / 2;
-
-    const trustScore = calculateTrustScore({
-      prompt: rawPrompt,
-      agreementLevel: activePair.semantic.agreementLevel,
-      disagreementType: verdictPayload.disagreementType,
-      finalConclusionAligned: verdictPayload.finalConclusionAligned,
-      averageQuality,
-      riskLevel,
-    });
-
-    const responsePayload = {
-      ok: true as const,
-      verdict: verdictPayload.verdict,
-      consensus: {
-        level: consensusLevel,
-        models_aligned: modelsAligned,
-      },
-      risk_level: riskLevel,
-      key_disagreement: verdictPayload.keyDisagreement,
-      recommended_action: verdictPayload.recommendedAction,
-      analysis: verifiedAnswer,
-      verified_answer: verifiedAnswer,
-      confidence: (() => {
-        if (riskLevel === "high") return "low" as AgreementLevel;
-        if (riskLevel === "moderate" && consensusLevel === "high") {
-          return "medium" as AgreementLevel;
-        }
-        return consensusLevel;
-      })(),
-      confidence_reason: getConfidenceReason({
-        agreementLevel: activePair.semantic.agreementLevel,
-        disagreementType: verdictPayload.disagreementType,
-        finalConclusionAligned: verdictPayload.finalConclusionAligned,
-      }),
-      trust_score: {
-        score: trustScore.score,
-        label: trustScore.label,
-        reason: trustScore.reason,
-      },
-      answers: {
-  openai: cleanEncoding(
-    activePair.providerA === "openai"
-      ? activePair.answerA
-      : activePair.providerB === "openai"
-      ? activePair.answerB
-      : ""
-  ),
-  anthropic: cleanEncoding(
-    activePair.providerA === "anthropic"
-      ? activePair.answerA
-      : activePair.providerB === "anthropic"
-      ? activePair.answerB
-      : ""
-  ),
-  perplexity: cleanEncoding(
-    activePair.providerA === "perplexity"
-      ? activePair.answerA
-      : activePair.providerB === "perplexity"
-      ? activePair.answerB
-      : ""
-  ),
-},
-      selectedProviders: [activePair.providerA, activePair.providerB] as [
-        ProviderName,
-        ProviderName,
-      ],
-      providers_used: invokedProviders,
-      verification: {
-        final_conclusion_aligned: verdictPayload.finalConclusionAligned,
-        disagreement_type: verdictPayload.disagreementType,
-        semantic_label: activePair.semantic.label,
-        semantic_rationale: activePair.semantic.rationale,
-        semantic_judge_model: activePair.semantic.judgeModel,
-        semantic_used_fallback: activePair.semantic.usedFallback,
-      },
-      arbitration: {
-        used: arbitrationUsed,
-        provider: arbitrationProvider,
-        winning_pair: [activePair.providerA, activePair.providerB],
-        pair_strengths: arbitrationPairStrengths,
-      },
-      model_diagnostics: Object.fromEntries(
-        invokedProviders.map((provider) => [
-          provider,
-          {
-            quality_score:
-              provider === activePair.providerA
-                ? qualityScores.scoreA
-                : provider === activePair.providerB
-                ? qualityScores.scoreB
-                : null,
-            duration_ms: executionMap[provider]!.durationMs,
-            timed_out: executionMap[provider]!.timedOut,
-            used_fallback: executionMap[provider]!.usedFallback,
-          },
-        ])
-      ),
-      meta: {
-        task_type: taskType,
-        overlap_ratio: activePair.comparison.overlapRatio,
-        agreement_summary: activePair.comparison.summary,
-        prompt_chars: rawPrompt.length,
-        execution_prompt_chars: executionPrompt.length,
-        likely_conflict: activePair.semantic.likelyConflict,
-        disagreement_type: verdictPayload.disagreementType,
-        initial_pair: [initialPair.providerA, initialPair.providerB],
-      },
-      usage: customerKeyMeta ?? null,
-      cached: false,
-    };
-
-    const validation = DecisionResponseSchema.safeParse(responsePayload);
-
-    if (!validation.success) {
-      console.error(
-        "[/api/decision] response_validation_failed:",
-        JSON.stringify(validation.error.issues)
-      );
-      return NextResponse.json(
-        { ok: false, error: "response_validation_failed" },
-        { status: 500 }
-      );
-    }
-
-    try {
-      const { usage: _usage, ...payloadWithoutUsage } = validation.data;
-      await redis.set(cacheKey, JSON.stringify(payloadWithoutUsage), {
-        ex: CACHE_TTL_SECONDS,
-      });
-      console.log("[/api/decision] cache_write", { cacheKey });
-    } catch (cacheErr) {
-      console.warn("[/api/decision] cache_write_error:", cacheErr);
-    }
-
-    return NextResponse.json(validation.data);
+    const finalPayload = await buildValidatedResponse();
+    return NextResponse.json(finalPayload);
   } catch (err) {
     console.error("[/api/decision] error:", err);
     return NextResponse.json(

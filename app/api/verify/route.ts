@@ -11,10 +11,11 @@ import { NextRequest, NextResponse } from "next/server";
  *
  * Request shape (from UI):
  *   POST /api/verify
- *   { prompt: string, raw_prompt?: string, cache_bypass?: boolean }
+ *   { prompt: string, raw_prompt?: string, cache_bypass?: boolean, stream?: boolean }
  *
  * Response shape:
- *   Passes through the /api/decision response unchanged.
+ *   - JSON mode: passes through the /api/decision response unchanged
+ *   - Stream mode: proxies the SSE stream from /api/decision unchanged
  */
 
 export const runtime = "nodejs";
@@ -30,10 +31,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    if (
-      body.raw_prompt !== undefined &&
-      typeof body.raw_prompt !== "string"
-    ) {
+    if (body.raw_prompt !== undefined && typeof body.raw_prompt !== "string") {
       return NextResponse.json(
         { ok: false, error: "invalid_raw_prompt" },
         { status: 400 }
@@ -56,6 +54,8 @@ export async function POST(req: NextRequest) {
         ? `https://${process.env.VERCEL_URL}`
         : "http://localhost:3000");
 
+    const streamMode = body.stream === true;
+
     const decisionRes = await fetch(`${baseUrl}/api/decision`, {
       method: "POST",
       headers: {
@@ -66,8 +66,31 @@ export async function POST(req: NextRequest) {
         prompt: body.prompt,
         raw_prompt: body.raw_prompt,
         cache_bypass: body.cache_bypass ?? false,
+        stream: streamMode,
       }),
     });
+
+    if (streamMode) {
+      if (!decisionRes.body) {
+        return NextResponse.json(
+          { ok: false, error: "decision_stream_missing" },
+          { status: 500 }
+        );
+      }
+
+      return new Response(decisionRes.body, {
+        status: decisionRes.status,
+        headers: {
+          "Content-Type":
+            decisionRes.headers.get("content-type") ??
+            "text/event-stream; charset=utf-8",
+          "Cache-Control":
+            decisionRes.headers.get("cache-control") ??
+            "no-cache, no-transform",
+          Connection: decisionRes.headers.get("connection") ?? "keep-alive",
+        },
+      });
+    }
 
     const decisionJson = await decisionRes.json().catch(() => null);
 

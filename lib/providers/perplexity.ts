@@ -14,15 +14,48 @@ Maximum response length: 250-300 words. Do not exceed this under any circumstanc
 Be direct and avoid unnecessary detail, padding, or repetition.
 Where relevant, include current or recent information.`;
 
+export type ProviderStreamOptions = {
+  onDelta?: (delta: string) => void;
+};
+
 export async function runPerplexity(
   prompt: string,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  options?: ProviderStreamOptions
 ): Promise<string> {
-  const completion = await client.chat.completions.create(
+  const onDelta = options?.onDelta;
+
+  if (!onDelta) {
+    const completion = await client.chat.completions.create(
+      {
+        model: "sonar",
+        max_tokens: MAX_OUTPUT_TOKENS,
+        temperature: 0.3,
+        messages: [
+          {
+            role: "system",
+            content: DEFAULT_SYSTEM,
+          },
+          {
+            role: "user",
+            content: prompt,
+          },
+        ],
+      },
+      {
+        signal,
+      }
+    );
+
+    return completion.choices?.[0]?.message?.content?.trim() ?? "";
+  }
+
+  const stream = await client.chat.completions.create(
     {
       model: "sonar",
       max_tokens: MAX_OUTPUT_TOKENS,
       temperature: 0.3,
+      stream: true,
       messages: [
         {
           role: "system",
@@ -39,5 +72,15 @@ export async function runPerplexity(
     }
   );
 
-  return completion.choices?.[0]?.message?.content?.trim() ?? "";
+  let fullText = "";
+
+  for await (const chunk of stream) {
+    const delta = chunk.choices?.[0]?.delta?.content ?? "";
+    if (!delta) continue;
+
+    fullText += delta;
+    onDelta(delta);
+  }
+
+  return fullText.trim();
 }
