@@ -151,6 +151,30 @@ const CONTEXT_LABEL: Record<Context, string> = {
 const HISTORY_KEY = "zorelan_history";
 const MAX_HISTORY = 50;
 
+// Generic verdict/disagreement phrases that aren't worth showing
+const GENERIC_VERDICT_PHRASES = [
+  "models are aligned",
+  "responses support the same",
+  "responses align",
+  "the responses align",
+  "models aligned",
+  "agree on",
+];
+
+const GENERIC_DISAGREEMENT_PHRASES = [
+  "minor differences in supporting detail",
+  "minor differences",
+  "the models differed mainly in emphasis",
+  "differ mainly in emphasis",
+  "none",
+];
+
+function isGenericText(text: string, phrases: string[]): boolean {
+  if (!text?.trim()) return true;
+  const lower = text.toLowerCase().trim();
+  return phrases.some((p) => lower.includes(p));
+}
+
 function cx(...classes: Array<string | false | undefined | null>) {
   return classes.filter(Boolean).join(" ");
 }
@@ -299,10 +323,11 @@ function getConfidenceBadgeClasses(level: "high" | "medium" | "low") {
   return "border-red-500/30 bg-red-500/10 text-red-400";
 }
 
+// Action-oriented confidence label — tells the user what to do, not just what the system thinks
 function getConfidenceLabel(level: "high" | "medium" | "low") {
-  if (level === "high") return "High Confidence";
-  if (level === "medium") return "Medium Confidence";
-  return "Low Confidence";
+  if (level === "high") return "Safe to use";
+  if (level === "medium") return "Verify before acting";
+  return "Review carefully";
 }
 
 function getRiskBadgeClasses(level: "low" | "moderate" | "high") {
@@ -345,9 +370,7 @@ function getRiskPanelClasses(level?: "low" | "moderate" | "high") {
   return "border-black/10 dark:border-white/10";
 }
 
-function getDisagreementPanelClasses(
-  label: string
-) {
+function getDisagreementPanelClasses(label: string) {
   if (label === "Present" || label === "Conditional") {
     return "border-red-500/20 bg-red-500/[0.04]";
   }
@@ -500,13 +523,9 @@ function ProviderAnswerCard({
   return (
     <div className="rounded-2xl border border-black/10 p-4 md:p-5 dark:border-white/10 space-y-3 min-w-0 overflow-hidden transition-all">
       <div className="space-y-2">
-        <div className="space-y-0.5">
-          <div className="text-xs uppercase tracking-wide opacity-50">
-            {getProviderLabel(provider)}
-          </div>
-          <div className="text-[11px] uppercase tracking-wide opacity-35">
-            Included in verification
-          </div>
+        {/* Suggestion 7: removed "Included in verification" subline — cleaner */}
+        <div className="text-xs uppercase tracking-wide opacity-50">
+          {getProviderLabel(provider)}
         </div>
 
         <button
@@ -637,6 +656,9 @@ export default function Home() {
   const [context, setContext] = useState<Context>("operator");
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [showPromptDetails, setShowPromptDetails] = useState(false);
+
+  // Suggestion 10: default first provider expanded on mobile so users see
+  // at least one answer without having to tap
   const [mobileExpandedProviders, setMobileExpandedProviders] = useState<
     Record<ProviderName, boolean>
   >({
@@ -650,9 +672,7 @@ export default function Home() {
   const [userAnswers, setUserAnswers] = useState<string[]>(["", "", ""]);
 
   const [answers, setAnswers] = useState<Answers | null>(null);
-  const [selectedProviders, setSelectedProviders] = useState<ProviderName[]>(
-    []
-  );
+  const [selectedProviders, setSelectedProviders] = useState<ProviderName[]>([]);
   const [streamingAnswers, setStreamingAnswers] = useState<Answers | null>(null);
   const [hasStreamedAnyAnswer, setHasStreamedAnyAnswer] = useState(false);
   const [isWaitingForFinal, setIsWaitingForFinal] = useState(false);
@@ -749,8 +769,9 @@ export default function Home() {
       !!answers &&
       selectedProviders.length === 2 &&
       !synthesizing &&
-      !isWaitingForFinal,
-    [answers, selectedProviders, synthesizing, isWaitingForFinal]
+      !isWaitingForFinal &&
+      !synthesis, // Suggestion 4: hide when synthesis already exists
+    [answers, selectedProviders, synthesizing, isWaitingForFinal, synthesis]
   );
 
   const showPlaceholder = input.trim().length === 0;
@@ -765,6 +786,18 @@ export default function Home() {
 
   const shouldShowBottomCTA =
     !!trustScore || !!decisionVerification || !!comparison || !!synthesis;
+
+  // Suggestion 5: only show verdict/disagreement when content is substantive
+  const shouldShowVerdict =
+    !!decisionVerification?.verdict &&
+    !isGenericText(decisionVerification.verdict, GENERIC_VERDICT_PHRASES);
+
+  const shouldShowKeyDisagreement =
+    !!decisionVerification?.keyDisagreement &&
+    !isGenericText(
+      decisionVerification.keyDisagreement,
+      GENERIC_DISAGREEMENT_PHRASES
+    );
 
   function resetAnalysisState() {
     setIntent(null);
@@ -965,12 +998,9 @@ export default function Home() {
         if (parsed.type === "selected_providers") {
           setSelectedProviders(parsed.selectedProviders);
           setStreamingAnswers((prev) => ({
-            ...(prev ?? {
-              openai: "",
-              anthropic: "",
-              perplexity: "",
-            }),
+            ...(prev ?? { openai: "", anthropic: "", perplexity: "" }),
           }));
+          // Suggestion 10: expand the first selected provider on mobile
           setMobileExpandedProviders({
             openai: parsed.selectedProviders[0] === "openai",
             anthropic: parsed.selectedProviders[0] === "anthropic",
@@ -981,18 +1011,12 @@ export default function Home() {
 
         if (parsed.type === "provider_delta") {
           setStreamingAnswers((prev) => {
-            const current = prev ?? {
-              openai: "",
-              anthropic: "",
-              perplexity: "",
-            };
-
+            const current = prev ?? { openai: "", anthropic: "", perplexity: "" };
             return {
               ...current,
               [parsed.provider]: (current[parsed.provider] ?? "") + parsed.delta,
             };
           });
-
           setHasStreamedAnyAnswer(true);
           return;
         }
@@ -1001,11 +1025,7 @@ export default function Home() {
           setSelectedProviders(parsed.selectedProviders);
           setHasStreamedAnyAnswer(true);
           setStreamingAnswers((prev) => ({
-            ...(prev ?? {
-              openai: "",
-              anthropic: "",
-              perplexity: "",
-            }),
+            ...(prev ?? { openai: "", anthropic: "", perplexity: "" }),
             [parsed.provider]: parsed.answer,
           }));
           return;
@@ -1084,11 +1104,9 @@ export default function Home() {
 
       while (true) {
         const { done, value } = await reader.read();
-
         if (done) break;
 
         buffer += decoder.decode(value, { stream: true }).replace(/\r\n/g, "\n");
-
         const events = buffer.split("\n\n");
         buffer = events.pop() ?? "";
 
@@ -1104,10 +1122,8 @@ export default function Home() {
 
           if (dataLines.length === 0) continue;
 
-          const dataText = dataLines.join("\n");
-
           try {
-            const parsed = JSON.parse(dataText) as StreamEvent;
+            const parsed = JSON.parse(dataLines.join("\n")) as StreamEvent;
             handleStreamEvent(parsed);
           } catch {
             // ignore partial fragments
@@ -1121,7 +1137,6 @@ export default function Home() {
           .split("\n")
           .map((line) => line.trim())
           .filter(Boolean);
-
         const dataLines = lines
           .filter((line) => line.startsWith("data:"))
           .map((line) => line.replace(/^data:\s*/, ""));
@@ -1219,17 +1234,14 @@ export default function Home() {
       window.open("https://chat.openai.com/", "_blank");
       return;
     }
-
     if (name === "Claude") {
       window.open(`https://claude.ai/new?q=${encoded}`, "_blank");
       return;
     }
-
     if (name === "Gemini") {
       window.open(`https://gemini.google.com/app?q=${encoded}`, "_blank");
       return;
     }
-
     if (name === "Perplexity") {
       window.open(`https://www.perplexity.ai/search?q=${encoded}`, "_blank");
     }
@@ -1263,6 +1275,7 @@ export default function Home() {
       !!displayedAnswers?.anthropic ||
       !!displayedAnswers?.perplexity);
 
+  // Suggestion 6: confidence level derived from risk, action-oriented label
   const displayedConfidenceLevel: "high" | "medium" | "low" =
     decisionVerification?.riskLevel === "low"
       ? "high"
@@ -1310,10 +1323,8 @@ export default function Home() {
                 <span className="text-xs opacity-40">
                   {formatTime(entry.timestamp)}
                 </span>
-                {entry.synthesis && (
-                  <span className="text-xs opacity-40">· verified answer</span>
-                )}
-                {entry.answers && !entry.synthesis && (
+                {/* Suggestion 9: single consistent label for completed verifications */}
+                {(entry.synthesis || entry.answers) && (
                   <span className="text-xs opacity-40">· verified</span>
                 )}
               </div>
@@ -1330,7 +1341,9 @@ export default function Home() {
     );
   }
 
+  // Suggestion 4: only show synthesize button when synthesis doesn't exist yet
   function SynthesizeButton() {
+    if (synthesis) return null;
     return (
       <SecondaryActionButton onClick={onSynthesize} disabled={!canSynthesize}>
         {synthesizing ? (
@@ -1354,6 +1367,7 @@ export default function Home() {
         />
       )}
 
+      {/* Floating pill — keep this, remove inline phase banner (suggestion 2) */}
       {isWaitingForFinal && hasStreamedAnyAnswer && (
         <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-[60] md:bottom-6">
           <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-black text-white px-4 py-2 text-xs shadow-2xl">
@@ -1363,6 +1377,7 @@ export default function Home() {
         </div>
       )}
 
+      {/* Desktop history sidebar */}
       <div
         className={cx(
           "fixed top-0 right-0 z-50 h-full w-80 bg-white dark:bg-black border-l border-black/10 dark:border-white/10 shadow-2xl transition-transform duration-300 hidden md:flex flex-col",
@@ -1393,6 +1408,7 @@ export default function Home() {
         </div>
       </div>
 
+      {/* Mobile history drawer */}
       <div
         className={cx(
           "fixed inset-x-0 bottom-0 z-50 bg-white dark:bg-black border-t border-black/10 dark:border-white/10 shadow-2xl transition-transform duration-300 md:hidden flex flex-col rounded-t-2xl",
@@ -1472,8 +1488,7 @@ export default function Home() {
             </h1>
 
             <p className="text-sm leading-relaxed opacity-65 max-w-xs mx-auto md:hidden">
-              Compare model outputs, detect disagreement, and verify before
-              acting.
+              Compare model outputs, detect disagreement, and verify before acting.
             </p>
 
             <p className="hidden md:block text-base opacity-65 leading-relaxed max-w-3xl mx-auto">
@@ -1491,7 +1506,6 @@ export default function Home() {
                 <span className="md:hidden">Ask a question</span>
                 <span className="hidden md:inline">Start with a raw question</span>
               </div>
-
               <p className="hidden md:block text-sm opacity-60 leading-relaxed max-w-2xl">
                 Ask anything. Zorelan will structure it for verification, check
                 multiple models, and show trust, risk, and disagreement before
@@ -1534,9 +1548,9 @@ export default function Home() {
                 >
                   Ask anything…
                   <div className="hidden md:block mt-4">
-                    Examples: “Should I trust AI for medical advice?” or “Should
-                    I use REST or GraphQL?” or “What is the safest way to store
-                    passwords?”
+                    Examples: "Should I trust AI for medical advice?" or "Should
+                    I use REST or GraphQL?" or "What is the safest way to store
+                    passwords?"
                   </div>
                 </div>
               )}
@@ -1556,6 +1570,7 @@ export default function Home() {
             </div>
           </div>
 
+          {/* Suggestion 8: example chips — visible when no result, naturally hidden when result exists */}
           {!hasAnyResult && (
             <div className="flex flex-wrap gap-2">
               {EXAMPLES.map((example) => (
@@ -1579,6 +1594,7 @@ export default function Home() {
             )}
           </PrimaryActionButton>
 
+          {/* Mobile advanced options */}
           <div className="space-y-3 md:hidden">
             <button
               onClick={() => setAdvancedOpen((v) => !v)}
@@ -1608,9 +1624,7 @@ export default function Home() {
             {advancedOpen && (
               <div className="grid gap-4">
                 <div className="space-y-3 rounded-2xl border border-black/10 dark:border-white/10 p-4">
-                  <div className="text-xs uppercase tracking-wide opacity-50">
-                    Context
-                  </div>
+                  <div className="text-xs uppercase tracking-wide opacity-50">Context</div>
                   <div className="grid grid-cols-3 gap-2">
                     {(Object.keys(CONTEXT_LABEL) as Context[]).map((c) => (
                       <button
@@ -1640,77 +1654,50 @@ export default function Home() {
                         {MODE_LABEL[m]}
                       </button>
                     ))}
-                  </div>
-                </div>
-
-                <div className="space-y-3 rounded-2xl border border-black/10 dark:border-white/10 p-4">
-                  <div className="text-xs uppercase tracking-wide opacity-50">
-                    Verification Settings
-                  </div>
-                  <div className="grid gap-3">
-                    <div className="rounded-xl border border-black/10 dark:border-white/10 p-3 space-y-1">
-                      <div className="text-xs opacity-50 uppercase tracking-wide">
-                        Depth
-                      </div>
-                      <div className="text-sm opacity-75">
-                        Standard verification
-                      </div>
-                    </div>
-                    <div className="rounded-xl border border-black/10 dark:border-white/10 p-3 space-y-1">
-                      <div className="text-xs opacity-50 uppercase tracking-wide">
-                        Provider strategy
-                      </div>
-                      <div className="text-sm opacity-75">
-                        Auto-select best comparison pair
-                      </div>
-                    </div>
                   </div>
                 </div>
               </div>
             )}
           </div>
 
-          <div className="hidden md:grid gap-4 md:grid-cols-2">
-            {appMode === "pro" && (
-              <>
-                <div className="space-y-3 rounded-2xl border border-black/10 dark:border-white/10 p-4">
-                  <div className="text-xs uppercase tracking-wide opacity-50">
-                    Context
-                  </div>
-                  <div className="grid grid-cols-3 gap-2">
-                    {(Object.keys(CONTEXT_LABEL) as Context[]).map((c) => (
-                      <button
-                        key={c}
-                        onClick={() => setContext(c)}
-                        style={c === context ? selectedStyle : unselectedStyle}
-                        className="rounded-xl px-3 py-3 text-sm"
-                      >
-                        {CONTEXT_LABEL[c]}
-                      </button>
-                    ))}
-                  </div>
+          {/* Desktop advanced options */}
+          {appMode === "pro" && (
+            <div className="hidden md:grid gap-4 md:grid-cols-2">
+              <div className="space-y-3 rounded-2xl border border-black/10 dark:border-white/10 p-4">
+                <div className="text-xs uppercase tracking-wide opacity-50">Context</div>
+                <div className="grid grid-cols-3 gap-2">
+                  {(Object.keys(CONTEXT_LABEL) as Context[]).map((c) => (
+                    <button
+                      key={c}
+                      onClick={() => setContext(c)}
+                      style={c === context ? selectedStyle : unselectedStyle}
+                      className="rounded-xl px-3 py-3 text-sm"
+                    >
+                      {CONTEXT_LABEL[c]}
+                    </button>
+                  ))}
                 </div>
+              </div>
 
-                <div className="space-y-3 rounded-2xl border border-black/10 dark:border-white/10 p-4">
-                  <div className="text-xs uppercase tracking-wide opacity-50">
-                    Verification Type
-                  </div>
-                  <div className="grid grid-cols-3 gap-2">
-                    {(Object.keys(MODE_LABEL) as Mode[]).map((m) => (
-                      <button
-                        key={m}
-                        onClick={() => setMode(m)}
-                        style={m === mode ? selectedStyle : unselectedStyle}
-                        className="rounded-xl px-3 py-3 text-sm"
-                      >
-                        {MODE_LABEL[m]}
-                      </button>
-                    ))}
-                  </div>
+              <div className="space-y-3 rounded-2xl border border-black/10 dark:border-white/10 p-4">
+                <div className="text-xs uppercase tracking-wide opacity-50">
+                  Verification Type
                 </div>
-              </>
-            )}
-          </div>
+                <div className="grid grid-cols-3 gap-2">
+                  {(Object.keys(MODE_LABEL) as Mode[]).map((m) => (
+                    <button
+                      key={m}
+                      onClick={() => setMode(m)}
+                      style={m === mode ? selectedStyle : unselectedStyle}
+                      className="rounded-xl px-3 py-3 text-sm"
+                    >
+                      {MODE_LABEL[m]}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
 
           {!intent && !busy && (
             <p className="text-center text-xs opacity-45 leading-relaxed">
@@ -1831,7 +1818,6 @@ export default function Home() {
                       label="Copy prompt"
                     />
                   </div>
-
                   <div className="text-xs uppercase tracking-wide opacity-50 mb-2">
                     Verification-ready prompt
                   </div>
@@ -1854,10 +1840,7 @@ export default function Home() {
               ))}
             </div>
 
-            <PrimaryActionButton
-              onClick={onRunAnalysis}
-              disabled={!canAnalyse}
-            >
+            <PrimaryActionButton onClick={onRunAnalysis} disabled={!canAnalyse}>
               {running ? (
                 <span className="inline-flex items-center gap-2">
                   <Spinner />
@@ -1885,11 +1868,9 @@ export default function Home() {
                   Verifying now
                 </div>
                 <p className="text-sm opacity-55">
-                  Checking agreement, disagreement, and risk across multiple
-                  models…
+                  Checking agreement, disagreement, and risk across multiple models…
                 </p>
               </div>
-
               <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                 <LoadingProviderCard />
                 <LoadingProviderCard />
@@ -1900,14 +1881,7 @@ export default function Home() {
 
         {showComparisonSection && (
           <section ref={resultsRef} className="space-y-4">
-            {isWaitingForFinal && hasStreamedAnyAnswer && (
-              <div className="rounded-2xl border border-blue-500/20 bg-blue-500/[0.06] p-4">
-                <div className="inline-flex items-center gap-2 text-sm">
-                  <Spinner />
-                  <span>Step 2 of 2 — evaluating trust, disagreement, and risk…</span>
-                </div>
-              </div>
-            )}
+            {/* Suggestion 2: removed inline phase banner — floating pill handles this */}
 
             {(trustScore || decisionVerification) && (
               <div
@@ -1920,9 +1894,7 @@ export default function Home() {
                   <div className="text-xs uppercase tracking-wide opacity-50">
                     Verification Result
                   </div>
-                  <p className="text-sm opacity-55">
-                    Can this answer be trusted?
-                  </p>
+                  <p className="text-sm opacity-55">Can this answer be trusted?</p>
                 </div>
 
                 <div className="flex items-center justify-between gap-3 flex-wrap">
@@ -1935,6 +1907,7 @@ export default function Home() {
                   </div>
 
                   <div className="flex items-center gap-2 flex-wrap">
+                    {/* Suggestion 6: action-oriented confidence label */}
                     <div
                       className={cx(
                         "text-xs font-medium px-3 py-1 rounded-full border",
@@ -1972,20 +1945,22 @@ export default function Home() {
                   </div>
                 </div>
 
+                {/* Suggestion 3: trust score card visually dominant — larger, full-width feel */}
                 <div className="grid gap-3 md:grid-cols-4">
                   <div
                     className={cx(
-                      "rounded-xl border p-4 md:col-span-2",
+                      "rounded-xl border p-5 md:col-span-2",
                       getTrustPanelClasses(trustScore?.label)
                     )}
                   >
-                    <div className="text-xs uppercase tracking-wide opacity-50 mb-1">
+                    <div className="text-xs uppercase tracking-wide opacity-50 mb-2">
                       Trust Score
                     </div>
-                    <div className="flex items-end gap-3">
-                      <div className="text-4xl md:text-5xl font-semibold tracking-tight">
+                    <div className="flex items-end gap-3 mb-3">
+                      <div className="text-5xl md:text-6xl font-semibold tracking-tight leading-none">
                         {trustScore ? `${trustScore.score}` : "—"}
                       </div>
+                      <div className="text-base opacity-35 pb-1">/100</div>
                       {trustScore && (
                         <div
                           className={cx(
@@ -1997,7 +1972,7 @@ export default function Home() {
                         </div>
                       )}
                     </div>
-                    <p className="text-xs opacity-60 mt-2 max-w-xl">
+                    <p className="text-xs opacity-60 leading-relaxed max-w-xl">
                       {trustScore?.reason ?? "Trust score not returned"}
                     </p>
                   </div>
@@ -2011,17 +1986,13 @@ export default function Home() {
                     <div className="text-xs uppercase tracking-wide opacity-50 mb-1">
                       Consensus
                     </div>
-                    <div className="text-2xl font-semibold tracking-tight">
-                      {displayedConsensusLevel === "high"
-                        ? "High"
-                        : displayedConsensusLevel === "medium"
-                          ? "Medium"
-                          : "Low"}
+                    <div className="text-2xl font-semibold tracking-tight capitalize">
+                      {displayedConsensusLevel}
                     </div>
                     <p className="text-xs opacity-60 mt-1">
                       {decisionVerification
                         ? `${decisionVerification.consensus.modelsAligned} models aligned`
-                        : "Agreement detected from compared outputs"}
+                        : "Agreement from compared outputs"}
                     </p>
                   </div>
 
@@ -2038,8 +2009,7 @@ export default function Home() {
                       {displayedDisagreementLabel}
                     </div>
                     <p className="text-xs opacity-60 mt-1">
-                      {comparison?.summary ||
-                        "Zorelan detected the shape of disagreement"}
+                      {comparison?.summary || "Zorelan detected the shape of disagreement"}
                     </p>
                   </div>
                 </div>
@@ -2060,17 +2030,21 @@ export default function Home() {
                   </div>
                 )}
 
-                {(decisionVerification?.verdict ||
-                  decisionVerification?.keyDisagreement) && (
+                {/* Suggestion 5: only show verdict/disagreement when substantive */}
+                {(shouldShowVerdict || shouldShowKeyDisagreement) && (
                   <div className="grid gap-3 md:grid-cols-2">
-                    <InsightBlock
-                      title="Verdict"
-                      value={decisionVerification?.verdict ?? ""}
-                    />
-                    <InsightBlock
-                      title="Key disagreement"
-                      value={decisionVerification?.keyDisagreement ?? ""}
-                    />
+                    {shouldShowVerdict && (
+                      <InsightBlock
+                        title="Verdict"
+                        value={decisionVerification?.verdict ?? ""}
+                      />
+                    )}
+                    {shouldShowKeyDisagreement && (
+                      <InsightBlock
+                        title="Key disagreement"
+                        value={decisionVerification?.keyDisagreement ?? ""}
+                      />
+                    )}
                   </div>
                 )}
               </div>
@@ -2099,6 +2073,7 @@ export default function Home() {
               </div>
             </div>
 
+            {/* Suggestion 4: button hidden when synthesis already exists */}
             <div className="pt-1">
               <SynthesizeButton />
             </div>
@@ -2112,8 +2087,7 @@ export default function Home() {
                 Generating verified answer
               </div>
               <p className="text-sm opacity-55">
-                Synthesizing the strongest shared conclusion across the selected
-                models…
+                Synthesizing the strongest shared conclusion across the selected models…
               </p>
             </div>
             <PulsePlaceholder />
@@ -2155,11 +2129,9 @@ export default function Home() {
                   label="Copy verified output"
                 />
               </div>
-
               <div className="text-xs uppercase tracking-wide opacity-50">
                 Final verified answer
               </div>
-
               <div className="min-w-0 max-w-full overflow-x-auto [&_*]:max-w-full [&_pre]:max-w-full [&_pre]:overflow-x-auto [&_pre]:whitespace-pre-wrap [&_pre]:break-words [&_code]:break-words">
                 {renderMarkdown(synthesis)}
               </div>
@@ -2188,58 +2160,7 @@ export default function Home() {
           </section>
         )}
 
-        {shouldShowBottomCTA && (
-          <section className="rounded-2xl border border-black/10 dark:border-white/10 p-5 space-y-4">
-            <div className="space-y-1">
-              <div className="text-xs uppercase tracking-wide opacity-50">
-                Use this in your app
-              </div>
-              <p className="text-sm opacity-60 max-w-2xl">
-                Gate AI output with verification before it reaches users,
-                decisions, or automation.
-              </p>
-            </div>
-
-            <div className="rounded-xl border border-black/10 dark:border-white/10 p-4 text-xs font-mono overflow-x-auto whitespace-pre-wrap break-words">
-{`POST /api/verify
-
-{
-  "prompt": ${JSON.stringify(
-    buildPolishedPrompt(
-      intent ?? {
-        goal: apiBridgePrompt,
-        context: "General verification",
-        constraints: ["Be accurate"],
-        inputs_needed: [],
-      },
-      userAnswers
-    ),
-    null,
-    2
-  )},
-  "raw_prompt": ${JSON.stringify(apiBridgePrompt, null, 2)},
-  "mode": ${JSON.stringify(mode, null, 2)}
-}`}
-            </div>
-
-            <div className="flex flex-col sm:flex-row gap-3">
-              <a
-                href="/api-docs"
-                className="inline-flex items-center justify-center rounded-xl bg-white text-black px-4 py-2.5 text-sm font-medium hover:opacity-90 transition"
-              >
-                View API Docs
-              </a>
-
-              <a
-                href="/api-docs"
-                className="inline-flex items-center justify-center rounded-xl border border-black/10 dark:border-white/10 px-4 py-2.5 text-sm font-medium opacity-80 hover:opacity-100 transition"
-              >
-                Get API Key
-              </a>
-            </div>
-          </section>
-        )}
-
+        {/* Suggestion 1: single consolidated CTA block — removed the duplicate code/snippet one */}
         {shouldShowBottomCTA && (
           <section className="rounded-3xl border border-black/10 dark:border-white/10 p-5 md:p-6 space-y-4 bg-black/[0.02] dark:bg-white/[0.02]">
             <div className="space-y-2">
