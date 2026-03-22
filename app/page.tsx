@@ -472,13 +472,13 @@ function ProviderAnswerCard({
 
 function LoadingProviderCard() {
   return (
-    <div className="rounded-2xl border border-white/10 p-5 space-y-3">
+    <div className="rounded-2xl border border-black/10 dark:border-white/10 p-5 space-y-3">
       <div className="space-y-0.5">
         <div className="text-xs uppercase tracking-wide opacity-50">
           Verifying across multiple models…
         </div>
         <div className="text-[11px] uppercase tracking-wide opacity-35">
-          Zorelan is selecting providers and checking agreement
+          Zorelan is checking agreement and disagreement
         </div>
       </div>
       <PulsePlaceholder />
@@ -532,6 +532,23 @@ function SecondaryActionButton({
       )}
     >
       {children}
+    </button>
+  );
+}
+
+function ExampleChip({
+  label,
+  onClick,
+}: {
+  label: string;
+  onClick: (value: string) => void;
+}) {
+  return (
+    <button
+      onClick={() => onClick(label)}
+      className="rounded-full border border-black/10 dark:border-white/10 px-3 py-1.5 text-xs opacity-70 hover:opacity-100 transition-opacity text-left"
+    >
+      {label}
     </button>
   );
 }
@@ -642,6 +659,16 @@ export default function Home() {
   );
 
   const showPlaceholder = input.trim().length === 0;
+  const hasAnyResult =
+    !!intent ||
+    !!answers ||
+    !!streamingAnswers ||
+    !!synthesis ||
+    !!comparison ||
+    !!decisionVerification ||
+    !!trustScore;
+  const shouldShowBottomCTA =
+    !!trustScore || !!decisionVerification || !!comparison || !!synthesis;
 
   function resetAnalysisState() {
     setIntent(null);
@@ -665,6 +692,25 @@ export default function Home() {
   function handleEditableInput() {
     const text = editableRef.current?.innerText ?? "";
     setInput(text);
+
+    if (
+      intent ||
+      answers ||
+      synthesis ||
+      structuredSynthesis ||
+      comparison ||
+      trustScore ||
+      streamingAnswers
+    ) {
+      resetAnalysisState();
+    }
+  }
+
+  function setExamplePrompt(value: string) {
+    setInput(value);
+    if (editableRef.current) {
+      editableRef.current.innerText = value;
+    }
 
     if (
       intent ||
@@ -1077,6 +1123,13 @@ export default function Home() {
     { name: "Perplexity" },
   ];
 
+  const EXAMPLES = [
+    "Should I trust AI for medical advice?",
+    "Should I use REST or GraphQL for a new API?",
+    "What is the safest way to store passwords?",
+    "Should I raise venture capital or bootstrap my startup?",
+  ];
+
   const comparisonProviders: ProviderName[] =
     selectedProviders.length === 2
       ? selectedProviders
@@ -1164,7 +1217,7 @@ export default function Home() {
   );
 
   return (
-    <main className="min-h-screen px-4 py-10">
+    <main className="min-h-screen px-4 py-6 md:py-10">
       {historyOpen && (
         <div
           className="fixed inset-0 z-40 bg-black/30 backdrop-blur-sm"
@@ -1236,14 +1289,16 @@ export default function Home() {
         </div>
       </div>
 
-      <div className="mx-auto w-full max-w-5xl space-y-6">
-        <header className="space-y-4 text-center">
-          <div className="flex items-center justify-between">
-            <div className="w-16" />
-            <h1 className="text-4xl md:text-5xl font-semibold tracking-tight">
-              Zorelan
-            </h1>
-            <div className="flex items-center gap-2 justify-end">
+      <div className="mx-auto w-full max-w-5xl space-y-6 md:space-y-8">
+        <header className="space-y-6">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <div className="text-xl md:text-2xl font-semibold tracking-tight">
+                Zorelan
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2">
               <button
                 onClick={() => setHistoryOpen(true)}
                 className="flex items-center gap-1.5 rounded-xl border border-black/10 dark:border-white/10 px-3 py-1.5 text-xs opacity-70 hover:opacity-100 transition-opacity"
@@ -1264,112 +1319,80 @@ export default function Home() {
                 </svg>
                 <span>{history.length > 0 ? history.length : "History"}</span>
               </button>
+
               <a
                 href="/api-docs"
                 className="flex items-center rounded-xl border border-black/10 dark:border-white/10 px-3 py-1.5 text-xs opacity-70 hover:opacity-100 transition-opacity"
               >
-                API
+                API Docs
               </a>
             </div>
           </div>
 
-          <div className="space-y-3">
-            <p className="text-xl md:text-2xl font-medium tracking-tight">
-              Verify AI before you trust it.
+          <div className="mx-auto max-w-3xl text-center space-y-3">
+            <h1 className="text-3xl md:text-5xl font-semibold tracking-tight leading-tight">
+              Verify AI before you trust it
+            </h1>
+            <p className="text-sm md:text-base opacity-65 leading-relaxed">
+              Zorelan compares multiple models, detects disagreement, and shows
+              you when an answer is strong enough to use — and when it needs
+              caution, review, or escalation.
             </p>
-            <p className="mx-auto max-w-3xl text-sm md:text-base opacity-65 leading-relaxed">
-              Zorelan compares multiple models, detects disagreement, and
-              returns a trust score so you can see when an answer is strong
-              enough to use — and when it needs caution, review, or escalation.
-            </p>
-            <p className="mx-auto max-w-2xl text-xs md:text-sm opacity-45 leading-relaxed">
-              Test the workflow below in real time. For production systems, the
-              API is the product.
-            </p>
-          </div>
-
-          <div className="flex flex-wrap items-center justify-center gap-3 text-sm md:text-xs opacity-45">
-            <span>Multi-Model Verification</span>
-            <span>•</span>
-            <span>Trust Scoring</span>
-            <span>•</span>
-            <span>Risk-Aware Output</span>
-          </div>
-
-          <div className="mx-auto max-w-4xl">
-            <div className="grid gap-3 md:grid-cols-3 text-left">
-              <div className="rounded-2xl border border-black/10 dark:border-white/10 p-4">
-                <div className="text-xs uppercase tracking-wide opacity-45 mb-1">
-                  Problem
-                </div>
-                <p className="text-sm opacity-75 leading-relaxed">
-                  AI can sound confident while being wrong, incomplete, or
-                  misaligned with other models.
-                </p>
-              </div>
-
-              <div className="rounded-2xl border border-black/10 dark:border-white/10 p-4">
-                <div className="text-xs uppercase tracking-wide opacity-45 mb-1">
-                  What Zorelan does
-                </div>
-                <p className="text-sm opacity-75 leading-relaxed">
-                  Zorelan checks multiple model outputs, measures agreement, and
-                  adds trust and risk signals before you act on the result.
-                </p>
-              </div>
-
-              <div className="rounded-2xl border border-black/10 dark:border-white/10 p-4">
-                <div className="text-xs uppercase tracking-wide opacity-45 mb-1">
-                  Why it matters
-                </div>
-                <p className="text-sm opacity-75 leading-relaxed">
-                  Developers can use Zorelan to decide when to show, warn,
-                  block, or escalate AI-driven behaviour in production.
-                </p>
-              </div>
-            </div>
-          </div>
-
-          <div className="inline-flex rounded-xl border border-black/10 p-1 dark:border-white/10">
-            <button
-              onClick={() => setAppMode("simple")}
-              className={cx(
-                "rounded-lg px-5 py-2 text-base md:text-sm font-medium transition-all",
-                appMode === "simple"
-                  ? "bg-white text-black shadow-sm"
-                  : "opacity-55 hover:opacity-85"
-              )}
-            >
-              Quick Verify
-            </button>
-            <button
-              onClick={() => setAppMode("pro")}
-              className={cx(
-                "rounded-lg px-5 py-2 text-base md:text-sm font-medium transition-all",
-                appMode === "pro"
-                  ? "bg-white text-black shadow-sm"
-                  : "opacity-55 hover:opacity-85"
-              )}
-            >
-              Advanced
-            </button>
           </div>
         </header>
 
-        <section className="space-y-4">
+        <section className="rounded-3xl border border-black/10 dark:border-white/10 p-4 md:p-6 space-y-5 bg-black/[0.02] dark:bg-white/[0.02]">
+          <div className="flex items-start justify-between gap-3 flex-wrap">
+            <div className="space-y-1">
+              <div className="text-xs uppercase tracking-wide opacity-50">
+                Start with a raw question
+              </div>
+              <p className="text-sm opacity-60 leading-relaxed max-w-2xl">
+                Ask anything. Zorelan will structure it for verification, check
+                multiple models, and show trust, risk, and disagreement before
+                you rely on the result.
+              </p>
+            </div>
+
+            <div className="inline-flex rounded-xl border border-black/10 dark:border-white/10 p-1">
+              <button
+                onClick={() => setAppMode("simple")}
+                className={cx(
+                  "rounded-lg px-4 py-2 text-sm font-medium transition-all",
+                  appMode === "simple"
+                    ? "bg-white text-black shadow-sm"
+                    : "opacity-55 hover:opacity-85"
+                )}
+              >
+                Quick Verify
+              </button>
+              <button
+                onClick={() => setAppMode("pro")}
+                className={cx(
+                  "rounded-lg px-4 py-2 text-sm font-medium transition-all",
+                  appMode === "pro"
+                    ? "bg-white text-black shadow-sm"
+                    : "opacity-55 hover:opacity-85"
+                )}
+              >
+                Advanced
+              </button>
+            </div>
+          </div>
+
           {appMode === "pro" && (
-            <>
-              <div className="space-y-4">
-                <div className="text-lg md:text-base font-medium opacity-90">
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="space-y-3 rounded-2xl border border-black/10 dark:border-white/10 p-4">
+                <div className="text-xs uppercase tracking-wide opacity-50">
                   Context
                 </div>
-                <div className="grid grid-cols-3 gap-3">
+                <div className="grid grid-cols-3 gap-2">
                   {(Object.keys(CONTEXT_LABEL) as Context[]).map((c) => (
                     <button
                       key={c}
                       onClick={() => setContext(c)}
                       style={c === context ? selectedStyle : unselectedStyle}
-                      className="rounded-xl px-3 py-3 text-base md:text-sm"
+                      className="rounded-xl px-3 py-3 text-sm"
                     >
                       {CONTEXT_LABEL[c]}
                     </button>
@@ -1377,77 +1400,85 @@ export default function Home() {
                 </div>
               </div>
 
-              <div className="space-y-4">
-                <div className="text-lg md:text-base font-medium opacity-90">
+              <div className="space-y-3 rounded-2xl border border-black/10 dark:border-white/10 p-4">
+                <div className="text-xs uppercase tracking-wide opacity-50">
                   Verification Type
                 </div>
-                <div className="grid grid-cols-3 gap-3">
+                <div className="grid grid-cols-3 gap-2">
                   {(Object.keys(MODE_LABEL) as Mode[]).map((m) => (
                     <button
                       key={m}
                       onClick={() => setMode(m)}
                       style={m === mode ? selectedStyle : unselectedStyle}
-                      className="rounded-xl px-3 py-3 text-base md:text-sm"
+                      className="rounded-xl px-3 py-3 text-sm"
                     >
                       {MODE_LABEL[m]}
                     </button>
                   ))}
                 </div>
               </div>
-            </>
+            </div>
           )}
 
           <div className="space-y-2">
-            <div className="text-sm text-left opacity-75">Raw Question</div>
-            <p className="text-xs text-left opacity-40">
-              This is what AI sees without verification.
-            </p>
-          </div>
+            <div className="text-sm opacity-75">Question</div>
 
-          <div className="relative">
-            {showPlaceholder && (
-              <div
-                className="absolute top-0 left-0 w-full p-4 text-base md:text-sm pointer-events-none select-none opacity-30 leading-relaxed"
-                aria-hidden="true"
-              >
-                <div className="mb-5">What do you want to verify?</div>
-                <div>
-                  Type any question, decision, or problem. Zorelan will prepare
-                  it for verification, compare multiple AI answers, and show you
-                  how much trust the result deserves before you rely on it.
+            <div className="relative">
+              {showPlaceholder && (
+                <div
+                  className="absolute top-0 left-0 w-full p-4 text-base md:text-sm pointer-events-none select-none opacity-30 leading-relaxed"
+                  aria-hidden="true"
+                >
+                  Ask anything…
+                  <div className="mt-4">
+                    Examples: “Should I trust AI for medical advice?” or “Should
+                    I use REST or GraphQL?” or “What is the safest way to store
+                    passwords?”
+                  </div>
                 </div>
-              </div>
-            )}
+              )}
 
-            <div
-              ref={editableRef}
-              contentEditable
-              suppressContentEditableWarning
-              onInput={handleEditableInput}
-              className="min-h-40 w-full rounded-2xl border border-black/10 bg-transparent p-4 text-base md:text-sm outline-none focus:border-black/30 dark:border-white/10 dark:focus:border-white/30 leading-relaxed"
-              style={{
-                whiteSpace: "pre-wrap",
-                wordBreak: "break-word",
-                overflowWrap: "anywhere",
-              }}
-            />
+              <div
+                ref={editableRef}
+                contentEditable
+                suppressContentEditableWarning
+                onInput={handleEditableInput}
+                className="min-h-40 w-full rounded-2xl border border-black/10 dark:border-white/10 bg-transparent p-4 text-base md:text-sm outline-none focus:border-black/30 dark:focus:border-white/30 leading-relaxed"
+                style={{
+                  whiteSpace: "pre-wrap",
+                  wordBreak: "break-word",
+                  overflowWrap: "anywhere",
+                }}
+              />
+            </div>
           </div>
+
+          {!hasAnyResult && (
+            <div className="flex flex-wrap gap-2">
+              {EXAMPLES.map((example) => (
+                <ExampleChip
+                  key={example}
+                  label={example}
+                  onClick={setExamplePrompt}
+                />
+              ))}
+            </div>
+          )}
 
           <PrimaryActionButton onClick={onPreframe} disabled={!canRun}>
             {busy ? (
               <>
                 <Spinner />
-                Preparing for verification…
+                Structuring for verification…
               </>
             ) : (
-              "Prepare for Verification"
+              "Verify"
             )}
           </PrimaryActionButton>
 
           {!intent && !busy && (
             <p className="text-center text-xs opacity-45 leading-relaxed">
-              Zorelan rewrites your input into a form that produces more
-              reliable outputs across multiple models.
+              One input. Multiple models. Trust and risk shown before action.
             </p>
           )}
         </section>
@@ -1460,37 +1491,50 @@ export default function Home() {
         )}
 
         {busy && (
-          <section className="rounded-2xl border border-white/10 p-5 space-y-4">
-            <div className="text-xs uppercase tracking-wide opacity-50">
-              Preparing verification…
+          <section className="rounded-2xl border border-black/10 dark:border-white/10 p-5 space-y-4">
+            <div className="space-y-1">
+              <div className="text-xs uppercase tracking-wide opacity-50">
+                Preparing verification
+              </div>
+              <p className="text-sm opacity-55">
+                Structuring your request for stronger cross-model checking…
+              </p>
             </div>
             <PulsePlaceholder />
           </section>
         )}
 
         {intent && !busy && (
-          <section className="space-y-4 rounded-2xl border border-black/10 p-5 dark:border-white/10">
-            {appMode === "pro" && (
-              <>
+          <section className="space-y-4 rounded-2xl border border-black/10 dark:border-white/10 p-5">
+            <div className="flex items-start justify-between gap-3 flex-wrap">
+              <div className="space-y-1">
                 <div className="text-xs uppercase tracking-wide opacity-50">
-                  How Zorelan structured the request
+                  Verification is ready
                 </div>
+                <p className="text-sm opacity-55 leading-relaxed max-w-2xl">
+                  Add optional context, review the verification-ready prompt, or
+                  run it immediately.
+                </p>
+              </div>
+            </div>
 
-                <div className="space-y-1">
+            {appMode === "pro" && (
+              <div className="grid gap-4 md:grid-cols-3">
+                <div className="rounded-xl border border-black/10 dark:border-white/10 p-4 space-y-1">
                   <div className="text-xs uppercase tracking-wide opacity-50">
                     Goal
                   </div>
                   <p className="text-sm leading-relaxed">{intent.goal}</p>
                 </div>
 
-                <div className="space-y-1">
+                <div className="rounded-xl border border-black/10 dark:border-white/10 p-4 space-y-1">
                   <div className="text-xs uppercase tracking-wide opacity-50">
                     Context
                   </div>
                   <p className="text-sm leading-relaxed">{intent.context}</p>
                 </div>
 
-                <div className="space-y-1">
+                <div className="rounded-xl border border-black/10 dark:border-white/10 p-4 space-y-1">
                   <div className="text-xs uppercase tracking-wide opacity-50">
                     Constraints
                   </div>
@@ -1503,34 +1547,34 @@ export default function Home() {
                     ))}
                   </ul>
                 </div>
-
-                <hr className="border-white/10" />
-              </>
+              </div>
             )}
 
-            <div className="space-y-3">
-              <div className="text-xs uppercase tracking-wide opacity-50">
-                Add context for stronger verification{" "}
-                <span className="opacity-50 normal-case">(optional)</span>
-              </div>
-
-              {intent.inputs_needed.map((question, i) => (
-                <div key={i} className="space-y-1">
-                  <label className="text-xs opacity-60">{question}</label>
-                  <input
-                    type="text"
-                    value={userAnswers[i] ?? ""}
-                    onChange={(e) => {
-                      const updated = [...userAnswers];
-                      updated[i] = e.target.value;
-                      setUserAnswers(updated);
-                    }}
-                    placeholder="Your answer…"
-                    className="w-full rounded-xl border border-black/10 bg-transparent px-3 py-2.5 text-base md:text-sm outline-none focus:border-black/30 dark:border-white/10 dark:focus:border-white/30"
-                  />
+            {intent.inputs_needed.length > 0 && (
+              <div className="space-y-3">
+                <div className="text-xs uppercase tracking-wide opacity-50">
+                  Add context for stronger verification{" "}
+                  <span className="opacity-50 normal-case">(optional)</span>
                 </div>
-              ))}
-            </div>
+
+                {intent.inputs_needed.map((question, i) => (
+                  <div key={i} className="space-y-1">
+                    <label className="text-xs opacity-60">{question}</label>
+                    <input
+                      type="text"
+                      value={userAnswers[i] ?? ""}
+                      onChange={(e) => {
+                        const updated = [...userAnswers];
+                        updated[i] = e.target.value;
+                        setUserAnswers(updated);
+                      }}
+                      placeholder="Your answer…"
+                      className="w-full rounded-xl border border-black/10 dark:border-white/10 bg-transparent px-3 py-2.5 text-base md:text-sm outline-none focus:border-black/30 dark:focus:border-white/30"
+                    />
+                  </div>
+                ))}
+              </div>
+            )}
 
             <div
               className={cx(
@@ -1561,7 +1605,7 @@ export default function Home() {
                 <button
                   key={a.name}
                   onClick={() => openAI(a.name)}
-                  className="rounded-xl border border-black/10 px-3 py-2.5 text-base md:text-sm opacity-85 hover:opacity-100 dark:border-white/10 transition-all"
+                  className="rounded-xl border border-black/10 dark:border-white/10 px-3 py-2.5 text-base md:text-sm opacity-85 hover:opacity-100 transition-all"
                 >
                   {a.name === "ChatGPT" ? "ChatGPT (copies)" : a.name}
                 </button>
@@ -1582,31 +1626,32 @@ export default function Home() {
               )}
             </PrimaryActionButton>
 
-            <div className="mt-3">
-              <p className="text-center text-xs opacity-50 leading-relaxed max-w-3xl mx-auto">
-                This interface shows how Zorelan works. In production,
-                developers use the API to gate AI with trust scores,
-                disagreement checks, and risk signals.
-              </p>
-            </div>
-
             {!running && !answers && (
-              <p className="text-sm md:text-xs text-center opacity-60 mt-1">
-                This usually takes 15–20 seconds
+              <p className="text-sm md:text-xs text-center opacity-55 mt-1">
+                Zorelan will compare multiple model outputs and score how much
+                trust the result deserves.
               </p>
             )}
           </section>
         )}
 
         {running && !showComparisonSection && (
-          <section className="space-y-4">
-            <div className="text-xs uppercase tracking-wide opacity-50 text-center">
-              Running verification across multiple AIs…
-            </div>
+          <section ref={resultsRef} className="space-y-4">
+            <div className="rounded-2xl border border-black/10 dark:border-white/10 p-5 space-y-4">
+              <div className="space-y-1 text-center md:text-left">
+                <div className="text-xs uppercase tracking-wide opacity-50">
+                  Verifying now
+                </div>
+                <p className="text-sm opacity-55">
+                  Checking agreement, disagreement, and risk across multiple
+                  models…
+                </p>
+              </div>
 
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-              <LoadingProviderCard />
-              <LoadingProviderCard />
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                <LoadingProviderCard />
+                <LoadingProviderCard />
+              </div>
             </div>
           </section>
         )}
@@ -1614,7 +1659,7 @@ export default function Home() {
         {showComparisonSection && (
           <section ref={resultsRef} className="space-y-4">
             {(trustScore || decisionVerification) && (
-              <div className="rounded-2xl border border-black/10 p-5 dark:border-white/10 space-y-4 bg-black/[0.02] dark:bg-white/[0.02]">
+              <div className="rounded-2xl border border-black/10 dark:border-white/10 p-5 space-y-5 bg-black/[0.02] dark:bg-white/[0.02]">
                 <div className="space-y-1 text-center md:text-left">
                   <div className="text-xs uppercase tracking-wide opacity-50">
                     Verification Result
@@ -1625,157 +1670,156 @@ export default function Home() {
                 </div>
 
                 <div className="flex items-center justify-between gap-3 flex-wrap">
-                  <div className="flex items-center gap-3 flex-wrap">
+                  <div className="flex items-center gap-2 flex-wrap">
                     {cached && (
                       <div className="text-xs px-2.5 py-1 rounded-full bg-white/5 border border-white/10 text-white/40">
                         ⚡ Cached result · verified earlier
                       </div>
                     )}
                   </div>
-                  <div
-                    className={cx(
-                      "text-xs font-medium px-3 py-1 rounded-full",
-                      getConfidenceBadgeClasses(displayedConfidenceLevel)
-                    )}
-                  >
-                    {getConfidenceLabel(displayedConfidenceLevel)}
-                  </div>
-                </div>
 
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                  <div className="rounded-xl border border-black/10 dark:border-white/10 p-4 space-y-1">
-                    <div className="text-xs uppercase tracking-wide opacity-50">
-                      Trust Score
-                    </div>
-                    <div className="text-2xl font-semibold leading-none">
-                      {trustScore?.score ?? "—"}
-                      <span className="text-sm font-normal opacity-40">
-                        /100
-                      </span>
-                    </div>
-                    {trustScore && (
-                      <div
-                        className={cx(
-                          "inline-flex rounded-full px-2.5 py-1 text-xs font-medium",
-                          getTrustBadgeClasses(trustScore.label)
-                        )}
-                      >
-                        {getTrustLabel(trustScore.label)}
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="rounded-xl border border-black/10 dark:border-white/10 p-4 space-y-1">
-                    <div className="text-xs uppercase tracking-wide opacity-50">
-                      Consensus
-                    </div>
-                    <div className="text-sm font-medium capitalize">
-                      {displayedConsensusLevel}
-                    </div>
+                  <div className="flex items-center gap-2 flex-wrap">
                     <div
                       className={cx(
-                        "inline-flex rounded-full px-2.5 py-1 text-xs font-medium",
-                        getConfidenceBadgeClasses(displayedConsensusLevel)
+                        "text-xs font-medium px-3 py-1 rounded-full",
+                        getConfidenceBadgeClasses(displayedConfidenceLevel)
                       )}
                     >
-                      {decisionVerification?.consensus.modelsAligned ?? 0}/2 aligned
+                      {getConfidenceLabel(displayedConfidenceLevel)}
                     </div>
-                  </div>
 
-                  <div className="rounded-xl border border-black/10 dark:border-white/10 p-4 space-y-1">
-                    <div className="text-xs uppercase tracking-wide opacity-50">
-                      Risk
-                    </div>
-                    <div className="text-sm font-medium capitalize">
-                      {decisionVerification?.riskLevel ?? "—"}
-                    </div>
-                    {decisionVerification?.riskLevel && (
+                    {decisionVerification && (
                       <div
                         className={cx(
-                          "inline-flex rounded-full px-2.5 py-1 text-xs font-medium capitalize",
+                          "text-xs font-medium px-3 py-1 rounded-full",
                           getRiskBadgeClasses(decisionVerification.riskLevel)
                         )}
                       >
-                        {decisionVerification.riskLevel}
+                        {decisionVerification.riskLevel === "low"
+                          ? "Low Risk"
+                          : decisionVerification.riskLevel === "moderate"
+                            ? "Moderate Risk"
+                            : "High Risk"}
+                      </div>
+                    )}
+
+                    {trustScore && (
+                      <div
+                        className={cx(
+                          "text-xs font-medium px-3 py-1 rounded-full",
+                          getTrustBadgeClasses(trustScore.label)
+                        )}
+                      >
+                        Trust {trustScore.score} · {getTrustLabel(trustScore.label)}
                       </div>
                     )}
                   </div>
+                </div>
 
-                  <div className="rounded-xl border border-black/10 dark:border-white/10 p-4 space-y-1">
-                    <div className="text-xs uppercase tracking-wide opacity-50">
-                      Model Disagreement
+                <div className="grid gap-3 md:grid-cols-4">
+                  <div className="rounded-xl border border-black/10 dark:border-white/10 p-4">
+                    <div className="text-xs uppercase tracking-wide opacity-50 mb-1">
+                      Trust Score
                     </div>
-                    <div className="text-sm font-medium">
+                    <div className="text-2xl font-semibold tracking-tight">
+                      {trustScore ? `${trustScore.score}` : "—"}
+                    </div>
+                    <p className="text-xs opacity-55 mt-1">
+                      {trustScore?.reason ?? "Trust score not returned"}
+                    </p>
+                  </div>
+
+                  <div className="rounded-xl border border-black/10 dark:border-white/10 p-4">
+                    <div className="text-xs uppercase tracking-wide opacity-50 mb-1">
+                      Consensus
+                    </div>
+                    <div className="text-2xl font-semibold tracking-tight">
+                      {displayedConsensusLevel === "high"
+                        ? "High"
+                        : displayedConsensusLevel === "medium"
+                          ? "Medium"
+                          : "Low"}
+                    </div>
+                    <p className="text-xs opacity-55 mt-1">
+                      {decisionVerification
+                        ? `${decisionVerification.consensus.modelsAligned} models aligned`
+                        : "Agreement detected from compared outputs"}
+                    </p>
+                  </div>
+
+                  <div className="rounded-xl border border-black/10 dark:border-white/10 p-4">
+                    <div className="text-xs uppercase tracking-wide opacity-50 mb-1">
+                      Disagreement
+                    </div>
+                    <div className="text-2xl font-semibold tracking-tight">
                       {displayedDisagreementLabel}
+                    </div>
+                    <p className="text-xs opacity-55 mt-1">
+                      {comparison?.summary || "Zorelan detected the shape of disagreement"}
+                    </p>
+                  </div>
+
+                  <div className="rounded-xl border border-black/10 dark:border-white/10 p-4">
+                    <div className="text-xs uppercase tracking-wide opacity-50 mb-1">
+                      Recommended Action
+                    </div>
+                    <div className="text-sm leading-relaxed">
+                      {decisionVerification?.recommendedAction || "Review result"}
                     </div>
                   </div>
                 </div>
 
-                {decisionVerification && (
-                  <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                {(decisionVerification?.verdict ||
+                  decisionVerification?.keyDisagreement) && (
+                  <div className="grid gap-3 md:grid-cols-2">
                     <InsightBlock
-                      title="Verification Verdict"
-                      value={decisionVerification.verdict}
+                      title="Verdict"
+                      value={decisionVerification?.verdict ?? ""}
                     />
                     <InsightBlock
-                      title="Suggested Handling"
-                      value={decisionVerification.recommendedAction}
+                      title="Key disagreement"
+                      value={decisionVerification?.keyDisagreement ?? ""}
                     />
-                  </div>
-                )}
-
-                {trustScore?.reason && (
-                  <div className="rounded-xl border border-black/10 dark:border-white/10 p-4">
-                    <div className="text-xs uppercase tracking-wide opacity-50 mb-2">
-                      Why this score
-                    </div>
-                    <div className="text-sm leading-relaxed whitespace-pre-wrap break-words">
-                      {trustScore.reason}
-                    </div>
                   </div>
                 )}
               </div>
             )}
 
-            <div className="text-xs uppercase tracking-wide opacity-50 text-center">
-              Compared Model Outputs
-            </div>
-
-            <p className="text-sm md:text-xs text-center opacity-55">
-              These models do not always agree. Zorelan compares them before you
-              decide what to trust.
-            </p>
-
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-              {comparisonProviders.map((provider) => (
-                <ProviderAnswerCard
-                  key={provider}
-                  provider={provider}
-                  answer={displayedAnswers?.[provider] || ""}
-                />
-              ))}
-            </div>
-
-            {isWaitingForFinal && (
-              <div className="rounded-xl border border-black/10 dark:border-white/10 p-4 text-center text-sm opacity-55">
-                Comparing the answers and calculating trust…
+            <div className="space-y-3">
+              <div className="space-y-1 text-center md:text-left">
+                <div className="text-xs uppercase tracking-wide opacity-50">
+                  Compared Outputs
+                </div>
+                <p className="text-sm opacity-55">
+                  See where the models align, diverge, or add nuance.
+                </p>
               </div>
-            )}
 
-            <div className="space-y-2">
-              <p className="text-sm md:text-xs text-center opacity-55">
-                Resolve into a final, verified answer once the model comparison
-                is complete.
-              </p>
-              <SynthesizeButton />
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                {comparisonProviders.map((provider) => (
+                  <ProviderAnswerCard
+                    key={provider}
+                    provider={provider}
+                    answer={displayedAnswers?.[provider] ?? ""}
+                  />
+                ))}
+              </div>
             </div>
+
+            <SynthesizeButton />
           </section>
         )}
 
         {synthesizing && (
-          <section className="rounded-2xl border border-white/10 p-5 space-y-3">
-            <div className="text-xs uppercase tracking-wide opacity-50">
-              Generating verified answer…
+          <section className="rounded-2xl border border-black/10 dark:border-white/10 p-5 space-y-4">
+            <div className="space-y-1">
+              <div className="text-xs uppercase tracking-wide opacity-50">
+                Generating verified answer
+              </div>
+              <p className="text-sm opacity-55">
+                Synthesizing the strongest shared conclusion across the selected
+                models…
+              </p>
             </div>
             <PulsePlaceholder />
           </section>
@@ -1784,7 +1828,7 @@ export default function Home() {
         {synthesis && !synthesizing && (
           <section
             ref={synthesisRef}
-            className="rounded-2xl border border-black/10 p-5 dark:border-white/10 space-y-4"
+            className="rounded-2xl border border-black/10 dark:border-white/10 p-5 space-y-4"
           >
             <div className="flex items-center justify-between gap-3 flex-wrap">
               <div className="space-y-1">
@@ -1795,6 +1839,7 @@ export default function Home() {
                   Synthesized from multiple models with agreement weighting.
                 </p>
               </div>
+
               {(comparison || decisionVerification) && (
                 <div
                   className={cx(
@@ -1819,59 +1864,66 @@ export default function Home() {
               <div className="text-xs uppercase tracking-wide opacity-50">
                 Final verified answer
               </div>
+
               <div className="min-w-0 max-w-full overflow-x-auto [&_*]:max-w-full [&_pre]:max-w-full [&_pre]:overflow-x-auto [&_pre]:whitespace-pre-wrap [&_pre]:break-words [&_code]:break-words">
                 {renderMarkdown(synthesis)}
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-2 md:flex md:flex-wrap md:items-center md:gap-2">
-              {AI_BUTTONS.map((a) => (
-                <button
-                  key={a.name}
-                  onClick={() => openAI(a.name, synthesis)}
-                  className="rounded-xl border border-black/10 px-3 py-2.5 text-base md:text-sm opacity-85 hover:opacity-100 dark:border-white/10 transition-all"
-                >
-                  {a.name === "ChatGPT" ? "ChatGPT (copies)" : a.name}
-                </button>
-              ))}
-            </div>
-
             {structuredSynthesis && (
-              <div className="space-y-3">
-                <div className="text-xs uppercase tracking-wide opacity-50">
-                  Structured decision output
-                </div>
-                <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-                  <InsightBlock
-                    title="Final Answer"
-                    value={structuredSynthesis.finalAnswer}
-                  />
-                  <InsightBlock
-                    title="Shared Conclusion"
-                    value={structuredSynthesis.sharedConclusion}
-                  />
-                  <InsightBlock
-                    title="Key Difference"
-                    value={structuredSynthesis.keyDifference}
-                  />
-                  <InsightBlock
-                    title="Decision Rule"
-                    value={structuredSynthesis.decisionRule}
-                  />
-                </div>
+              <div className="grid gap-3 md:grid-cols-2">
+                <InsightBlock
+                  title="Shared conclusion"
+                  value={structuredSynthesis.sharedConclusion}
+                />
+                <InsightBlock
+                  title="Key difference"
+                  value={structuredSynthesis.keyDifference}
+                />
+                <InsightBlock
+                  title="Decision rule"
+                  value={structuredSynthesis.decisionRule}
+                />
+                <InsightBlock
+                  title="Final answer"
+                  value={structuredSynthesis.finalAnswer}
+                />
               </div>
             )}
           </section>
         )}
 
-        <div className="text-center pt-6">
-          <a
-            href="/privacy"
-            className="text-xs opacity-30 hover:opacity-60 transition-opacity"
-          >
-            Privacy Policy
-          </a>
-        </div>
+        {shouldShowBottomCTA && (
+          <section className="rounded-3xl border border-black/10 dark:border-white/10 p-5 md:p-6 space-y-4 bg-black/[0.02] dark:bg-white/[0.02]">
+            <div className="space-y-2">
+              <div className="text-xs uppercase tracking-wide opacity-50">
+                Use Zorelan in production
+              </div>
+              <h2 className="text-2xl md:text-3xl font-semibold tracking-tight">
+                Add verification before AI reaches users
+              </h2>
+              <p className="text-sm md:text-base opacity-65 leading-relaxed max-w-3xl">
+                Use the API to gate AI output with trust scoring, disagreement
+                checks, and risk-aware decisions inside your own product.
+              </p>
+            </div>
+
+            <div className="flex flex-col sm:flex-row gap-3">
+              <a
+                href="/api-docs"
+                className="inline-flex items-center justify-center rounded-2xl bg-white text-black px-4 py-3 text-sm font-medium shadow-sm hover:shadow-md transition-all"
+              >
+                View API Docs
+              </a>
+              <a
+                href="/api-docs"
+                className="inline-flex items-center justify-center rounded-2xl border border-black/10 dark:border-white/10 px-4 py-3 text-sm font-medium opacity-85 hover:opacity-100 transition-all"
+              >
+                Get API Key
+              </a>
+            </div>
+          </section>
+        )}
       </div>
     </main>
   );

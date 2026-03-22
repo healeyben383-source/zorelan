@@ -575,7 +575,10 @@ export default function ApiDocsPage() {
           Most products do not need the full payload to get started. In many
           cases, these fields are enough to drive UI and routing decisions.
         </p>
-        <CodeBlock label="json · minimal useful response" code={minimalResponseExample} />
+        <CodeBlock
+          label="json · minimal useful response"
+          code={minimalResponseExample}
+        />
       </section>
 
       <section className="mb-12">
@@ -762,7 +765,10 @@ Content-Type: application/json`}
         <h2 className="text-xl font-semibold mb-6">Quickstart examples</h2>
         <div className="space-y-4">
           <CodeBlock label="curl" code={curlExample} />
-          <CodeBlock label="curl · advanced dual-prompt" code={advancedCurlExample} />
+          <CodeBlock
+            label="curl · advanced dual-prompt"
+            code={advancedCurlExample}
+          />
           <CodeBlock label="node.js / typescript SDK" code={nodeExample} />
           <CodeBlock label="python" code={pythonExample} />
         </div>
