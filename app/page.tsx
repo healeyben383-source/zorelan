@@ -1,6 +1,13 @@
 "use client";
 
-import { useMemo, useState, useRef, useEffect } from "react";
+import {
+  useMemo,
+  useState,
+  useRef,
+  useEffect,
+  type ReactNode,
+  type MouseEvent,
+} from "react";
 
 type Mode = "execution" | "strategy" | "decision";
 type Context = "operator" | "general" | "student";
@@ -192,9 +199,21 @@ function formatTime(ts: number): string {
   return d.toLocaleDateString([], { month: "short", day: "numeric" });
 }
 
+function renderInline(text: string) {
+  const parts = text.split(/(\*\*.*?\*\*)/g);
+
+  return parts.map((part, i) =>
+    part.startsWith("**") && part.endsWith("**") ? (
+      <strong key={i}>{part.slice(2, -2)}</strong>
+    ) : (
+      part
+    )
+  );
+}
+
 function renderMarkdown(text: string) {
   const lines = text.split("\n");
-  const elements: React.ReactNode[] = [];
+  const elements: ReactNode[] = [];
   let i = 0;
 
   while (i < lines.length) {
@@ -260,18 +279,6 @@ function renderMarkdown(text: string) {
   return elements;
 }
 
-function renderInline(text: string) {
-  const parts = text.split(/(\*\*.*?\*\*)/g);
-
-  return parts.map((part, i) =>
-    part.startsWith("**") && part.endsWith("**") ? (
-      <strong key={i}>{part.slice(2, -2)}</strong>
-    ) : (
-      part
-    )
-  );
-}
-
 function getProviderLabel(provider: ProviderName) {
   switch (provider) {
     case "openai":
@@ -334,6 +341,7 @@ function Spinner() {
       xmlns="http://www.w3.org/2000/svg"
       fill="none"
       viewBox="0 0 24 24"
+      aria-hidden="true"
     >
       <circle
         className="opacity-25"
@@ -409,6 +417,7 @@ function CopyIconButton({
           strokeWidth="2"
           strokeLinecap="round"
           strokeLinejoin="round"
+          aria-hidden="true"
         >
           <path d="M20 6 9 17l-5-5" />
         </svg>
@@ -423,6 +432,7 @@ function CopyIconButton({
           strokeWidth="2"
           strokeLinecap="round"
           strokeLinejoin="round"
+          aria-hidden="true"
         >
           <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
           <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
@@ -493,7 +503,7 @@ function PrimaryActionButton({
 }: {
   onClick: () => void;
   disabled: boolean;
-  children: React.ReactNode;
+  children: ReactNode;
 }) {
   return (
     <button
@@ -518,7 +528,7 @@ function SecondaryActionButton({
 }: {
   onClick: () => void;
   disabled: boolean;
-  children: React.ReactNode;
+  children: ReactNode;
 }) {
   return (
     <button
@@ -546,7 +556,7 @@ function ExampleChip({
   return (
     <button
       onClick={() => onClick(label)}
-      className="rounded-full border border-black/10 dark:border-white/10 px-3 py-1.5 text-xs opacity-70 hover:opacity-100 transition-opacity text-left"
+      className="rounded-full border border-black/10 dark:border-white/10 px-3 py-1 md:px-3 md:py-1.5 text-xs opacity-70 hover:opacity-100 transition-opacity text-left leading-snug"
     >
       {label}
     </button>
@@ -557,9 +567,13 @@ export default function Home() {
   const [appMode, setAppMode] = useState<AppMode>("simple");
   const [mode, setMode] = useState<Mode>("decision");
   const [context, setContext] = useState<Context>("operator");
+  const [advancedOpen, setAdvancedOpen] = useState(false);
+  const [showPromptDetails, setShowPromptDetails] = useState(false);
+
   const [input, setInput] = useState("");
   const [intent, setIntent] = useState<Intent | null>(null);
   const [userAnswers, setUserAnswers] = useState<string[]>(["", "", ""]);
+
   const [answers, setAnswers] = useState<Answers | null>(null);
   const [selectedProviders, setSelectedProviders] = useState<ProviderName[]>(
     []
@@ -567,9 +581,11 @@ export default function Home() {
   const [streamingAnswers, setStreamingAnswers] = useState<Answers | null>(null);
   const [hasStreamedAnyAnswer, setHasStreamedAnyAnswer] = useState(false);
   const [isWaitingForFinal, setIsWaitingForFinal] = useState(false);
+
   const [synthesis, setSynthesis] = useState<string | null>(null);
   const [structuredSynthesis, setStructuredSynthesis] =
     useState<StructuredSynthesis | null>(null);
+
   const [comparison, setComparison] = useState<{
     agreementLevel: "high" | "medium" | "low";
     likelyConflict: boolean;
@@ -578,17 +594,21 @@ export default function Home() {
     finalConclusionAligned?: boolean;
     disagreementType?: DisagreementType;
   } | null>(null);
+
   const [decisionVerification, setDecisionVerification] =
     useState<DecisionVerification | null>(null);
   const [trustScore, setTrustScore] = useState<TrustScore | null>(null);
+
   const [cached, setCached] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [running, setRunning] = useState(false);
   const [synthesizing, setSynthesizing] = useState(false);
+
   const [promptCopied, setPromptCopied] = useState(false);
   const [insightCopied, setInsightCopied] = useState(false);
   const [highlighted, setHighlighted] = useState(false);
+
   const [historyOpen, setHistoryOpen] = useState(false);
   const [history, setHistory] = useState<HistoryEntry[]>([]);
 
@@ -667,6 +687,7 @@ export default function Home() {
     !!comparison ||
     !!decisionVerification ||
     !!trustScore;
+
   const shouldShowBottomCTA =
     !!trustScore || !!decisionVerification || !!comparison || !!synthesis;
 
@@ -751,7 +772,7 @@ export default function Home() {
     }
   }
 
-  function deleteEntry(id: string, e: React.MouseEvent) {
+  function deleteEntry(id: string, e: MouseEvent) {
     e.stopPropagation();
     const updated = history.filter((h) => h.id !== id);
     saveHistory(updated);
@@ -924,7 +945,7 @@ export default function Home() {
           setDecisionVerification({
             verdict: verifyJson?.verdict ?? "",
             consensus: {
-              level: verifyJson?.consensus?.level ?? "medium",
+              level: verifyJson?.consensus?.level ?? "high",
               modelsAligned: verifyJson?.consensus?.models_aligned ?? 0,
             },
             riskLevel: verifyJson?.risk_level ?? "moderate",
@@ -1112,7 +1133,6 @@ export default function Home() {
 
     if (name === "Perplexity") {
       window.open(`https://www.perplexity.ai/search?q=${encoded}`, "_blank");
-      return;
     }
   }
 
@@ -1144,25 +1164,40 @@ export default function Home() {
       !!displayedAnswers?.anthropic ||
       !!displayedAnswers?.perplexity);
 
-  const SynthesizeButton = () => (
-    <SecondaryActionButton onClick={onSynthesize} disabled={!canSynthesize}>
-      {synthesizing ? (
-        <>
-          <Spinner />
-          Generating verified answer…
-        </>
-      ) : (
-        "Generate Verified Answer"
-      )}
-    </SecondaryActionButton>
+  const displayedConfidenceLevel: "high" | "medium" | "low" =
+    decisionVerification?.riskLevel === "low"
+      ? "high"
+      : decisionVerification?.riskLevel === "moderate"
+        ? "medium"
+        : decisionVerification?.riskLevel === "high"
+          ? "low"
+          : decisionVerification?.consensus.level ??
+            comparison?.agreementLevel ??
+            "medium";
+
+  const displayedConsensusLevel: "high" | "medium" | "low" =
+    decisionVerification?.consensus.level ??
+    comparison?.agreementLevel ??
+    "medium";
+
+  const displayedDisagreementLabel = getDisagreementLabel(
+    decisionVerification?.disagreementType ?? comparison?.disagreementType,
+    comparison?.likelyConflict
   );
 
-  const HistoryList = () =>
-    history.length === 0 ? (
-      <div className="px-5 py-8 text-center text-xs opacity-40">
-        No history yet. Run a verification to save it here.
-      </div>
-    ) : (
+  const apiBridgePrompt =
+    input.trim() || "Should I use AI output directly in production?";
+
+  function HistoryList() {
+    if (history.length === 0) {
+      return (
+        <div className="px-5 py-8 text-center text-xs opacity-40">
+          No history yet. Run a verification to save it here.
+        </div>
+      );
+    }
+
+    return (
       <>
         {history.map((entry) => (
           <div
@@ -1194,27 +1229,22 @@ export default function Home() {
         ))}
       </>
     );
+  }
 
-  const displayedConfidenceLevel: "high" | "medium" | "low" =
-    decisionVerification?.riskLevel === "low"
-      ? "high"
-      : decisionVerification?.riskLevel === "moderate"
-        ? "medium"
-        : decisionVerification?.riskLevel === "high"
-          ? "low"
-          : decisionVerification?.consensus.level ??
-            comparison?.agreementLevel ??
-            "medium";
-
-  const displayedConsensusLevel: "high" | "medium" | "low" =
-    decisionVerification?.consensus.level ??
-    comparison?.agreementLevel ??
-    "medium";
-
-  const displayedDisagreementLabel = getDisagreementLabel(
-    decisionVerification?.disagreementType ?? comparison?.disagreementType,
-    comparison?.likelyConflict
-  );
+  function SynthesizeButton() {
+    return (
+      <SecondaryActionButton onClick={onSynthesize} disabled={!canSynthesize}>
+        {synthesizing ? (
+          <>
+            <Spinner />
+            Generating verified answer…
+          </>
+        ) : (
+          "Generate Verified Answer"
+        )}
+      </SecondaryActionButton>
+    );
+  }
 
   return (
     <main className="min-h-screen px-4 py-6 md:py-10">
@@ -1290,12 +1320,10 @@ export default function Home() {
       </div>
 
       <div className="mx-auto w-full max-w-5xl space-y-6 md:space-y-8">
-        <header className="space-y-6">
+        <header className="space-y-4 md:space-y-6">
           <div className="flex items-center justify-between gap-3">
-            <div className="flex items-center gap-2">
-              <div className="text-xl md:text-2xl font-semibold tracking-tight">
-                Zorelan
-              </div>
+            <div className="text-xl md:text-2xl font-semibold tracking-tight">
+              Zorelan
             </div>
 
             <div className="flex items-center gap-2">
@@ -1313,6 +1341,7 @@ export default function Home() {
                   strokeWidth="2"
                   strokeLinecap="round"
                   strokeLinejoin="round"
+                  aria-hidden="true"
                 >
                   <circle cx="12" cy="12" r="10" />
                   <polyline points="12 6 12 12 16 14" />
@@ -1329,11 +1358,17 @@ export default function Home() {
             </div>
           </div>
 
-          <div className="mx-auto max-w-3xl text-center space-y-3">
-            <h1 className="text-3xl md:text-5xl font-semibold tracking-tight leading-tight">
+          <div className="mx-auto max-w-4xl text-center space-y-2 md:space-y-3">
+            <h1 className="text-[2.5rem] leading-[1.02] font-semibold tracking-tight md:text-6xl md:leading-[0.98]">
               Verify AI before you trust it
             </h1>
-            <p className="text-sm md:text-base opacity-65 leading-relaxed">
+
+            <p className="text-sm leading-relaxed opacity-65 max-w-xs mx-auto md:hidden">
+              Compare model outputs, detect disagreement, and verify before
+              acting.
+            </p>
+
+            <p className="hidden md:block text-base opacity-65 leading-relaxed max-w-3xl mx-auto">
               Zorelan compares multiple models, detects disagreement, and shows
               you when an answer is strong enough to use — and when it needs
               caution, review, or escalation.
@@ -1341,20 +1376,22 @@ export default function Home() {
           </div>
         </header>
 
-        <section className="rounded-3xl border border-black/10 dark:border-white/10 p-4 md:p-6 space-y-5 bg-black/[0.02] dark:bg-white/[0.02]">
-          <div className="flex items-start justify-between gap-3 flex-wrap">
+        <section className="rounded-3xl border border-black/10 dark:border-white/10 bg-black/[0.02] dark:bg-white/[0.02] p-4 md:p-6 space-y-4 md:space-y-5">
+          <div className="md:flex md:items-start md:justify-between md:gap-4">
             <div className="space-y-1">
               <div className="text-xs uppercase tracking-wide opacity-50">
-                Start with a raw question
+                <span className="md:hidden">Ask a question</span>
+                <span className="hidden md:inline">Start with a raw question</span>
               </div>
-              <p className="text-sm opacity-60 leading-relaxed max-w-2xl">
+
+              <p className="hidden md:block text-sm opacity-60 leading-relaxed max-w-2xl">
                 Ask anything. Zorelan will structure it for verification, check
                 multiple models, and show trust, risk, and disagreement before
                 you rely on the result.
               </p>
             </div>
 
-            <div className="inline-flex rounded-xl border border-black/10 dark:border-white/10 p-1">
+            <div className="hidden md:inline-flex rounded-xl border border-black/10 dark:border-white/10 p-1">
               <button
                 onClick={() => setAppMode("simple")}
                 className={cx(
@@ -1380,49 +1417,7 @@ export default function Home() {
             </div>
           </div>
 
-          {appMode === "pro" && (
-            <div className="grid gap-4 md:grid-cols-2">
-              <div className="space-y-3 rounded-2xl border border-black/10 dark:border-white/10 p-4">
-                <div className="text-xs uppercase tracking-wide opacity-50">
-                  Context
-                </div>
-                <div className="grid grid-cols-3 gap-2">
-                  {(Object.keys(CONTEXT_LABEL) as Context[]).map((c) => (
-                    <button
-                      key={c}
-                      onClick={() => setContext(c)}
-                      style={c === context ? selectedStyle : unselectedStyle}
-                      className="rounded-xl px-3 py-3 text-sm"
-                    >
-                      {CONTEXT_LABEL[c]}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <div className="space-y-3 rounded-2xl border border-black/10 dark:border-white/10 p-4">
-                <div className="text-xs uppercase tracking-wide opacity-50">
-                  Verification Type
-                </div>
-                <div className="grid grid-cols-3 gap-2">
-                  {(Object.keys(MODE_LABEL) as Mode[]).map((m) => (
-                    <button
-                      key={m}
-                      onClick={() => setMode(m)}
-                      style={m === mode ? selectedStyle : unselectedStyle}
-                      className="rounded-xl px-3 py-3 text-sm"
-                    >
-                      {MODE_LABEL[m]}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </div>
-          )}
-
           <div className="space-y-2">
-            <div className="text-sm opacity-75">Question</div>
-
             <div className="relative">
               {showPlaceholder && (
                 <div
@@ -1430,7 +1425,7 @@ export default function Home() {
                   aria-hidden="true"
                 >
                   Ask anything…
-                  <div className="mt-4">
+                  <div className="hidden md:block mt-4">
                     Examples: “Should I trust AI for medical advice?” or “Should
                     I use REST or GraphQL?” or “What is the safest way to store
                     passwords?”
@@ -1443,7 +1438,7 @@ export default function Home() {
                 contentEditable
                 suppressContentEditableWarning
                 onInput={handleEditableInput}
-                className="min-h-40 w-full rounded-2xl border border-black/10 dark:border-white/10 bg-transparent p-4 text-base md:text-sm outline-none focus:border-black/30 dark:focus:border-white/30 leading-relaxed"
+                className="min-h-36 md:min-h-40 w-full rounded-2xl border border-black/10 dark:border-white/10 bg-transparent p-4 text-base md:text-sm outline-none focus:border-black/30 dark:focus:border-white/30 leading-relaxed"
                 style={{
                   whiteSpace: "pre-wrap",
                   wordBreak: "break-word",
@@ -1476,9 +1471,147 @@ export default function Home() {
             )}
           </PrimaryActionButton>
 
+          <div className="space-y-3 md:hidden">
+            <button
+              onClick={() => setAdvancedOpen((v) => !v)}
+              className="inline-flex items-center gap-2 text-xs opacity-60 hover:opacity-100 transition-opacity"
+            >
+              <span>{advancedOpen ? "Hide" : "Show"} advanced options</span>
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="12"
+                height="12"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                className={cx(
+                  "transition-transform duration-200",
+                  advancedOpen ? "rotate-180" : ""
+                )}
+                aria-hidden="true"
+              >
+                <path d="m6 9 6 6 6-6" />
+              </svg>
+            </button>
+
+            {advancedOpen && (
+              <div className="grid gap-4">
+                <div className="space-y-3 rounded-2xl border border-black/10 dark:border-white/10 p-4">
+                  <div className="text-xs uppercase tracking-wide opacity-50">
+                    Context
+                  </div>
+                  <div className="grid grid-cols-3 gap-2">
+                    {(Object.keys(CONTEXT_LABEL) as Context[]).map((c) => (
+                      <button
+                        key={c}
+                        onClick={() => setContext(c)}
+                        style={c === context ? selectedStyle : unselectedStyle}
+                        className="rounded-xl px-3 py-3 text-sm"
+                      >
+                        {CONTEXT_LABEL[c]}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="space-y-3 rounded-2xl border border-black/10 dark:border-white/10 p-4">
+                  <div className="text-xs uppercase tracking-wide opacity-50">
+                    Verification Type
+                  </div>
+                  <div className="grid grid-cols-3 gap-2">
+                    {(Object.keys(MODE_LABEL) as Mode[]).map((m) => (
+                      <button
+                        key={m}
+                        onClick={() => setMode(m)}
+                        style={m === mode ? selectedStyle : unselectedStyle}
+                        className="rounded-xl px-3 py-3 text-sm"
+                      >
+                        {MODE_LABEL[m]}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="space-y-3 rounded-2xl border border-black/10 dark:border-white/10 p-4">
+                  <div className="text-xs uppercase tracking-wide opacity-50">
+                    Verification Settings
+                  </div>
+                  <div className="grid gap-3">
+                    <div className="rounded-xl border border-black/10 dark:border-white/10 p-3 space-y-1">
+                      <div className="text-xs opacity-50 uppercase tracking-wide">
+                        Depth
+                      </div>
+                      <div className="text-sm opacity-75">
+                        Standard verification
+                      </div>
+                    </div>
+                    <div className="rounded-xl border border-black/10 dark:border-white/10 p-3 space-y-1">
+                      <div className="text-xs opacity-50 uppercase tracking-wide">
+                        Provider strategy
+                      </div>
+                      <div className="text-sm opacity-75">
+                        Auto-select best comparison pair
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+
+          <div className="hidden md:grid gap-4 md:grid-cols-2">
+            {appMode === "pro" && (
+              <>
+                <div className="space-y-3 rounded-2xl border border-black/10 dark:border-white/10 p-4">
+                  <div className="text-xs uppercase tracking-wide opacity-50">
+                    Context
+                  </div>
+                  <div className="grid grid-cols-3 gap-2">
+                    {(Object.keys(CONTEXT_LABEL) as Context[]).map((c) => (
+                      <button
+                        key={c}
+                        onClick={() => setContext(c)}
+                        style={c === context ? selectedStyle : unselectedStyle}
+                        className="rounded-xl px-3 py-3 text-sm"
+                      >
+                        {CONTEXT_LABEL[c]}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="space-y-3 rounded-2xl border border-black/10 dark:border-white/10 p-4">
+                  <div className="text-xs uppercase tracking-wide opacity-50">
+                    Verification Type
+                  </div>
+                  <div className="grid grid-cols-3 gap-2">
+                    {(Object.keys(MODE_LABEL) as Mode[]).map((m) => (
+                      <button
+                        key={m}
+                        onClick={() => setMode(m)}
+                        style={m === mode ? selectedStyle : unselectedStyle}
+                        className="rounded-xl px-3 py-3 text-sm"
+                      >
+                        {MODE_LABEL[m]}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+
           {!intent && !busy && (
             <p className="text-center text-xs opacity-45 leading-relaxed">
-              One input. Multiple models. Trust and risk shown before action.
+              <span className="md:hidden">
+                One question. Multiple models. Trust and risk before action.
+              </span>
+              <span className="hidden md:inline">
+                One input. Multiple models. Trust and risk shown before action.
+              </span>
             </p>
           )}
         </section>
@@ -1512,43 +1645,11 @@ export default function Home() {
                   Verification is ready
                 </div>
                 <p className="text-sm opacity-55 leading-relaxed max-w-2xl">
-                  Add optional context, review the verification-ready prompt, or
-                  run it immediately.
+                  Review the verification-ready prompt, add optional context,
+                  then run it across multiple models.
                 </p>
               </div>
             </div>
-
-            {appMode === "pro" && (
-              <div className="grid gap-4 md:grid-cols-3">
-                <div className="rounded-xl border border-black/10 dark:border-white/10 p-4 space-y-1">
-                  <div className="text-xs uppercase tracking-wide opacity-50">
-                    Goal
-                  </div>
-                  <p className="text-sm leading-relaxed">{intent.goal}</p>
-                </div>
-
-                <div className="rounded-xl border border-black/10 dark:border-white/10 p-4 space-y-1">
-                  <div className="text-xs uppercase tracking-wide opacity-50">
-                    Context
-                  </div>
-                  <p className="text-sm leading-relaxed">{intent.context}</p>
-                </div>
-
-                <div className="rounded-xl border border-black/10 dark:border-white/10 p-4 space-y-1">
-                  <div className="text-xs uppercase tracking-wide opacity-50">
-                    Constraints
-                  </div>
-                  <ul className="space-y-1">
-                    {intent.constraints.map((c, i) => (
-                      <li key={i} className="flex gap-2 text-sm">
-                        <span className="opacity-30">—</span>
-                        <span>{c}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              </div>
-            )}
 
             {intent.inputs_needed.length > 0 && (
               <div className="space-y-3">
@@ -1576,28 +1677,59 @@ export default function Home() {
               </div>
             )}
 
-            <div
-              className={cx(
-                "relative rounded-xl border p-4 pr-16 transition-all duration-500",
-                highlighted
-                  ? "border-blue-400/60 bg-blue-500/10 dark:border-blue-400/40 dark:bg-blue-400/10"
-                  : "border-black/10 bg-black/[0.02] dark:border-white/10 dark:bg-white/[0.02]"
-              )}
-            >
-              <div className="absolute top-3 right-3">
-                <CopyIconButton
-                  copied={promptCopied}
-                  onClick={onCopyPrompt}
-                  label="Copy prompt"
-                />
-              </div>
+            <div className="space-y-3">
+              <button
+                onClick={() => setShowPromptDetails((v) => !v)}
+                className="inline-flex items-center gap-2 text-xs opacity-60 hover:opacity-100 transition-opacity"
+              >
+                <span>
+                  {showPromptDetails ? "Hide" : "View"} verification prompt
+                </span>
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  width="12"
+                  height="12"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  className={cx(
+                    "transition-transform duration-200",
+                    showPromptDetails ? "rotate-180" : ""
+                  )}
+                  aria-hidden="true"
+                >
+                  <path d="m6 9 6 6 6-6" />
+                </svg>
+              </button>
 
-              <div className="text-xs uppercase tracking-wide opacity-50 mb-2">
-                Verification-ready prompt
-              </div>
-              <p className="text-sm leading-relaxed whitespace-pre-wrap break-words">
-                {buildPolishedPrompt(intent, userAnswers)}
-              </p>
+              {showPromptDetails && (
+                <div
+                  className={cx(
+                    "relative rounded-xl border p-4 pr-16 transition-all duration-500",
+                    highlighted
+                      ? "border-blue-400/60 bg-blue-500/10 dark:border-blue-400/40 dark:bg-blue-400/10"
+                      : "border-black/10 bg-black/[0.02] dark:border-white/10 dark:bg-white/[0.02]"
+                  )}
+                >
+                  <div className="absolute top-3 right-3">
+                    <CopyIconButton
+                      copied={promptCopied}
+                      onClick={onCopyPrompt}
+                      label="Copy prompt"
+                    />
+                  </div>
+
+                  <div className="text-xs uppercase tracking-wide opacity-50 mb-2">
+                    Verification-ready prompt
+                  </div>
+                  <p className="text-sm leading-relaxed whitespace-pre-wrap break-words">
+                    {buildPolishedPrompt(intent, userAnswers)}
+                  </p>
+                </div>
+              )}
             </div>
 
             <div className="grid grid-cols-2 gap-2 md:flex md:flex-wrap md:items-center md:gap-2">
@@ -1755,7 +1887,8 @@ export default function Home() {
                       {displayedDisagreementLabel}
                     </div>
                     <p className="text-xs opacity-55 mt-1">
-                      {comparison?.summary || "Zorelan detected the shape of disagreement"}
+                      {comparison?.summary ||
+                        "Zorelan detected the shape of disagreement"}
                     </p>
                   </div>
 
@@ -1890,6 +2023,58 @@ export default function Home() {
                 />
               </div>
             )}
+          </section>
+        )}
+
+        {shouldShowBottomCTA && (
+          <section className="rounded-2xl border border-black/10 dark:border-white/10 p-5 space-y-4">
+            <div className="space-y-1">
+              <div className="text-xs uppercase tracking-wide opacity-50">
+                Use this in your app
+              </div>
+              <p className="text-sm opacity-60 max-w-2xl">
+                Gate AI output with verification before it reaches users,
+                decisions, or automation.
+              </p>
+            </div>
+
+            <div className="rounded-xl border border-black/10 dark:border-white/10 p-4 text-xs font-mono overflow-x-auto whitespace-pre-wrap break-words">
+{`POST /api/verify
+
+{
+  "prompt": ${JSON.stringify(
+    buildPolishedPrompt(
+      intent ?? {
+        goal: apiBridgePrompt,
+        context: "General verification",
+        constraints: ["Be accurate"],
+        inputs_needed: [],
+      },
+      userAnswers
+    ),
+    null,
+    2
+  )},
+  "raw_prompt": ${JSON.stringify(apiBridgePrompt, null, 2)},
+  "mode": ${JSON.stringify(mode, null, 2)}
+}`}
+            </div>
+
+            <div className="flex flex-col sm:flex-row gap-3">
+              <a
+                href="/api-docs"
+                className="inline-flex items-center justify-center rounded-xl bg-white text-black px-4 py-2.5 text-sm font-medium hover:opacity-90 transition"
+              >
+                View API Docs
+              </a>
+
+              <a
+                href="/api-docs"
+                className="inline-flex items-center justify-center rounded-xl border border-black/10 dark:border-white/10 px-4 py-2.5 text-sm font-medium opacity-80 hover:opacity-100 transition"
+              >
+                Get API Key
+              </a>
+            </div>
           </section>
         )}
 
