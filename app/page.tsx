@@ -293,9 +293,10 @@ function getProviderLabel(provider: ProviderName) {
 }
 
 function getConfidenceBadgeClasses(level: "high" | "medium" | "low") {
-  if (level === "high") return "bg-green-500/10 text-green-500";
-  if (level === "medium") return "bg-yellow-500/10 text-yellow-500";
-  return "bg-red-500/10 text-red-500";
+  if (level === "high") return "border-green-500/30 bg-green-500/10 text-green-400";
+  if (level === "medium")
+    return "border-yellow-500/30 bg-yellow-500/10 text-yellow-400";
+  return "border-red-500/30 bg-red-500/10 text-red-400";
 }
 
 function getConfidenceLabel(level: "high" | "medium" | "low") {
@@ -305,21 +306,55 @@ function getConfidenceLabel(level: "high" | "medium" | "low") {
 }
 
 function getRiskBadgeClasses(level: "low" | "moderate" | "high") {
-  if (level === "low") return "bg-green-500/10 text-green-500";
-  if (level === "moderate") return "bg-yellow-500/10 text-yellow-500";
-  return "bg-red-500/10 text-red-500";
+  if (level === "low") return "border-green-500/30 bg-green-500/10 text-green-400";
+  if (level === "moderate")
+    return "border-yellow-500/30 bg-yellow-500/10 text-yellow-400";
+  return "border-red-500/30 bg-red-500/10 text-red-400";
 }
 
 function getTrustBadgeClasses(label: "high" | "moderate" | "low") {
-  if (label === "high") return "bg-green-500/10 text-green-500";
-  if (label === "moderate") return "bg-yellow-500/10 text-yellow-500";
-  return "bg-red-500/10 text-red-500";
+  if (label === "high") return "border-green-500/30 bg-green-500/10 text-green-400";
+  if (label === "moderate")
+    return "border-yellow-500/30 bg-yellow-500/10 text-yellow-400";
+  return "border-red-500/30 bg-red-500/10 text-red-400";
 }
 
 function getTrustLabel(label: "high" | "moderate" | "low") {
   if (label === "high") return "Strong";
   if (label === "moderate") return "Use With Caution";
   return "Needs Review";
+}
+
+function getTrustPanelClasses(label?: "high" | "moderate" | "low") {
+  if (label === "high") {
+    return "border-green-500/30 bg-green-500/[0.07]";
+  }
+  if (label === "moderate") {
+    return "border-yellow-500/30 bg-yellow-500/[0.07]";
+  }
+  if (label === "low") {
+    return "border-red-500/30 bg-red-500/[0.07]";
+  }
+  return "border-black/10 dark:border-white/10 bg-black/[0.02] dark:bg-white/[0.02]";
+}
+
+function getRiskPanelClasses(level?: "low" | "moderate" | "high") {
+  if (level === "low") return "border-green-500/20 bg-green-500/[0.04]";
+  if (level === "moderate") return "border-yellow-500/20 bg-yellow-500/[0.04]";
+  if (level === "high") return "border-red-500/20 bg-red-500/[0.04]";
+  return "border-black/10 dark:border-white/10";
+}
+
+function getDisagreementPanelClasses(
+  label: string
+) {
+  if (label === "Present" || label === "Conditional") {
+    return "border-red-500/20 bg-red-500/[0.04]";
+  }
+  if (label === "Minor") {
+    return "border-yellow-500/20 bg-yellow-500/[0.04]";
+  }
+  return "border-black/10 dark:border-white/10";
 }
 
 function getDisagreementLabel(
@@ -337,7 +372,7 @@ function getDisagreementLabel(
 function Spinner() {
   return (
     <svg
-      className="animate-spin h-4 w-4 inline-block mr-2"
+      className="animate-spin h-4 w-4 inline-block"
       xmlns="http://www.w3.org/2000/svg"
       fill="none"
       viewBox="0 0 24 24"
@@ -454,22 +489,55 @@ const unselectedStyle = {
 function ProviderAnswerCard({
   provider,
   answer,
+  mobileExpanded,
+  onToggleMobile,
 }: {
   provider: ProviderName;
   answer: string;
+  mobileExpanded?: boolean;
+  onToggleMobile?: () => void;
 }) {
   return (
-    <div className="rounded-2xl border border-black/10 p-5 dark:border-white/10 space-y-2 min-w-0 overflow-hidden transition-all">
-      <div className="space-y-0.5">
-        <div className="text-xs uppercase tracking-wide opacity-50">
-          {getProviderLabel(provider)}
+    <div className="rounded-2xl border border-black/10 p-4 md:p-5 dark:border-white/10 space-y-3 min-w-0 overflow-hidden transition-all">
+      <div className="space-y-2">
+        <div className="space-y-0.5">
+          <div className="text-xs uppercase tracking-wide opacity-50">
+            {getProviderLabel(provider)}
+          </div>
+          <div className="text-[11px] uppercase tracking-wide opacity-35">
+            Included in verification
+          </div>
         </div>
-        <div className="text-[11px] uppercase tracking-wide opacity-35">
-          Included in verification
-        </div>
+
+        <button
+          onClick={onToggleMobile}
+          className="md:hidden inline-flex items-center gap-2 rounded-lg border border-black/10 dark:border-white/10 px-3 py-2 text-xs opacity-80 hover:opacity-100"
+        >
+          <span>{mobileExpanded ? "Hide response" : "View response"}</span>
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="12"
+            height="12"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            className={cx("transition-transform", mobileExpanded ? "rotate-180" : "")}
+            aria-hidden="true"
+          >
+            <path d="m6 9 6 6 6-6" />
+          </svg>
+        </button>
       </div>
 
-      <div className="min-w-0 max-w-full overflow-x-auto overflow-y-hidden [&_*]:max-w-full [&_pre]:max-w-full [&_pre]:overflow-x-auto [&_pre]:whitespace-pre-wrap [&_pre]:break-words [&_code]:break-words">
+      <div
+        className={cx(
+          "min-w-0 max-w-full overflow-x-auto overflow-y-hidden [&_*]:max-w-full [&_pre]:max-w-full [&_pre]:overflow-x-auto [&_pre]:whitespace-pre-wrap [&_pre]:break-words [&_code]:break-words",
+          mobileExpanded ? "block" : "hidden md:block"
+        )}
+      >
         {answer?.trim() ? (
           renderMarkdown(answer)
         ) : (
@@ -569,6 +637,13 @@ export default function Home() {
   const [context, setContext] = useState<Context>("operator");
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [showPromptDetails, setShowPromptDetails] = useState(false);
+  const [mobileExpandedProviders, setMobileExpandedProviders] = useState<
+    Record<ProviderName, boolean>
+  >({
+    openai: true,
+    anthropic: false,
+    perplexity: false,
+  });
 
   const [input, setInput] = useState("");
   const [intent, setIntent] = useState<Intent | null>(null);
@@ -708,6 +783,11 @@ export default function Home() {
     setError(null);
     setPromptCopied(false);
     setInsightCopied(false);
+    setMobileExpandedProviders({
+      openai: true,
+      anthropic: false,
+      perplexity: false,
+    });
   }
 
   function handleEditableInput() {
@@ -767,6 +847,13 @@ export default function Home() {
     setInsightCopied(false);
     setRunning(false);
 
+    const selected = entry.selectedProviders ?? ["openai", "anthropic"];
+    setMobileExpandedProviders({
+      openai: selected[0] === "openai",
+      anthropic: selected[0] === "anthropic",
+      perplexity: selected[0] === "perplexity",
+    });
+
     if (editableRef.current) {
       editableRef.current.innerText = entry.input;
     }
@@ -782,6 +869,13 @@ export default function Home() {
   function clearHistory() {
     saveHistory([]);
     setHistory([]);
+  }
+
+  function toggleMobileProvider(provider: ProviderName) {
+    setMobileExpandedProviders((prev) => ({
+      ...prev,
+      [provider]: !prev[provider],
+    }));
   }
 
   async function onPreframe() {
@@ -877,6 +971,11 @@ export default function Home() {
               perplexity: "",
             }),
           }));
+          setMobileExpandedProviders({
+            openai: parsed.selectedProviders[0] === "openai",
+            anthropic: parsed.selectedProviders[0] === "anthropic",
+            perplexity: parsed.selectedProviders[0] === "perplexity",
+          });
           return;
         }
 
@@ -1235,10 +1334,10 @@ export default function Home() {
     return (
       <SecondaryActionButton onClick={onSynthesize} disabled={!canSynthesize}>
         {synthesizing ? (
-          <>
+          <span className="inline-flex items-center gap-2">
             <Spinner />
             Generating verified answer…
-          </>
+          </span>
         ) : (
           "Generate Verified Answer"
         )}
@@ -1253,6 +1352,15 @@ export default function Home() {
           className="fixed inset-0 z-40 bg-black/30 backdrop-blur-sm"
           onClick={() => setHistoryOpen(false)}
         />
+      )}
+
+      {isWaitingForFinal && hasStreamedAnyAnswer && (
+        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-[60] md:bottom-6">
+          <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-black text-white px-4 py-2 text-xs shadow-2xl">
+            <Spinner />
+            <span>Verifying trust, disagreement, and risk…</span>
+          </div>
+        </div>
       )}
 
       <div
@@ -1462,10 +1570,10 @@ export default function Home() {
 
           <PrimaryActionButton onClick={onPreframe} disabled={!canRun}>
             {busy ? (
-              <>
+              <span className="inline-flex items-center gap-2">
                 <Spinner />
                 Structuring for verification…
-              </>
+              </span>
             ) : (
               "Verify"
             )}
@@ -1680,15 +1788,17 @@ export default function Home() {
             <div className="space-y-3">
               <button
                 onClick={() => setShowPromptDetails((v) => !v)}
-                className="inline-flex items-center gap-2 text-xs opacity-60 hover:opacity-100 transition-opacity"
+                className="inline-flex items-center gap-2 rounded-xl border border-black/10 dark:border-white/10 bg-black/[0.03] dark:bg-white/[0.03] px-3 py-2 text-sm hover:bg-black/[0.05] dark:hover:bg-white/[0.05] transition-colors"
               >
                 <span>
-                  {showPromptDetails ? "Hide" : "View"} verification prompt
+                  {showPromptDetails
+                    ? "Hide how Zorelan structured this"
+                    : "See how Zorelan structured this"}
                 </span>
                 <svg
                   xmlns="http://www.w3.org/2000/svg"
-                  width="12"
-                  height="12"
+                  width="14"
+                  height="14"
                   viewBox="0 0 24 24"
                   fill="none"
                   stroke="currentColor"
@@ -1749,10 +1859,10 @@ export default function Home() {
               disabled={!canAnalyse}
             >
               {running ? (
-                <>
+                <span className="inline-flex items-center gap-2">
                   <Spinner />
                   Running verification across multiple AIs…
-                </>
+                </span>
               ) : (
                 "Run Verification"
               )}
@@ -1790,8 +1900,22 @@ export default function Home() {
 
         {showComparisonSection && (
           <section ref={resultsRef} className="space-y-4">
+            {isWaitingForFinal && hasStreamedAnyAnswer && (
+              <div className="rounded-2xl border border-blue-500/20 bg-blue-500/[0.06] p-4">
+                <div className="inline-flex items-center gap-2 text-sm">
+                  <Spinner />
+                  <span>Step 2 of 2 — evaluating trust, disagreement, and risk…</span>
+                </div>
+              </div>
+            )}
+
             {(trustScore || decisionVerification) && (
-              <div className="rounded-2xl border border-black/10 dark:border-white/10 p-5 space-y-5 bg-black/[0.02] dark:bg-white/[0.02]">
+              <div
+                className={cx(
+                  "rounded-2xl border p-5 space-y-5",
+                  getTrustPanelClasses(trustScore?.label)
+                )}
+              >
                 <div className="space-y-1 text-center md:text-left">
                   <div className="text-xs uppercase tracking-wide opacity-50">
                     Verification Result
@@ -1804,7 +1928,7 @@ export default function Home() {
                 <div className="flex items-center justify-between gap-3 flex-wrap">
                   <div className="flex items-center gap-2 flex-wrap">
                     {cached && (
-                      <div className="text-xs px-2.5 py-1 rounded-full bg-white/5 border border-white/10 text-white/40">
+                      <div className="text-xs px-2.5 py-1 rounded-full border border-white/10 bg-white/5 text-white/50">
                         ⚡ Cached result · verified earlier
                       </div>
                     )}
@@ -1813,7 +1937,7 @@ export default function Home() {
                   <div className="flex items-center gap-2 flex-wrap">
                     <div
                       className={cx(
-                        "text-xs font-medium px-3 py-1 rounded-full",
+                        "text-xs font-medium px-3 py-1 rounded-full border",
                         getConfidenceBadgeClasses(displayedConfidenceLevel)
                       )}
                     >
@@ -1823,7 +1947,7 @@ export default function Home() {
                     {decisionVerification && (
                       <div
                         className={cx(
-                          "text-xs font-medium px-3 py-1 rounded-full",
+                          "text-xs font-medium px-3 py-1 rounded-full border",
                           getRiskBadgeClasses(decisionVerification.riskLevel)
                         )}
                       >
@@ -1838,7 +1962,7 @@ export default function Home() {
                     {trustScore && (
                       <div
                         className={cx(
-                          "text-xs font-medium px-3 py-1 rounded-full",
+                          "text-xs font-medium px-3 py-1 rounded-full border",
                           getTrustBadgeClasses(trustScore.label)
                         )}
                       >
@@ -1849,19 +1973,41 @@ export default function Home() {
                 </div>
 
                 <div className="grid gap-3 md:grid-cols-4">
-                  <div className="rounded-xl border border-black/10 dark:border-white/10 p-4">
+                  <div
+                    className={cx(
+                      "rounded-xl border p-4 md:col-span-2",
+                      getTrustPanelClasses(trustScore?.label)
+                    )}
+                  >
                     <div className="text-xs uppercase tracking-wide opacity-50 mb-1">
                       Trust Score
                     </div>
-                    <div className="text-2xl font-semibold tracking-tight">
-                      {trustScore ? `${trustScore.score}` : "—"}
+                    <div className="flex items-end gap-3">
+                      <div className="text-4xl md:text-5xl font-semibold tracking-tight">
+                        {trustScore ? `${trustScore.score}` : "—"}
+                      </div>
+                      {trustScore && (
+                        <div
+                          className={cx(
+                            "mb-1 text-xs font-medium px-3 py-1 rounded-full border",
+                            getTrustBadgeClasses(trustScore.label)
+                          )}
+                        >
+                          {getTrustLabel(trustScore.label)}
+                        </div>
+                      )}
                     </div>
-                    <p className="text-xs opacity-55 mt-1">
+                    <p className="text-xs opacity-60 mt-2 max-w-xl">
                       {trustScore?.reason ?? "Trust score not returned"}
                     </p>
                   </div>
 
-                  <div className="rounded-xl border border-black/10 dark:border-white/10 p-4">
+                  <div
+                    className={cx(
+                      "rounded-xl border p-4",
+                      getRiskPanelClasses(decisionVerification?.riskLevel)
+                    )}
+                  >
                     <div className="text-xs uppercase tracking-wide opacity-50 mb-1">
                       Consensus
                     </div>
@@ -1872,35 +2018,47 @@ export default function Home() {
                           ? "Medium"
                           : "Low"}
                     </div>
-                    <p className="text-xs opacity-55 mt-1">
+                    <p className="text-xs opacity-60 mt-1">
                       {decisionVerification
                         ? `${decisionVerification.consensus.modelsAligned} models aligned`
                         : "Agreement detected from compared outputs"}
                     </p>
                   </div>
 
-                  <div className="rounded-xl border border-black/10 dark:border-white/10 p-4">
+                  <div
+                    className={cx(
+                      "rounded-xl border p-4",
+                      getDisagreementPanelClasses(displayedDisagreementLabel)
+                    )}
+                  >
                     <div className="text-xs uppercase tracking-wide opacity-50 mb-1">
                       Disagreement
                     </div>
                     <div className="text-2xl font-semibold tracking-tight">
                       {displayedDisagreementLabel}
                     </div>
-                    <p className="text-xs opacity-55 mt-1">
+                    <p className="text-xs opacity-60 mt-1">
                       {comparison?.summary ||
                         "Zorelan detected the shape of disagreement"}
                     </p>
                   </div>
+                </div>
 
-                  <div className="rounded-xl border border-black/10 dark:border-white/10 p-4">
+                {decisionVerification?.recommendedAction && (
+                  <div
+                    className={cx(
+                      "rounded-xl border p-4",
+                      getRiskPanelClasses(decisionVerification.riskLevel)
+                    )}
+                  >
                     <div className="text-xs uppercase tracking-wide opacity-50 mb-1">
                       Recommended Action
                     </div>
                     <div className="text-sm leading-relaxed">
-                      {decisionVerification?.recommendedAction || "Review result"}
+                      {decisionVerification.recommendedAction}
                     </div>
                   </div>
-                </div>
+                )}
 
                 {(decisionVerification?.verdict ||
                   decisionVerification?.keyDisagreement) && (
@@ -1934,12 +2092,16 @@ export default function Home() {
                     key={provider}
                     provider={provider}
                     answer={displayedAnswers?.[provider] ?? ""}
+                    mobileExpanded={mobileExpandedProviders[provider]}
+                    onToggleMobile={() => toggleMobileProvider(provider)}
                   />
                 ))}
               </div>
             </div>
 
-            <SynthesizeButton />
+            <div className="pt-1">
+              <SynthesizeButton />
+            </div>
           </section>
         )}
 
@@ -1976,7 +2138,7 @@ export default function Home() {
               {(comparison || decisionVerification) && (
                 <div
                   className={cx(
-                    "text-xs font-medium px-3 py-1 rounded-full",
+                    "text-xs font-medium px-3 py-1 rounded-full border",
                     getConfidenceBadgeClasses(displayedConfidenceLevel)
                   )}
                 >
