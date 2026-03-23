@@ -14,24 +14,24 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Zorelan — Think once. Ask every AI.",
+  title: "Zorelan — Verify AI before you trust it",
   description:
-    "Structure your thinking, then run it across multiple AI models at once. Compare answers and combine the best insights.",
+    "Zorelan compares multiple AI models, detects disagreement, and returns a trust-calibrated answer with a trust score, risk level, and recommended action.",
   openGraph: {
-    title: "Zorelan — Think once. Ask every AI.",
+    title: "Zorelan — Verify AI before you trust it",
     description:
-      "Structure your thinking, then run it across multiple AI models at once. Compare answers and combine the best insights.",
-    url: "https://zorelan.vercel.app",
+      "Zorelan compares multiple AI models, detects disagreement, and returns a trust-calibrated answer with a trust score, risk level, and recommended action.",
+    url: "https://zorelan.com",
     siteName: "Zorelan",
     type: "website",
   },
   twitter: {
     card: "summary",
-    title: "Zorelan — Think once. Ask every AI.",
+    title: "Zorelan — Verify AI before you trust it",
     description:
-      "Structure your thinking, then run it across multiple AI models at once. Compare answers and combine the best insights.",
+      "Zorelan compares multiple AI models, detects disagreement, and returns a trust-calibrated answer with a trust score, risk level, and recommended action.",
   },
-  metadataBase: new URL("https://zorelan.vercel.app"),
+  metadataBase: new URL("https://zorelan.com"),
 };
 
 export default function RootLayout({
