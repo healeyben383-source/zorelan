@@ -1484,32 +1484,32 @@ export default function Home() {
 
           <div className="mx-auto max-w-4xl text-center space-y-2 md:space-y-3">
             <h1 className="text-[2.5rem] leading-[1.02] font-semibold tracking-tight md:text-6xl md:leading-[0.98]">
-              Verify AI before you trust it
+              AI agreement is not verification.
             </h1>
 
             <p className="text-sm leading-relaxed opacity-65 max-w-xs mx-auto md:hidden">
-              Compare model outputs, detect disagreement, and verify before acting.
+              Zorelan verifies AI output before your production system acts — because unverified answers cause real failures.
             </p>
 
             <p className="hidden md:block text-base opacity-65 leading-relaxed max-w-3xl mx-auto">
-              Zorelan compares multiple models, detects disagreement, and shows
-              you when an answer is strong enough to use — and when it needs
-              caution, review, or escalation.
+              Zorelan verifies AI output before your production system acts — because unverified answers cause real failures.
             </p>
           </div>
         </header>
+
+        <p className="text-xs text-center opacity-60 tracking-wide -mt-2">
+          Trust · Risk · Disagreement — before your system acts on AI
+        </p>
 
         <section className="rounded-3xl border border-black/10 dark:border-white/10 bg-black/[0.02] dark:bg-white/[0.02] p-4 md:p-6 space-y-4 md:space-y-5">
           <div className="md:flex md:items-start md:justify-between md:gap-4">
             <div className="space-y-1">
               <div className="text-xs uppercase tracking-wide opacity-50">
-                <span className="md:hidden">Ask a question</span>
-                <span className="hidden md:inline">Start with a raw question</span>
+                <span className="md:hidden">Enter a decision to verify</span>
+                <span className="hidden md:inline">Enter a decision to verify</span>
               </div>
               <p className="hidden md:block text-sm opacity-60 leading-relaxed max-w-2xl">
-                Ask anything. Zorelan will structure it for verification, check
-                multiple models, and show trust, risk, and disagreement before
-                you rely on the result.
+                Describe a decision or action you want to verify before acting.
               </p>
             </div>
 
@@ -1534,7 +1534,7 @@ export default function Home() {
                     : "opacity-55 hover:opacity-85"
                 )}
               >
-                Advanced
+                Add Context
               </button>
             </div>
           </div>
@@ -1546,7 +1546,7 @@ export default function Home() {
                   className="absolute top-0 left-0 w-full p-4 text-base md:text-sm pointer-events-none select-none opacity-30 leading-relaxed"
                   aria-hidden="true"
                 >
-                  Ask anything…
+                  Describe the decision you want to verify…
                   <div className="hidden md:block mt-4">
                     Examples: "Should I trust AI for medical advice?" or "Should
                     I use REST or GraphQL?" or "What is the safest way to store
@@ -1590,7 +1590,7 @@ export default function Home() {
                 Structuring for verification…
               </span>
             ) : (
-              "Verify"
+              "Run Verification"
             )}
           </PrimaryActionButton>
 
@@ -1600,7 +1600,7 @@ export default function Home() {
               onClick={() => setAdvancedOpen((v) => !v)}
               className="inline-flex items-center gap-2 text-xs opacity-60 hover:opacity-100 transition-opacity"
             >
-              <span>{advancedOpen ? "Hide" : "Show"} advanced options</span>
+              <span>{advancedOpen ? "Hide" : "Add"} context</span>
               <svg
                 xmlns="http://www.w3.org/2000/svg"
                 width="12"

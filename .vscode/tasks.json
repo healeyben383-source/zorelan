@@ -1,0 +1,29 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Start All Dev",
+      "dependsOn": ["Zorelan Dev", "AI Clarity Dev"]
+    },
+    {
+      "label": "Zorelan Dev",
+      "type": "shell",
+      "command": "npm run dev",
+      "options": {
+        "cwd": "C:\\Users\\HN2nds\\preframe"
+      },
+      "isBackground": true,
+      "problemMatcher": []
+    },
+    {
+      "label": "AI Clarity Dev",
+      "type": "shell",
+      "command": "npm run dev -- -p 3001",
+      "options": {
+        "cwd": "C:\\Users\\HN2nds\\OneDrive\\Desktop\\Consultancy business\\chat-app"
+      },
+      "isBackground": true,
+      "problemMatcher": []
+    }
+  ]
+}
