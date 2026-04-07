@@ -28,6 +28,7 @@ export type DomainType =
   | "financial"
   | "medical"
   | "legal"
+  | "security"
   | "subjective"
   | "mixed"
   | "unknown";
@@ -84,6 +85,24 @@ function isLegalPrompt(p: string): boolean {
     /\bregulat(ion|ory|ed)\b/.test(p) ||
     /\bcomplian(ce|t)\b/.test(p) ||
     /\bcontract\b/.test(p)
+  );
+}
+
+/**
+ * Detects prompts involving production security decisions or known vulnerability
+ * patterns. These prompts can produce agreeable-sounding AI answers that still
+ * carry high-consequence execution risk and must not auto-allow.
+ */
+function isSecurityCriticalPrompt(p: string): boolean {
+  return (
+    /\bvirus scan(ning)?\b/.test(p) ||
+    /\bmalware\b/.test(p) ||
+    /\bsql injection\b/.test(p) ||
+    /\b(xss|csrf|ssrf)\b/.test(p) ||
+    /\bpath traversal\b/.test(p) ||
+    /\bremote code execution\b/.test(p) ||
+    /\bsecurity vulnerabilit/.test(p) ||
+    /\bwithout (virus |malware )?(scan(ning)?|sanitiz)/.test(p)
   );
 }
 
@@ -287,30 +306,33 @@ export function classifyPrompt(prompt: string): PromptClassification {
   let stakes: StakesLevel = "low";
 
   // ── Domain detection (order matters — more specific first) ────────────────
-  if (isMedicalPrompt(p)) {
-    domain = "medical";
-    stakes = "high";
-  } else if (isLegalPrompt(p)) {
-    domain = "legal";
-    stakes = "high";
-  } else if (isFinancialPrompt(p)) {
-    domain = "financial";
-    stakes = "high";
-  } else if (isPersonalDecisionPrompt(p)) {
-    domain = "personal_decision";
-    stakes = "high";
-  } else if (isPredictionPrompt(p)) {
-    domain = "prediction";
-  } else if (isTradeoffPrompt(p)) {
-    domain = "tradeoff";
-    if (stakes === "low") stakes = "moderate";
-  } else if (isBestPracticePrompt(p)) {
-    domain = "best_practice";
-  } else if (isSubjectivePrompt(p)) {
-    domain = "subjective";
-  } else if (isStableFactPrompt(p)) {
-    domain = "fact";
-  }
+if (isSecurityCriticalPrompt(p)) {
+  domain = "security";
+  stakes = "high";
+} else if (isMedicalPrompt(p)) {
+  domain = "medical";
+  stakes = "high";
+} else if (isLegalPrompt(p)) {
+  domain = "legal";
+  stakes = "high";
+} else if (isFinancialPrompt(p)) {
+  domain = "financial";
+  stakes = "high";
+} else if (isPersonalDecisionPrompt(p)) {
+  domain = "personal_decision";
+  stakes = "high";
+} else if (isPredictionPrompt(p)) {
+  domain = "prediction";
+} else if (isTradeoffPrompt(p)) {
+  domain = "tradeoff";
+  if (stakes === "low") stakes = "moderate";
+} else if (isBestPracticePrompt(p)) {
+  domain = "best_practice";
+} else if (isSubjectivePrompt(p)) {
+  domain = "subjective";
+} else if (isStableFactPrompt(p)) {
+  domain = "fact";
+}
 
   // Handle mixed domain (multiple high-stakes domains present)
   const highStakesDomainCount = [

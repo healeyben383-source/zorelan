@@ -160,6 +160,8 @@ const DecisionResponseSchema = z.object({
     label: z.enum(["high", "moderate", "low"]),
     reason: z.string(),
   }),
+  decision: z.enum(["allow", "review", "block"]),
+  decision_reason: z.string(),
   answers: z.object({
     openai: z.string(),
     anthropic: z.string(),
@@ -217,6 +219,126 @@ const DecisionResponseSchema = z.object({
     .nullable(),
   cached: z.boolean().optional(),
 });
+
+function getDecision(
+  trustScore: number,
+  riskLevel: "low" | "moderate" | "high",
+  disagreementType: string
+): { decision: "allow" | "review" | "block"; decision_reason: string } {
+  if (riskLevel === "high") {
+    return {
+      decision: "block",
+      decision_reason: "Risk level is high. Do not act on this output without human review.",
+    };
+  }
+  if (disagreementType === "material_conflict") {
+    return {
+      decision: "block",
+      decision_reason: "Models produced a material conflict. Output cannot be trusted without resolution.",
+    };
+  }
+  if (trustScore < 60) {
+    return {
+      decision: "review",
+      decision_reason: "Trust score is below 60. Output requires review before acting.",
+    };
+  }
+  if (trustScore < 80) {
+    return {
+      decision: "review",
+      decision_reason: "Trust score is below 80. Verify output before relying on it in production.",
+    };
+  }
+  return {
+    decision: "allow",
+    decision_reason: "Low risk, no material conflict, and high trust score. Output is consistent and safe to act on.",
+  };
+}
+
+/**
+ * Deterministic execution gating function.
+ * Takes domain, risk, disagreement, alignment, and trust score.
+ * Returns a hard decision: allow | review | block.
+ *
+ * Security prompts can never auto-allow — even at high trust.
+ * High risk always gates to review minimum.
+ * Conditional alignment prevents automatic execution.
+ */
+function deriveDecision(input: {
+  domain: string;
+  risk: "low" | "moderate" | "high";
+  disagreementType: string;
+  finalConclusionAligned: boolean;
+  trustScore: number;
+}): { decision: "allow" | "review" | "block"; decision_reason: string } {
+  const { domain, risk, disagreementType, finalConclusionAligned, trustScore } = input;
+
+  // Absolute safety floor — security prompts never auto-execute
+  if (domain === "security") {
+    return {
+      decision: "review",
+      decision_reason: "Human review required. This prompt involves a security-critical decision that cannot be automatically executed.",
+    };
+  }
+
+  // High risk — no automatic execution regardless of model agreement
+  if (risk === "high") {
+    return {
+      decision: "review",
+      decision_reason: "Human review required. This prompt carries high-risk consequences and must not be acted on automatically.",
+    };
+  }
+
+  // Material conflict — models fundamentally disagree
+  if (disagreementType === "material_conflict") {
+    return {
+      decision: "review",
+      decision_reason: "Human review required. Models produced a material conflict and the output cannot be trusted without resolution.",
+    };
+  }
+
+  // Conditional alignment — execution depends on conditions or caveats
+  if (!finalConclusionAligned) {
+    return {
+      decision: "review",
+      decision_reason: "Human review required. Execution depends on conditions or caveats that were not fully resolved.",
+    };
+  }
+
+  // Moderate risk — allow only with strong trust and clean agreement
+  if (risk === "moderate") {
+    if (trustScore >= 80 && disagreementType === "none") {
+      return {
+        decision: "allow",
+        decision_reason: "Moderate risk with strong model agreement and high trust score. Output is consistent and safe to act on.",
+      };
+    }
+    return {
+      decision: "review",
+      decision_reason: "Human review required. Moderate risk with insufficient trust or agreement to execute automatically.",
+    };
+  }
+
+  // Low risk — allow if trust score clears threshold
+  if (risk === "low") {
+    if (trustScore >= 75) {
+      return {
+        decision: "allow",
+        decision_reason: "Low risk, high trust score, and consistent model agreement. Output is safe to act on.",
+      };
+    }
+    return {
+      decision: "review",
+      decision_reason: "Human review required. Low risk but trust score is below threshold to execute automatically.",
+    };
+  }
+
+  // Default safe fallback
+  return {
+    decision: "review",
+    decision_reason: "Human review required. Execution safety could not be confirmed.",
+  };
+}
 
 function withTimeout<T>(
   promiseFactory: (signal: AbortSignal) => Promise<T>,
@@ -588,6 +710,7 @@ function calculateTrustScore(input: {
   averageQuality: number;
   riskLevel: RiskLevel;
   prompt: string;
+  promptClassification?: { domain: string; risk: "low" | "moderate" | "high" };
 }): { score: number; label: "high" | "moderate" | "low"; reason: string } {
   const agreementBase = getAgreementBaseScore(input.agreementLevel);
   const qualityNormalized = input.averageQuality * 10;
@@ -619,9 +742,10 @@ function calculateTrustScore(input: {
     lowerPrompt.includes("portfolio") ||
     lowerPrompt.includes("long-term investment");
 
-  if (input.disagreementType === "explanation_variation") score -= 4;
-  else if (input.disagreementType === "conditional_alignment") score -= 12;
-  else if (input.disagreementType === "material_conflict") score -= 20;
+  if (input.disagreementType === "additive_nuance") score -= 2;
+  else if (input.disagreementType === "explanation_variation") score -= 4;
+  else if (input.disagreementType === "conditional_alignment") score -= 20;
+  else if (input.disagreementType === "material_conflict") score -= 35;
 
   if (!input.finalConclusionAligned) score -= 10;
 
@@ -662,6 +786,14 @@ function calculateTrustScore(input: {
   if (speculativeHighRisk || input.riskLevel === "high") {
     score = Math.min(score, 70);
   }
+
+  // Domain and risk-based caps — applied after all scoring to prevent trust score
+  // from overriding execution safety signals derived from domain, risk, and disagreement.
+  if (input.promptClassification?.domain === "security") score = Math.min(score, 70);
+  if (input.riskLevel === "high") score = Math.min(score, 75);
+  if (input.riskLevel === "moderate") score = Math.min(score, 75);
+  if (input.disagreementType === "conditional_alignment") score = Math.min(score, 80);
+  if (input.disagreementType === "material_conflict") score = Math.min(score, 60);
 
   const finalScore = Math.round(clamp(score, 0, 100));
 
@@ -1561,6 +1693,15 @@ export async function POST(req: NextRequest) {
         finalConclusionAligned: verdictPayload.finalConclusionAligned,
         averageQuality,
         riskLevel,
+        promptClassification,
+      });
+
+      const { decision, decision_reason } = deriveDecision({
+        domain: promptClassification.domain,
+        risk: promptClassification.risk,
+        disagreementType: verdictPayload.disagreementType,
+        finalConclusionAligned: verdictPayload.finalConclusionAligned,
+        trustScore: trustScore.score,
       });
 
       const responsePayload = {
@@ -1592,6 +1733,8 @@ export async function POST(req: NextRequest) {
           label: trustScore.label,
           reason: trustScore.reason,
         },
+        decision,
+        decision_reason,
         answers: {
           openai: cleanEncoding(
             activePair.providerA === "openai"

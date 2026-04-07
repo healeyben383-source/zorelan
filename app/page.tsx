@@ -57,6 +57,8 @@ interface TrustScore {
   score: number;
   label: "high" | "moderate" | "low";
   reason: string;
+  decision: "allow" | "review" | "block";
+  decision_reason: string;
 }
 
 interface HistoryEntry {
@@ -1082,6 +1084,8 @@ export default function Home() {
                   score: verifyJson.trust_score.score,
                   label: verifyJson.trust_score.label,
                   reason: verifyJson.trust_score.reason,
+                  decision: verifyJson.decision ?? "review",
+                  decision_reason: verifyJson.decision_reason ?? "",
                 }
               : null
           );
@@ -1484,21 +1488,21 @@ export default function Home() {
 
           <div className="mx-auto max-w-4xl text-center space-y-2 md:space-y-3">
             <h1 className="text-[2.5rem] leading-[1.02] font-semibold tracking-tight md:text-6xl md:leading-[0.98]">
-              AI agreement is not verification.
+              Ship AI safely<br />or don't ship it at all.
             </h1>
 
             <p className="text-sm leading-relaxed opacity-65 max-w-xs mx-auto md:hidden">
-              Zorelan verifies AI output before your production system acts — because unverified answers cause real failures.
+              Zorelan is the verification layer that decides whether AI output is safe to execute — before it reaches users or systems.
             </p>
 
             <p className="hidden md:block text-base opacity-65 leading-relaxed max-w-3xl mx-auto">
-              Zorelan verifies AI output before your production system acts — because unverified answers cause real failures.
+              Zorelan is the verification layer that decides whether AI output is safe to execute — before it reaches users or systems.
             </p>
           </div>
         </header>
 
         <p className="text-xs text-center opacity-60 tracking-wide -mt-2">
-          Trust · Risk · Disagreement — before your system acts on AI
+          Trust · Risk · Decision — enforced before action
         </p>
 
         <section className="rounded-3xl border border-black/10 dark:border-white/10 bg-black/[0.02] dark:bg-white/[0.02] p-4 md:p-6 space-y-4 md:space-y-5">
@@ -1590,7 +1594,7 @@ export default function Home() {
                 Structuring for verification…
               </span>
             ) : (
-              "Run Verification"
+              "Evaluate Decision"
             )}
           </PrimaryActionButton>
 
@@ -1847,7 +1851,7 @@ export default function Home() {
                   Running verification across multiple AIs…
                 </span>
               ) : (
-                "Run Verification"
+                "Evaluate Decision"
               )}
             </PrimaryActionButton>
 
@@ -1883,6 +1887,13 @@ export default function Home() {
           <section ref={resultsRef} className="space-y-4">
             {/* Suggestion 2: removed inline phase banner — floating pill handles this */}
 
+            <div className="text-xs text-center opacity-60 tracking-wide font-mono mb-4">
+              Input → Models → Zorelan → Decision → Execute / Block
+            </div>
+            <div className="text-xs text-center opacity-40 mt-1">
+              Most production AI systems gate outputs before execution.
+            </div>
+
             {(trustScore || decisionVerification) && (
               <div
                 className={cx(
@@ -1891,6 +1902,9 @@ export default function Home() {
                 )}
               >
                 <div className="space-y-1 text-center md:text-left">
+                  <div className="text-xs uppercase tracking-wide opacity-35 mb-0.5">
+                    System execution decision
+                  </div>
                   <div className="text-xs uppercase tracking-wide opacity-50">
                     Verification Result
                   </div>
@@ -1944,6 +1958,41 @@ export default function Home() {
                     )}
                   </div>
                 </div>
+
+                {trustScore?.decision && (
+                  <div
+                    className={cx(
+                      "rounded-xl border px-5 py-4",
+                      trustScore.decision === "allow"
+                        ? "bg-green-500/10 border-green-500/30 text-green-700 dark:text-green-400"
+                        : trustScore.decision === "review"
+                          ? "bg-yellow-500/10 border-yellow-500/30 text-yellow-700 dark:text-yellow-400"
+                          : "bg-red-500/10 border-red-500/30 text-red-700 dark:text-red-400"
+                    )}
+                  >
+                    <div className="text-xs uppercase tracking-wide opacity-60 mb-1">System Decision</div>
+                    <div className="text-3xl md:text-4xl font-bold tracking-tight mb-2">
+                      {trustScore.decision === "allow"
+                        ? "SAFE TO EXECUTE"
+                        : trustScore.decision === "review"
+                        ? "HUMAN REVIEW REQUIRED"
+                        : "BLOCKED"}
+                    </div>
+
+                    <div className="text-xs opacity-70 leading-relaxed">
+  {trustScore.decision === "allow"
+    ? "This output meets reliability thresholds and can be executed."
+    : trustScore.decision === "review"
+    ? "This output is not safe for automatic execution. Human validation required."
+    : "Execution prevented due to high risk or conflicting signals."}
+</div>
+                    {trustScore.decision_reason && (
+                      <p className="text-xs opacity-70 leading-relaxed">
+                        {trustScore.decision_reason}
+                      </p>
+                    )}
+                  </div>
+                )}
 
                 {/* Suggestion 3: trust score card visually dominant — larger, full-width feel */}
                 <div className="grid gap-3 md:grid-cols-4">
@@ -2168,12 +2217,24 @@ export default function Home() {
                 Use Zorelan in production
               </div>
               <h2 className="text-2xl md:text-3xl font-semibold tracking-tight">
-                Add verification before AI reaches users
+                Gate AI execution in production
               </h2>
+              <div className="text-xs opacity-50 mt-1">
+                Add a decision layer between your models and real-world actions.
+              </div>
               <p className="text-sm md:text-base opacity-65 leading-relaxed max-w-3xl">
-                Use the API to gate AI output with trust scoring, disagreement
-                checks, and risk-aware decisions inside your own product.
+                Use the API to verify and control AI output with trust scoring, disagreement detection, and execution decisions — before it reaches users or systems.
               </p>
+              <pre className="mt-4 rounded-xl border border-white/10 bg-black text-white text-xs leading-relaxed p-4 overflow-x-auto">{`const result = await zorelan.verify(prompt)
+
+if (result.decision === "allow") {
+  execute(result.output)
+} else {
+  block()
+}`}</pre>
+              <div className="text-xs opacity-40 mt-2">
+                ~300–800ms verification latency • deterministic scoring • production safe
+              </div>
             </div>
 
             <div className="flex flex-col sm:flex-row gap-3">
@@ -2187,7 +2248,7 @@ export default function Home() {
                 href="/api-docs"
                 className="inline-flex items-center justify-center rounded-2xl border border-black/10 dark:border-white/10 px-4 py-3 text-sm font-medium opacity-85 hover:opacity-100 transition-all"
               >
-                Get API Key
+                Gate Your AI Pipeline
               </a>
             </div>
           </section>
