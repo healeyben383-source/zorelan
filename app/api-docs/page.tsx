@@ -80,6 +80,8 @@ const advancedJsonExample = `{
 const minimalResponseExample = `{
   "ok": true,
   "verified_answer": "Yes — you should use HTTPS for your web application.",
+  "decision": "allow",
+  "decision_reason": "Low risk, high trust score, and consistent model agreement. Output is safe to act on.",
   "trust_score": {
     "score": 94,
     "label": "high",
@@ -95,6 +97,8 @@ const minimalResponseExample = `{
 
 const responseExample = `{
   "ok": true,
+  "decision": "allow",
+  "decision_reason": "Low risk, high trust score, and consistent model agreement. Output is safe to act on.",
   "verified_answer": "Yes — you should use HTTPS for your web application. The providers agree that HTTPS is standard practice for protecting user data, securing sessions, and establishing trust.",
   "verdict": "Models are aligned on the main conclusion",
   "consensus": {
@@ -161,11 +165,14 @@ const zorelan = new Zorelan(process.env.ZORELAN_API_KEY!);
 
 const result = await zorelan.verify(userInput);
 
-// Gate behaviour based on trust score
-if (result.trust_score.score >= 75 && result.risk_level !== "high") {
+// Gate execution on result.decision — the authoritative field
+if (result.decision === "allow") {
   showAnswer(result.verified_answer);
+} else if (result.decision === "review") {
+  showWithWarning(result.verified_answer, result.decision_reason);
 } else {
-  showWarning("Low confidence. Review before acting.");
+  // "block" — high risk, material conflict, or unresolved conditions
+  requireHumanReview(result.decision_reason);
 }`;
 
 const feedbackPostExample = `curl -X POST https://zorelan.com/api/feedback \\
@@ -184,6 +191,16 @@ const feedbackGetExample = `curl https://zorelan.com/api/feedback \\
   -H "Authorization: Bearer YOUR_MASTER_KEY"`;
 
 const responseFields = [
+  {
+    field: "decision",
+    type: "string",
+    desc: '"allow" · "review" · "block" — the authoritative execution gate. Derived from risk level, disagreement type, model alignment, and trust score. Use this field to drive product logic; do not re-implement the gate from trust_score alone.',
+  },
+  {
+    field: "decision_reason",
+    type: "string",
+    desc: "Plain English explanation of why this decision was reached.",
+  },
   {
     field: "verified_answer",
     type: "string",
@@ -508,23 +525,23 @@ export default function ApiDocsPage() {
         <div className="mb-14">
           <SectionLabel>Developer API</SectionLabel>
           <h1 className="text-4xl font-semibold tracking-tight mb-4">
-            Verify AI before it reaches your users
+            Ship AI safely or don&apos;t ship it at all.
           </h1>
 
           <p className="text-white text-2xl leading-tight tracking-tight mb-3 max-w-3xl">
-            Zorelan compares multiple model outputs and returns a trust-calibrated
-            answer you can use in production.
+            Zorelan is the verification layer that decides whether AI output is
+            safe to execute — before it reaches users or systems.
           </p>
 
           <p className="text-white/65 text-lg leading-relaxed mb-5 max-w-3xl">
-            Add a verification layer between your app and AI providers. In one API
-            call, Zorelan returns a verified answer, trust score, risk level,
-            consensus signal, disagreement analysis, and recommended action.
+            In one API call, Zorelan compares multiple model outputs, scores
+            trust, assesses risk, and returns a hard decision: allow, review, or
+            block. Your application gates on <InlineCode>result.decision</InlineCode> — not on
+            raw model output.
           </p>
 
           <p className="text-white/50 text-sm leading-relaxed mb-8 max-w-3xl">
-            Use it to decide when to show an answer directly, when to warn the
-            user, and when to route a response into fallback or human review.
+            Trust → Risk → Decision → Execution
           </p>
 
           <div className="grid gap-4 md:grid-cols-3">
@@ -541,6 +558,22 @@ export default function ApiDocsPage() {
             </FeatureCard>
           </div>
         </div>
+
+        {/* ── Where Zorelan sits ────────────────────────────────────────────── */}
+        <section className="mb-12">
+          <SectionLabel>Where Zorelan sits</SectionLabel>
+          <p className="text-white/60 leading-relaxed mb-4 max-w-2xl">
+            Zorelan runs after model generation and before execution. It takes
+            model outputs, evaluates agreement, risk, and context, and returns a
+            deterministic decision your system can act on.
+          </p>
+          <div className="rounded-xl border border-white/10 bg-white/[0.02] px-5 py-4 font-mono text-sm text-white/60 tracking-tight">
+            User Input → Models → Zorelan → Decision → Execution
+          </div>
+          <p className="text-white/40 text-sm leading-relaxed mt-4">
+            Use it as the final checkpoint before your system acts on AI output.
+          </p>
+        </section>
 
         {/* ── Change 3: Why Zorelan moved above quickstart ──────────────────── */}
         <section id="why" className="mb-12">
@@ -586,7 +619,7 @@ export default function ApiDocsPage() {
                 </p>
                 <div className="space-y-2 text-sm text-white/55">
                   <div>• Verify answers before showing them in your UI</div>
-                  <div>• Gate workflows using trust score thresholds</div>
+                  <div>• Gate workflows on <code className="font-mono text-xs bg-white/10 px-1 rounded">result.decision</code> — allow, review, or block</div>
                   <div>• Surface uncertainty instead of hiding it</div>
                   <div>• Reduce single-model failure risk in production</div>
                 </div>
@@ -667,9 +700,10 @@ export default function ApiDocsPage() {
               and risk level to decide whether to present an answer directly or
               expose uncertainty.
             </FeatureCard>
-            <FeatureCard title="Gate actions based on confidence">
+            <FeatureCard title="Gate actions on the decision field">
               Only trigger workflows, automations, notifications, or downstream
-              decisions when the trust score clears your threshold.
+              decisions when <InlineCode>result.decision === &quot;allow&quot;</InlineCode>.
+              The decision field already encodes risk, disagreement, and trust.
             </FeatureCard>
             <FeatureCard title="Reduce hallucinations in production">
               Add a verification layer between your app and LLMs to reduce
@@ -834,26 +868,29 @@ Content-Type: application/json`}
         <section className="mb-12">
           <SectionLabel>Decision layer</SectionLabel>
           <h2 className="text-xl font-semibold mb-4">
-            A practical way to use the score
+            Gate execution on <InlineCode>result.decision</InlineCode>
           </h2>
 
           <p className="text-white/60 leading-relaxed mb-6">
-            Zorelan is most useful when its output drives product behaviour. A
-            simple pattern is to map trust and risk into three states.
+            Every response includes a <InlineCode>decision</InlineCode> field
+            that encodes the execution gate. Zorelan derives it from risk level,
+            disagreement type, model alignment, and trust score — you do not need
+            to re-implement this logic yourself. Branch on{" "}
+            <InlineCode>decision</InlineCode> directly.
           </p>
 
           <div className="grid gap-4 md:grid-cols-3">
-            <FeatureCard title="Show answer">
-              High trust and acceptable risk. Safe to rely on directly in normal
-              product flows.
+            <FeatureCard title={`"allow"`}>
+              Low risk, no material conflict, and trust score above threshold.
+              Safe to act on automatically.
             </FeatureCard>
-            <FeatureCard title="Show with warning">
-              Useful answer, but with enough uncertainty that your UI should
-              signal caution or context.
+            <FeatureCard title={`"review"`}>
+              Moderate risk, conditional alignment, or trust score below
+              threshold. Route to human review before acting.
             </FeatureCard>
-            <FeatureCard title="Block or escalate">
-              Low trust, high risk, or material conflict. Use fallback logic,
-              human review, or avoid acting automatically.
+            <FeatureCard title={`"block"`}>
+              High risk, material conflict, or a security-domain prompt. Do not
+              act on this output without resolution.
             </FeatureCard>
           </div>
         </section>
