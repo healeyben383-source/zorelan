@@ -119,6 +119,8 @@ type StreamEvent =
           label: "high" | "moderate" | "low";
           reason: string;
         };
+        decision?: "allow" | "review" | "block";
+        decision_reason?: string;
         answers: Answers;
         selectedProviders: ProviderName[];
         cached?: boolean;
