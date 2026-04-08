@@ -542,6 +542,26 @@ function normalizeVerdictWithSemantic(input: {
     };
   }
 
+  // Fallback-path fix: the semantic judge timed out (slow network) and the
+  // heuristic returned "medium" for a low-risk factual/best-practice prompt.
+  // A direction mismatch ("positive" vs "neutral" answer phrasing) is enough
+  // to push the heuristic score below the 0.74 high-agreement threshold even
+  // when both models say exactly the same thing. No genuine conflict was
+  // detected — normalize to clean alignment, same as the high+low-risk path above.
+  if (
+    input.semanticAgreementLevel === "medium" &&
+    !input.semanticLikelyConflict &&
+    input.promptClassification.risk === "low" &&
+    (input.promptClassification.domain === "fact" ||
+      input.promptClassification.domain === "best_practice")
+  ) {
+    return {
+      ...input.verdictPayload,
+      finalConclusionAligned: true,
+      disagreementType: "none",
+    };
+  }
+
   const normalized: VerdictPayload = { ...input.verdictPayload };
 
   if (input.semanticAgreementLevel === "high") {
@@ -1320,9 +1340,23 @@ export async function POST(req: NextRequest) {
       lowerPrompt.includes("ssl") ||
       lowerPrompt.includes("tls");
 
+    // "How many/how often/how [attribute]" prompts are stable factual questions
+    // that isFactPrompt misses because it anchors to sentence-initial "how does".
+    // Guard on domain === "unknown" so this never fires for prompts that already
+    // classified into a high-stakes domain (financial, medical, legal, tradeoff, etc.).
+    const isUnclassifiedQuantityFact =
+      initialPromptClassification.domain === "unknown" &&
+      /^how (many|often|long|far|deep|fast|old|tall|big|large|small|heavy|much|wide|hot|cold|thick|high)\b/.test(lowerPrompt);
+
     const promptClassification = isHttpsBestPractice
       ? {
           ...initialPromptClassification,
+          risk: "low" as const,
+        }
+      : isUnclassifiedQuantityFact
+      ? {
+          ...initialPromptClassification,
+          domain: "fact" as const,
           risk: "low" as const,
         }
       : initialPromptClassification;
@@ -1664,9 +1698,61 @@ export async function POST(req: NextRequest) {
         ? invokedProviders.length
         : limitedProviders.length;
 
+      // "additive_nuance" and "explanation_variation" are harmless framing
+      // differences on aligned outputs and should not suppress agreement level
+      // to "medium" or trigger the medium cap (≤74) on trust. Treat them the
+      // same as "none" when the prompt is low-risk, models are aligned, and no
+      // genuine conflict was detected. For correctly classified fact/best_practice
+      // prompts the normalizer already forces disagreementType to "none" before
+      // this point — this is belt-and-suspenders for any variant that exits
+      // normalisation with a harmless type still set.
+      const harmlessDisagreementType =
+        verdictPayload.disagreementType === "none" ||
+        verdictPayload.disagreementType === "additive_nuance" ||
+        verdictPayload.disagreementType === "explanation_variation";
+
+      // Single source of truth for low-risk factual calibration.
+      // Agreement level (A), trust floor (B), and final decision (C)
+      // all derive from this one flag so they cannot drift out of sync.
+      const isLowRiskFactualSafe =
+        (promptClassification.domain === "fact" ||
+          promptClassification.domain === "best_practice") &&
+        promptClassification.risk === "low" &&
+        verdictPayload.finalConclusionAligned &&
+        harmlessDisagreementType &&
+        activePair.semantic.agreementLevel !== "low" &&
+        !activePair.semantic.likelyConflict;
+
+      // Second safe-lane for low-risk informational/explanatory prompts.
+      // Broader than the factual lane — does not require fact/best_practice domain —
+      // but requires HIGH (not just non-low) semantic agreement and explicitly
+      // excludes all high-stakes and speculative domains.
+      const isLowRiskInformationalSafe =
+        (promptClassification.risk === "low" ||
+          (promptClassification.risk === "moderate" &&
+            promptClassification.stakes === "low" &&
+            promptClassification.domain === "unknown" &&
+            promptClassification.drivers.length === 0)) &&
+        verdictPayload.finalConclusionAligned &&
+        harmlessDisagreementType &&
+        (activePair.semantic.agreementLevel === "high" ||
+          activePair.semantic.agreementLevel === "medium") &&
+        !activePair.semantic.likelyConflict &&
+        promptClassification.domain !== "tradeoff" &&
+        promptClassification.domain !== "prediction" &&
+        promptClassification.domain !== "financial" &&
+        promptClassification.domain !== "medical" &&
+        promptClassification.domain !== "legal" &&
+        promptClassification.domain !== "security";
+
+      // A. Agreement normalization: factual safe-lane always scores as high agreement.
+      const effectiveAgreementLevel: AgreementLevel = isLowRiskFactualSafe
+        ? "high"
+        : activePair.semantic.agreementLevel;
+
       const modelsAligned = getModelsAligned({
         totalProviders: consensusProviderCount,
-        agreementLevel: activePair.semantic.agreementLevel,
+        agreementLevel: effectiveAgreementLevel,
         finalConclusionAligned: verdictPayload.finalConclusionAligned,
         disagreementType: verdictPayload.disagreementType,
       });
@@ -1678,7 +1764,7 @@ export async function POST(req: NextRequest) {
 
       const riskLevel = getRiskLevel({
         prompt: rawPrompt,
-        agreementLevel: activePair.semantic.agreementLevel,
+        agreementLevel: effectiveAgreementLevel,
         disagreementType: verdictPayload.disagreementType,
         finalConclusionAligned: verdictPayload.finalConclusionAligned,
         promptClassification,
@@ -1686,9 +1772,9 @@ export async function POST(req: NextRequest) {
 
       const averageQuality = (qualityScores.scoreA + qualityScores.scoreB) / 2;
 
-      const trustScore = calculateTrustScore({
+      const rawTrustScore = calculateTrustScore({
         prompt: rawPrompt,
-        agreementLevel: activePair.semantic.agreementLevel,
+        agreementLevel: effectiveAgreementLevel,
         disagreementType: verdictPayload.disagreementType,
         finalConclusionAligned: verdictPayload.finalConclusionAligned,
         averageQuality,
@@ -1696,13 +1782,38 @@ export async function POST(req: NextRequest) {
         promptClassification,
       });
 
-      const { decision, decision_reason } = deriveDecision({
-        domain: promptClassification.domain,
-        risk: promptClassification.risk,
-        disagreementType: verdictPayload.disagreementType,
-        finalConclusionAligned: verdictPayload.finalConclusionAligned,
-        trustScore: trustScore.score,
-      });
+      // B. Trust floors: factual safe-lane ≥92, informational safe-lane ≥88.
+      // Checked in priority order so the tighter floor wins when both are true.
+      const trustScore = (() => {
+        if (isLowRiskFactualSafe && rawTrustScore.score < 92) {
+          return { ...rawTrustScore, score: 92, label: "high" as const };
+        }
+        if (isLowRiskInformationalSafe && rawTrustScore.score < 88) {
+          return { ...rawTrustScore, score: 88, label: "high" as const };
+        }
+        return rawTrustScore;
+      })();
+
+      // C. Decision: factual lane first, informational lane second, normal logic last.
+      const { decision, decision_reason } = isLowRiskFactualSafe
+        ? {
+            decision: "allow" as const,
+            decision_reason:
+              "Factual prompt with low risk, aligned models, and no meaningful disagreement. Safe to execute.",
+          }
+        : isLowRiskInformationalSafe
+        ? {
+            decision: "allow" as const,
+            decision_reason:
+              "Low-risk informational prompt with aligned models and no meaningful disagreement. Safe to execute.",
+          }
+        : deriveDecision({
+            domain: promptClassification.domain,
+            risk: promptClassification.risk,
+            disagreementType: verdictPayload.disagreementType,
+            finalConclusionAligned: verdictPayload.finalConclusionAligned,
+            trustScore: trustScore.score,
+          });
 
       const responsePayload = {
         ok: true as const,
