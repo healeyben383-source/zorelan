@@ -80,6 +80,41 @@ export async function POST(req: NextRequest) {
     }
 
     const parsed = safeParseJSON(raw);
+
+    // Scope-escalation guard: if the model reframed a simple explanatory prompt
+    // into an evaluation/comparison task, override the goal with a category-aware
+    // normalization derived from the raw user input.
+    const SCOPE_ESCALATION_TOKENS = [
+      "evaluate", "compare", "comparison", "model selection",
+      "framework", "benchmark", "optimize", "tradeoff", "effectiveness of",
+      "two different", "two models", "between two",
+    ];
+    const inputLower = userInput.toLowerCase();
+    const userRequestedComparison = SCOPE_ESCALATION_TOKENS.some((t) => inputLower.includes(t));
+
+    if (!userRequestedComparison) {
+      const intentObj =
+        typeof parsed.intent === "object" && parsed.intent !== null
+          ? (parsed.intent as Record<string, unknown>)
+          : null;
+      if (intentObj && typeof intentObj.goal === "string") {
+        const goalLower = intentObj.goal.toLowerCase();
+        if (SCOPE_ESCALATION_TOKENS.some((t) => goalLower.includes(t))) {
+          console.warn("[/api/intent] scope_escalation_detected — goal overridden:", intentObj.goal);
+          const normalized = userInput.trim().toLowerCase().replace(/\?$/, "").trim();
+          if (normalized.startsWith("why ") || normalized.startsWith("how ")) {
+            intentObj.goal = `Explain ${normalized}`;
+          } else if (normalized.startsWith("what is ")) {
+            intentObj.goal = `Describe ${normalized.replace(/^what is\s+/, "")}`;
+          } else if (normalized.startsWith("what are ")) {
+            intentObj.goal = `Describe ${normalized.replace(/^what are\s+/, "")}`;
+          } else {
+            intentObj.goal = normalized.charAt(0).toUpperCase() + normalized.slice(1);
+          }
+        }
+      }
+    }
+
     return NextResponse.json({ ok: true, data: parsed });
 
   } catch (err: unknown) {

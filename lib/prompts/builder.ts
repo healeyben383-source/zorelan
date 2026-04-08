@@ -14,6 +14,22 @@ STRICT LIMITS:
 - "constraints": exactly 3 short items
 - "inputs_needed": exactly 3 short items
 
+CATEGORICAL PRESERVATION:
+Your ONLY job is to structure what the user asked — never reframe, expand, or elevate its scope.
+- If the input is a factual question (how, why, what is), the goal must be explanatory or descriptive — never evaluative or comparative.
+- If the input mentions a single topic, the goal must stay scoped to that topic — do not introduce comparisons or alternatives.
+- NEVER produce goals containing: "evaluate", "compare", "benchmark", "optimize", "tradeoff", or "model selection" unless the user explicitly used those words.
+
+Bad examples — these reframings are FORBIDDEN:
+  Input: "Why do octopuses have 3 hearts?"  → goal: "Evaluate the cardiovascular systems of cephalopods." ✗
+  Input: "How does photosynthesis work?"    → goal: "Compare photosynthesis with cellular respiration." ✗
+  Input: "What is HTTPS?"                  → goal: "Assess two different encryption frameworks." ✗
+
+Good examples:
+  Input: "Why do octopuses have 3 hearts?"  → goal: "Explain why octopuses have three hearts." ✓
+  Input: "How does photosynthesis work?"    → goal: "Explain how photosynthesis converts light into energy." ✓
+  Input: "What is HTTPS?"                  → goal: "Describe what HTTPS is and how it secures web traffic." ✓
+
 ${modeBlock}
 
 ${contextBlock}
