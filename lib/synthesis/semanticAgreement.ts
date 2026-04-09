@@ -221,8 +221,20 @@ async function judgeWithOpenAI(
   const raw = response.output_text?.trim();
   if (!raw) throw new Error("OpenAI semantic judge returned empty output");
 
-  const parsed: { label: SemanticAgreementLabel; rationale: string } =
-    JSON.parse(raw);
+  let parsed: { label: SemanticAgreementLabel; rationale: string };
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    const text = raw.toUpperCase();
+    const label: SemanticAgreementLabel =
+      text.includes("HIGH_AGREEMENT") ? "HIGH_AGREEMENT"
+      : text.includes("HIGH") ? "HIGH_AGREEMENT"
+      : text.includes("MEDIUM_AGREEMENT") ? "MEDIUM_AGREEMENT"
+      : text.includes("MEDIUM") ? "MEDIUM_AGREEMENT"
+      : text.includes("CONFLICT") ? "CONFLICT"
+      : "LOW_AGREEMENT";
+    parsed = { label, rationale: "Fallback: JSON parse failed." };
+  }
   const mapped = mapLabel(parsed.label);
 
   return {
@@ -277,8 +289,20 @@ async function judgeWithAnthropic(
 
   // Strip any accidental markdown fences
   const cleaned = raw.replace(/```json\s*/gi, "").replace(/```\s*/g, "").trim();
-  const parsed: { label: SemanticAgreementLabel; rationale: string } =
-    JSON.parse(cleaned);
+  let parsed: { label: SemanticAgreementLabel; rationale: string };
+  try {
+    parsed = JSON.parse(cleaned);
+  } catch {
+    const text = cleaned.toUpperCase();
+    const label: SemanticAgreementLabel =
+      text.includes("HIGH_AGREEMENT") ? "HIGH_AGREEMENT"
+      : text.includes("HIGH") ? "HIGH_AGREEMENT"
+      : text.includes("MEDIUM_AGREEMENT") ? "MEDIUM_AGREEMENT"
+      : text.includes("MEDIUM") ? "MEDIUM_AGREEMENT"
+      : text.includes("CONFLICT") ? "CONFLICT"
+      : "LOW_AGREEMENT";
+    parsed = { label, rationale: "Fallback: JSON parse failed." };
+  }
 
   const mapped = mapLabel(parsed.label);
 

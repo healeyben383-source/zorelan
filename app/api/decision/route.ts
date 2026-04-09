@@ -24,6 +24,11 @@ import {
   classifyPrompt,
   type PromptClassification,
 } from "@/lib/routing/promptClassification";
+import { classifyTruthRisk } from "@/lib/verification/truthClassifier";
+import {
+  classifyTruthRiskV2,
+  mergeTruthClassifications,
+} from "@/lib/verification/truthClassifierV2";
 
 export const runtime = "nodejs";
 
@@ -1711,10 +1716,45 @@ export async function POST(req: NextRequest) {
         verdictPayload.disagreementType === "additive_nuance" ||
         verdictPayload.disagreementType === "explanation_variation";
 
+      // Truth / controversy classification — two-layer pipeline:
+      //   V1 (deterministic) runs first as the baseline.
+      //   V2 (semantic / model-based) refines the result using provider answers.
+      //   Merged result controls SAFE eligibility and trust caps.
+      const deterministicTruthClass = classifyTruthRisk(rawPrompt, promptClassification);
+      console.log("[/api/decision] truth_classification_v1", JSON.stringify(deterministicTruthClass));
+
+      const v2TruthClass = await classifyTruthRiskV2({
+        prompt: rawPrompt,
+        answers: [
+          { provider: activePair.providerA, text: activePair.answerA },
+          { provider: activePair.providerB, text: activePair.answerB },
+        ],
+        promptClassification,
+        fallback: deterministicTruthClass,
+      });
+      console.log("[/api/decision] truth_classification_v2", JSON.stringify(v2TruthClass));
+
+      const truthClass = mergeTruthClassifications({
+        deterministic: deterministicTruthClass,
+        v2: v2TruthClass,
+        promptClassification,
+        semanticAgreementLevel: activePair.semantic.agreementLevel,
+        likelyConflict: activePair.semantic.likelyConflict,
+      });
+      console.log(
+        "[/api/decision] truth_classification_final",
+        JSON.stringify({
+          classification: truthClass.classification,
+          source: truthClass.source,
+          upgraded: deterministicTruthClass.classification !== truthClass.classification,
+        })
+      );
+
       // Single source of truth for low-risk factual calibration.
       // Agreement level (A), trust floor (B), and final decision (C)
       // all derive from this one flag so they cannot drift out of sync.
       const isLowRiskFactualSafe =
+        truthClass.classification === "FACTUAL_STABLE" &&
         (promptClassification.domain === "fact" ||
           promptClassification.domain === "best_practice") &&
         promptClassification.risk === "low" &&
@@ -1728,6 +1768,7 @@ export async function POST(req: NextRequest) {
       // but requires HIGH (not just non-low) semantic agreement and explicitly
       // excludes all high-stakes and speculative domains.
       const isLowRiskInformationalSafe =
+        truthClass.classification === "FACTUAL_STABLE" &&
         (promptClassification.risk === "low" ||
           (promptClassification.risk === "moderate" &&
             promptClassification.stakes === "low" &&
@@ -1784,14 +1825,26 @@ export async function POST(req: NextRequest) {
 
       // B. Trust floors: factual safe-lane ≥92, informational safe-lane ≥88.
       // Checked in priority order so the tighter floor wins when both are true.
+      // Truth classification caps are applied last so floors cannot override
+      // safety signals on controversial or misinformation prompts.
       const trustScore = (() => {
-        if (isLowRiskFactualSafe && rawTrustScore.score < 92) {
-          return { ...rawTrustScore, score: 92, label: "high" as const };
+        let s = rawTrustScore;
+        if (isLowRiskFactualSafe && s.score < 92) {
+          s = { ...s, score: 92, label: "high" as const };
+        } else if (isLowRiskInformationalSafe && s.score < 88) {
+          s = { ...s, score: 88, label: "high" as const };
         }
-        if (isLowRiskInformationalSafe && rawTrustScore.score < 88) {
-          return { ...rawTrustScore, score: 88, label: "high" as const };
+        if (truthClass.classification === "MISINFORMATION_PATTERN") {
+          const capped = Math.min(s.score, 30);
+          s = { ...s, score: capped, label: getTrustLabel(capped) };
+        } else if (truthClass.classification === "CONTROVERSIAL") {
+          const capped = Math.min(s.score, 60);
+          s = { ...s, score: capped, label: getTrustLabel(capped) };
+        } else if (truthClass.classification === "FACTUAL_UNCERTAIN") {
+          const capped = Math.min(s.score, 74);
+          s = { ...s, score: capped, label: getTrustLabel(capped) };
         }
-        return rawTrustScore;
+        return s;
       })();
 
       // C. Decision: factual lane first, informational lane second, normal logic last.

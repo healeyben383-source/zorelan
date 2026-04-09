@@ -30,6 +30,7 @@ export type DomainType =
   | "legal"
   | "security"
   | "subjective"
+  | "philosophical"
   | "mixed"
   | "unknown";
 
@@ -69,7 +70,15 @@ function isMedicalPrompt(p: string): boolean {
     /\btreatment\b/.test(p) ||
     /\bibuprofen\b/.test(p) ||
     /\baspirin\b/.test(p) ||
-    /\bparacetamol\b/.test(p)
+    /\bparacetamol\b/.test(p) ||
+    /\bhealthy\b/.test(p) ||
+    /\bhealth\b/.test(p) ||
+    /\bnutrition\b/.test(p) ||
+    /\bdiet\b/.test(p) ||
+    /\bfasting\b/.test(p) ||
+    /\bsupplement(s)?\b/.test(p) ||
+    /\bis\s+\S+\s+(good|bad)\s+for\s+(you|me|health)\b/.test(p) ||
+    /\bis\s+\S+\s+safe\b/.test(p)
   );
 }
 
@@ -176,6 +185,16 @@ function isTradeoffPrompt(p: string): boolean {
     /\bwhich (should|is|one)\b/.test(p) ||
     // "or" only when combined with "should i" — avoids "is water H or O?"
     (/\bshould i\b/.test(p) && /\bor\b/.test(p))
+  );
+}
+
+function isPhilosophicalPrompt(p: string): boolean {
+  return (
+    /\bgod\b/.test(p) ||
+    /\bmeaning of life\b/.test(p) ||
+    /\bpurpose of life\b/.test(p) ||
+    /\bexistence of\b/.test(p) ||
+    /\bfree will\b/.test(p)
   );
 }
 
@@ -328,6 +347,8 @@ if (isSecurityCriticalPrompt(p)) {
   if (stakes === "low") stakes = "moderate";
 } else if (isBestPracticePrompt(p)) {
   domain = "best_practice";
+} else if (isPhilosophicalPrompt(p)) {
+  domain = "philosophical";
 } else if (isSubjectivePrompt(p)) {
   domain = "subjective";
 } else if (isStableFactPrompt(p)) {
