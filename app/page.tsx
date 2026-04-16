@@ -1494,28 +1494,36 @@ export default function Home() {
             </h1>
 
             <p className="text-sm leading-relaxed opacity-65 max-w-xs mx-auto md:hidden">
-              Zorelan is the verification layer that decides whether AI output is safe to execute — before it reaches users or systems.
+              Zorelan verifies AI outputs before your system acts on them. Run your prompt through multiple AI models, compare their answers, and get a trust score and decision: allow, review, or block.
             </p>
 
             <p className="hidden md:block text-base opacity-65 leading-relaxed max-w-3xl mx-auto">
-              Zorelan is the verification layer that decides whether AI output is safe to execute — before it reaches users or systems.
+              Zorelan verifies AI outputs before your system acts on them. Run your prompt through multiple AI models, compare their answers, and get a trust score and decision: allow, review, or block.
+            </p>
+
+            <p className="text-sm text-center opacity-55 leading-relaxed">
+              AI can sound confident and still be wrong. Zorelan checks before your system acts.
+            </p>
+
+            <p className="text-xs text-center opacity-50 tracking-wide font-mono">
+              One prompt → multiple AI models → detect disagreement → assign trust → decide if it's safe to act
             </p>
           </div>
         </header>
 
         <p className="text-xs text-center opacity-60 tracking-wide -mt-2">
-          Trust · Risk · Decision — enforced before action
+          Multiple models · Disagreement detection · Trust scoring · Execution decision
         </p>
 
         <section className="rounded-3xl border border-black/10 dark:border-white/10 bg-black/[0.02] dark:bg-white/[0.02] p-4 md:p-6 space-y-4 md:space-y-5">
           <div className="md:flex md:items-start md:justify-between md:gap-4">
             <div className="space-y-1">
               <div className="text-xs uppercase tracking-wide opacity-50">
-                <span className="md:hidden">Enter a decision to verify</span>
-                <span className="hidden md:inline">Enter a decision to verify</span>
+                <span className="md:hidden">Verify an AI output or decision</span>
+                <span className="hidden md:inline">Verify an AI output or decision</span>
               </div>
               <p className="hidden md:block text-sm opacity-60 leading-relaxed max-w-2xl">
-                Describe a decision or action you want to verify before acting.
+                Describe an AI-generated answer or decision you want to verify before acting.
               </p>
             </div>
 
