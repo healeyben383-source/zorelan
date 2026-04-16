@@ -1505,6 +1505,17 @@ export default function Home() {
               AI can sound confident and still be wrong. Zorelan checks before your system acts.
             </p>
 
+            <p className="text-sm text-center">
+              <a
+                href="https://zorelan-support-verification-demo-puvgimhju.vercel.app"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="opacity-70 hover:opacity-100 transition-opacity underline underline-offset-2"
+              >
+                Run the demo — see how Zorelan catches unsafe AI decisions →
+              </a>
+            </p>
+
             <p className="text-xs text-center opacity-50 tracking-wide font-mono">
               One prompt → multiple AI models → detect disagreement → assign trust → decide if it's safe to act
             </p>
@@ -2138,6 +2149,47 @@ export default function Home() {
             </div>
           </section>
         )}
+
+        <section className="rounded-3xl border border-black/10 dark:border-white/10 p-5 md:p-6 space-y-4 bg-black/[0.02] dark:bg-white/[0.02]">
+          <div className="space-y-2">
+            <div className="text-xs uppercase tracking-wide opacity-50">
+              Where Zorelan fits in your system
+            </div>
+            <p className="text-sm md:text-base opacity-65 leading-relaxed max-w-3xl">
+              Zorelan sits between AI output and execution, deciding whether your system should act at all.
+            </p>
+            <div className="text-xs font-mono opacity-50 mt-1">
+              User input → Your app → Zorelan → Decision → Execute or Block
+            </div>
+            <pre className="mt-4 rounded-xl border border-white/10 bg-black text-white text-xs leading-relaxed p-4 overflow-x-auto">{`const result = await zorelan.verify(prompt)
+
+if (result.decision === "allow") {
+  execute()
+} else {
+  block()
+}`}</pre>
+          </div>
+        </section>
+
+        <section className="rounded-3xl border border-black/10 dark:border-white/10 p-5 md:p-6 space-y-4 bg-black/[0.02] dark:bg-white/[0.02]">
+          <div className="space-y-4">
+            <div className="text-xs uppercase tracking-wide opacity-50">
+              What happens without Zorelan
+            </div>
+            <p className="text-sm md:text-base opacity-65 leading-relaxed max-w-3xl">
+              AI responses can be correct — but still unsafe to act on. Without a verification layer, systems execute blindly.
+            </p>
+            <ul className="space-y-2">
+              <li className="text-sm opacity-65 leading-relaxed">· Refunds triggered without verified context</li>
+              <li className="text-sm opacity-65 leading-relaxed">· Policies applied incorrectly due to missing nuance</li>
+              <li className="text-sm opacity-65 leading-relaxed">· Confident but incomplete answers sent to users</li>
+              <li className="text-sm opacity-65 leading-relaxed">· Actions executed without understanding real-world risk</li>
+            </ul>
+            <p className="text-sm opacity-65 leading-relaxed max-w-3xl">
+              Zorelan prevents this by deciding whether an action should happen at all — not just whether an answer looks correct.
+            </p>
+          </div>
+        </section>
 
         {synthesizing && (
           <section className="rounded-2xl border border-black/10 dark:border-white/10 p-5 space-y-4">
