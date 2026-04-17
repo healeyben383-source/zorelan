@@ -1516,6 +1516,13 @@ export default function Home() {
               </a>
             </p>
 
+            <p className="text-xs text-center" style={{ color: "#6b7280", marginTop: 6 }}>
+              This is the same system — try it with your own input.
+            </p>
+            <p className="text-xs text-center" style={{ color: "#6b7280" }}>
+              No signup required.
+            </p>
+
             <p className="text-xs text-center opacity-50 tracking-wide font-mono">
               One prompt → multiple AI models → detect disagreement → assign trust → decide if it's safe to act
             </p>
