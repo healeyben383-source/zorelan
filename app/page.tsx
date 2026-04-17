@@ -1507,7 +1507,7 @@ export default function Home() {
 
             <p className="text-sm text-center">
               <a
-                href="https://zorelan-support-verification-demo.vercel.app"
+                href="/demo"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="opacity-70 hover:opacity-100 transition-opacity underline underline-offset-2"
