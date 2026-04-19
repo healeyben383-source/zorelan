@@ -1494,15 +1494,11 @@ export default function Home() {
             </h1>
 
             <p className="text-sm leading-relaxed opacity-65 max-w-xs mx-auto md:hidden">
-              Zorelan verifies AI outputs before your system acts on them. Run your prompt through multiple AI models, compare their answers, and get a trust score and decision: allow, review, or block.
+              AI can agree and still be wrong — and that mistake can cost you.<br />Zorelan checks outputs across models, assigns a trust score, and tells your system whether to allow, review, or block before it acts.
             </p>
 
             <p className="hidden md:block text-base opacity-65 leading-relaxed max-w-3xl mx-auto">
-              Zorelan verifies AI outputs before your system acts on them. Run your prompt through multiple AI models, compare their answers, and get a trust score and decision: allow, review, or block.
-            </p>
-
-            <p className="text-sm text-center opacity-55 leading-relaxed">
-              AI can sound confident and still be wrong. Zorelan checks before your system acts.
+              AI can agree and still be wrong — and that mistake can cost you.<br />Zorelan checks outputs across models, assigns a trust score, and tells your system whether to allow, review, or block before it acts.
             </p>
 
             <p className="text-sm text-center">
@@ -1532,6 +1528,17 @@ export default function Home() {
         <p className="text-xs text-center opacity-60 tracking-wide -mt-2">
           Multiple models · Disagreement detection · Trust scoring · Execution decision
         </p>
+
+        <section className="rounded-3xl border border-black/10 dark:border-white/10 p-5 md:p-6 space-y-3 bg-black/[0.02] dark:bg-white/[0.02]">
+          <div className="text-xs uppercase tracking-wide opacity-50">Real-world example</div>
+          <p className="text-sm md:text-base font-medium opacity-85 leading-snug">The answer looks reasonable. The action is still risky.</p>
+          <p className="text-sm opacity-60 leading-relaxed">
+            A customer support AI suggests issuing a refund before delivery is confirmed.<br />
+            The answer sounds reasonable. The action creates financial and fraud risk.<br />
+            Zorelan flags the risk before your system acts.
+          </p>
+          <p className="text-xs opacity-40 italic">Agreement is not the same as safe execution.</p>
+        </section>
 
         <section className="rounded-3xl border border-black/10 dark:border-white/10 bg-black/[0.02] dark:bg-white/[0.02] p-4 md:p-6 space-y-4 md:space-y-5">
           <div className="md:flex md:items-start md:justify-between md:gap-4">
