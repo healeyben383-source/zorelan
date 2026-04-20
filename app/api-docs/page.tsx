@@ -6,7 +6,7 @@ import CheckoutStatusBanner from "./CheckoutStatusBanner";
 export const metadata: Metadata = {
   title: "API Docs — Zorelan",
   description:
-    "Verify AI before it reaches your users. Zorelan compares multiple model responses and returns a verified answer with trust scoring, risk signals, and disagreement analysis.",
+    "Zorelan sits between AI output and execution — deciding whether your system should execute AI-driven actions. Allow, review, or block with trust scoring, risk signals, and execution decisions.",
 };
 
 const sdkInstallExample = `npm install @zorelan/sdk`;
@@ -239,17 +239,17 @@ const responseFields = [
   {
     field: "risk_level",
     type: "string",
-    desc: '"low" · "moderate" · "high" — assessed risk of acting on this answer.',
+    desc: '"low" · "moderate" · "high" — assessed risk of executing based on this AI output.',
   },
   {
     field: "key_disagreement",
     type: "string",
-    desc: "The main tension, tradeoff, or difference between the model responses.",
+    desc: "The main tension, tradeoff, or difference between model outputs.",
   },
   {
     field: "recommended_action",
     type: "string",
-    desc: "Practical guidance on how to use this answer.",
+    desc: "Practical guidance on how to act on this execution decision.",
   },
   {
     field: "cached",
@@ -525,36 +525,35 @@ export default function ApiDocsPage() {
         <div className="mb-14">
           <SectionLabel>Developer API</SectionLabel>
           <h1 className="text-4xl font-semibold tracking-tight mb-4">
-            Ship AI safely or don&apos;t ship it at all.
+            Control AI execution in production.
           </h1>
 
           <p className="text-white text-2xl leading-tight tracking-tight mb-3 max-w-3xl">
-            Zorelan is the verification layer that decides whether AI output is
-            safe to execute — before it reaches users or systems.
+            Zorelan sits between AI output and execution — deciding whether your
+            system should execute AI-driven actions.
           </p>
 
           <p className="text-white/65 text-lg leading-relaxed mb-5 max-w-3xl">
-            In one API call, Zorelan compares multiple model outputs, scores
-            trust, assesses risk, and returns a hard decision: allow, review, or
-            block. Your application gates on <InlineCode>result.decision</InlineCode> — not on
-            raw model output.
+            It acts as a decision layer that evaluates risk, agreement, and
+            context before actions run. Your system gates on{" "}
+            <InlineCode>result.decision</InlineCode> — not on raw model output.
           </p>
 
-          <p className="text-white/50 text-sm leading-relaxed mb-8 max-w-3xl">
-            Trust → Risk → Decision → Execution
+          <p className="text-white/50 text-sm leading-relaxed mb-8 max-w-3xl font-mono">
+            User input → AI output → Zorelan → Decision → Execute or Block
           </p>
 
           <div className="grid gap-4 md:grid-cols-3">
-            <FeatureCard title="Show answer">
-              High trust, acceptable risk, and clean alignment across providers.
+            <FeatureCard title="Allow">
+              High trust, low risk, and clean model agreement. Safe to execute.
             </FeatureCard>
-            <FeatureCard title="Show with warning">
-              Moderate trust or elevated uncertainty where the answer is useful
-              but should not be presented as hard certainty.
+            <FeatureCard title="Review">
+              Moderate trust or elevated uncertainty. A human should verify
+              before the action runs.
             </FeatureCard>
-            <FeatureCard title="Block or escalate">
-              Low trust, high risk, or material disagreement where your product
-              should fall back, ask for review, or avoid acting automatically.
+            <FeatureCard title="Block">
+              High risk, material disagreement, or unresolved context. Execution
+              is prevented.
             </FeatureCard>
           </div>
         </div>
@@ -568,10 +567,10 @@ export default function ApiDocsPage() {
             deterministic decision your system can act on.
           </p>
           <div className="rounded-xl border border-white/10 bg-white/[0.02] px-5 py-4 font-mono text-sm text-white/60 tracking-tight">
-            User Input → Models → Zorelan → Decision → Execution
+            User input → AI output → Zorelan → Decision → Execute or Block
           </div>
           <p className="text-white/40 text-sm leading-relaxed mt-4">
-            Use it as the final checkpoint before your system acts on AI output.
+            Zorelan does not replace your models — it controls whether their outputs are safe to act on.
           </p>
         </section>
 
@@ -579,30 +578,30 @@ export default function ApiDocsPage() {
         <section id="why" className="mb-12">
           <SectionLabel>Why this exists</SectionLabel>
           <h2 className="text-xl font-semibold mb-4">
-            Why not just use one model?
+            Why not just act on raw AI output?
           </h2>
 
           <p className="text-white/60 leading-relaxed mb-6 max-w-2xl">
-            A single model can generate an answer, but it does not tell you
-            whether that answer deserves confidence. Zorelan compares multiple
-            model outputs and returns a structured verification signal you can use
-            to show, warn, block, or escalate responses in production.
+            A single model produces output, but it does not tell you whether
+            that output is safe to act on. Zorelan compares multiple model
+            outputs and returns a structured execution decision — allow, review,
+            or block — your system can use to control what runs.
           </p>
 
           <div className="grid gap-4 md:grid-cols-3 mb-8">
-            <FeatureCard title="Single model">
-              One answer, no cross-check, no disagreement signal, and no reliable
-              way to decide whether the output should drive product behaviour.
+            <FeatureCard title="Raw AI output">
+              One output, no cross-check, no execution signal, and no reliable
+              way to decide whether the action should run.
             </FeatureCard>
 
             <FeatureCard title="Zorelan">
-              Multiple model outputs compared through semantic agreement analysis,
-              with arbitration when disagreement matters.
+              Multiple model outputs evaluated through semantic agreement
+              analysis, with arbitration when disagreement matters.
             </FeatureCard>
 
             <FeatureCard title="Result">
-              A trust-aware output your application can actually use: answer,
-              score, risk, disagreement, and recommended action.
+              A structured execution decision your system can act on: allow,
+              review, or block — with risk, trust, and disagreement signals.
             </FeatureCard>
           </div>
 
@@ -613,15 +612,15 @@ export default function ApiDocsPage() {
                   Use this in production
                 </h2>
                 <p className="text-white/60 leading-relaxed mb-4">
-                  Zorelan is built for AI products that need more than a raw model
-                  answer. Instead of trusting a single output, you get a decision
-                  signal your application can act on.
+                  Zorelan is built for systems that need to control whether
+                  AI-driven actions execute. Instead of trusting a single
+                  output, you get a hard decision your system can gate on.
                 </p>
                 <div className="space-y-2 text-sm text-white/55">
-                  <div>• Verify answers before showing them in your UI</div>
-                  <div>• Gate workflows on <code className="font-mono text-xs bg-white/10 px-1 rounded">result.decision</code> — allow, review, or block</div>
-                  <div>• Surface uncertainty instead of hiding it</div>
-                  <div>• Reduce single-model failure risk in production</div>
+                  <div>• Gate execution on <code className="font-mono text-xs bg-white/10 px-1 rounded">result.decision</code> — allow, review, or block</div>
+                  <div>• Prevent unsafe actions before they run</div>
+                  <div>• Surface risk and disagreement instead of hiding it</div>
+                  <div>• Reduce single-model execution failure in production</div>
                 </div>
               </div>
               <CodeBlock
@@ -634,14 +633,61 @@ export default function ApiDocsPage() {
 
         <Divider />
 
+        {/* ── Basic usage ───────────────────────────────────────────────────── */}
+        <section className="mb-12">
+          <SectionLabel>Basic usage</SectionLabel>
+          <h2 className="text-xl font-semibold mb-4">Gate execution on <InlineCode>result.decision</InlineCode></h2>
+          <p className="text-white/60 leading-relaxed mb-6 max-w-2xl">
+            Call <InlineCode>zorelan.verify(prompt)</InlineCode> with an AI output or action description. Zorelan returns a structured decision your system uses to control execution.
+          </p>
+          <CodeBlock
+            label="node.js · basic usage"
+            code={`const result = await zorelan.verify(prompt)\n\nif (result.decision === "allow") {\n  executeAction()\n} else {\n  blockAction()\n}`}
+          />
+        </section>
+
+        {/* ── What the API returns ──────────────────────────────────────────── */}
+        <section className="mb-12">
+          <SectionLabel>What the API returns</SectionLabel>
+          <h2 className="text-xl font-semibold mb-4">Execution signals</h2>
+          <p className="text-white/60 leading-relaxed mb-4 max-w-2xl">
+            These signals are used to determine whether execution should proceed.
+          </p>
+          <div className="rounded-xl border border-white/10 bg-white/[0.02] divide-y divide-white/10 text-sm">
+            {[
+              ["decision", "allow · review · block — the authoritative execution gate"],
+              ["trust_score", "0–100 — reliability score calibrated from model agreement and risk"],
+              ["risk_level", "low · moderate · high — assessed risk of acting on this output"],
+              ["consensus", "Agreement signals and disagreement classification across models"],
+              ["verified_answer", "Synthesized answer from the active model pair"],
+            ].map(([field, desc]) => (
+              <div key={field} className="flex gap-4 px-5 py-3">
+                <span className="font-mono text-white/70 text-xs whitespace-nowrap w-36 flex-shrink-0 pt-0.5">{field}</span>
+                <span className="text-white/50 leading-relaxed">{desc}</span>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        {/* ── What Zorelan is ───────────────────────────────────────────────── */}
+        <section className="mb-12">
+          <SectionLabel>What Zorelan is</SectionLabel>
+          <InfoBox>
+            <p className="mb-2 text-white/75 font-medium">Zorelan is not a model and does not generate answers.</p>
+            <p>It is a verification and decision layer that sits in your pipeline to control execution. It evaluates AI output against multiple models and returns a hard decision your system can act on.</p>
+          </InfoBox>
+        </section>
+
+        <Divider />
+
         {/* ── Change 4: Quickstart — curl first ─────────────────────────────── */}
         <section id="quickstart" className="mb-12">
           <SectionLabel>Quickstart</SectionLabel>
           <h2 className="text-xl font-semibold mb-4">Make your first call</h2>
           <p className="text-white/60 leading-relaxed mb-6">
-            The fastest path is a single HTTP call. Send one prompt, get back a
-            verified answer plus the confidence signals needed to decide how your
-            product should use it.
+            The fastest path is a single HTTP call. Send AI output or an action
+            description, get back an execution decision — allow, review, or
+            block — with trust score, risk level, and supporting signals.
           </p>
 
           <div className="space-y-4">
@@ -661,17 +707,17 @@ export default function ApiDocsPage() {
           <SectionLabel>Returned signals</SectionLabel>
           <h2 className="text-xl font-semibold mb-4">What you get back</h2>
           <div className="grid gap-4 md:grid-cols-3">
-            <FeatureCard title="Verified answer">
-              A synthesized final answer based on the strongest aligned provider
-              outputs.
+            <FeatureCard title="Execution decision">
+              allow · review · block — the authoritative signal your system
+              gates execution on.
             </FeatureCard>
             <FeatureCard title="Trust score">
-              A calibrated 0–100 signal that reflects agreement strength,
-              disagreement severity, and domain risk.
+              A calibrated 0–100 signal reflecting agreement strength,
+              disagreement severity, and execution risk.
             </FeatureCard>
-            <FeatureCard title="Decision metadata">
-              Risk level, consensus, disagreement type, recommended action,
-              arbitration usage, provider diagnostics, and usage metadata.
+            <FeatureCard title="Decision signals">
+              Risk level, consensus, disagreement type, arbitration result,
+              provider diagnostics, and usage metadata.
             </FeatureCard>
           </div>
         </section>
@@ -695,27 +741,26 @@ export default function ApiDocsPage() {
           <SectionLabel>Use cases</SectionLabel>
           <h2 className="text-xl font-semibold mb-4">Where to use Zorelan</h2>
           <div className="grid gap-4 md:grid-cols-2">
-            <FeatureCard title="Validate AI before showing users">
-              Verify responses before displaying them in your UI. Use trust score
-              and risk level to decide whether to present an answer directly or
-              expose uncertainty.
+            <FeatureCard title="Control execution in AI pipelines">
+              Gate whether AI-driven actions run. Use <InlineCode>result.decision</InlineCode> to
+              allow, review, or block before your system executes.
             </FeatureCard>
-            <FeatureCard title="Gate actions on the decision field">
-              Only trigger workflows, automations, notifications, or downstream
-              decisions when <InlineCode>result.decision === &quot;allow&quot;</InlineCode>.
+            <FeatureCard title="Gate workflows on the decision field">
+              Only trigger automations, notifications, or downstream actions
+              when <InlineCode>result.decision === &quot;allow&quot;</InlineCode>.
               The decision field already encodes risk, disagreement, and trust.
             </FeatureCard>
-            <FeatureCard title="Reduce hallucinations in production">
-              Add a verification layer between your app and LLMs to reduce
-              fabricated or weak answers in higher-risk contexts.
+            <FeatureCard title="Prevent unsafe execution in production">
+              Add an execution layer between your app and AI output to stop
+              high-risk or conflicting outputs from driving actions.
             </FeatureCard>
             <FeatureCard title="Compare model behaviour">
               Inspect agreement, disagreement type, and arbitration results to
-              understand how providers respond to the same prompt.
+              understand how providers respond to the same AI output.
             </FeatureCard>
-            <FeatureCard title="Add explainability to AI features">
-              Return confidence and disagreement metadata alongside the answer so
-              your product can communicate uncertainty clearly.
+            <FeatureCard title="Surface execution risk to users">
+              Return risk level and disagreement signals alongside AI output so
+              your product can communicate uncertainty and block unsafe actions.
             </FeatureCard>
             <FeatureCard title="Build trust-aware product logic">
               Use trust score, risk level, and cached status as inputs into your

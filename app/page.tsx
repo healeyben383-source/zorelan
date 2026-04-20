@@ -8,6 +8,7 @@ import {
   type ReactNode,
   type MouseEvent,
 } from "react";
+import HeroVideo from "@/components/hero-video";
 
 type Mode = "execution" | "strategy" | "decision";
 type Context = "operator" | "general" | "student";
@@ -1261,10 +1262,10 @@ export default function Home() {
   ];
 
   const EXAMPLES = [
-    "Should I trust AI for medical advice?",
-    "Should I use REST or GraphQL for a new API?",
-    "What is the safest way to store passwords?",
-    "Should I raise venture capital or bootstrap my startup?",
+    "Issue refund before delivery confirmed",
+    "Reset user password via email link",
+    "Approve transaction flagged as suspicious",
+    "Auto-close support ticket with partial info",
   ];
 
   const comparisonProviders: ProviderName[] =
@@ -1488,40 +1489,63 @@ export default function Home() {
             </div>
           </div>
 
-          <div className="mx-auto max-w-4xl text-center space-y-2 md:space-y-3">
-            <h1 className="text-[2.5rem] leading-[1.02] font-semibold tracking-tight md:text-6xl md:leading-[0.98]">
-              Ship AI safely<br />or don't ship it at all.
-            </h1>
+          <div className="grid lg:grid-cols-2 gap-10 lg:gap-16 items-center">
+            <div className="space-y-2 md:space-y-3 text-center lg:text-left">
+              <h1 className="text-[2.5rem] leading-[1.02] font-semibold tracking-tight md:text-6xl md:leading-[0.98]">
+                AI can be right — and still trigger the wrong action.
+              </h1>
 
-            <p className="text-sm leading-relaxed opacity-65 max-w-xs mx-auto md:hidden">
-              AI can agree and still be wrong — and that mistake can cost you.<br />Zorelan checks outputs across models, assigns a trust score, and tells your system whether to allow, review, or block before it acts.
-            </p>
+              <p className="text-xs uppercase tracking-widest opacity-40 font-medium">
+                Execution Decision
+              </p>
 
-            <p className="hidden md:block text-base opacity-65 leading-relaxed max-w-3xl mx-auto">
-              AI can agree and still be wrong — and that mistake can cost you.<br />Zorelan checks outputs across models, assigns a trust score, and tells your system whether to allow, review, or block before it acts.
-            </p>
+              <p className="text-sm leading-relaxed opacity-65 max-w-xs mx-auto lg:mx-0 md:hidden">
+                Zorelan sits between AI output and execution — deciding whether your system should execute AI-driven actions.
+              </p>
 
-            <p className="text-sm text-center">
-              <a
-                href="/demo"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="opacity-70 hover:opacity-100 transition-opacity underline underline-offset-2"
-              >
-                Run the demo — see how Zorelan catches unsafe AI decisions →
-              </a>
-            </p>
+              <p className="hidden md:block text-base opacity-65 leading-relaxed max-w-xl">
+                Zorelan sits between AI output and execution — deciding whether your system should execute AI-driven actions.
+              </p>
 
-            <p className="text-xs text-center" style={{ color: "#6b7280", marginTop: 6 }}>
-              This is the same system — try it with your own input.
-            </p>
-            <p className="text-xs text-center" style={{ color: "#6b7280" }}>
-              No signup required.
-            </p>
+              <p className="text-sm opacity-60 leading-relaxed max-w-xl text-center lg:text-left">
+                Add a decision layer that turns AI output into execution decisions.
+              </p>
 
-            <p className="text-xs text-center opacity-50 tracking-wide font-mono">
-              One prompt → multiple AI models → detect disagreement → assign trust → decide if it's safe to act
-            </p>
+              <p className="text-sm text-center lg:text-left">
+                <a
+                  href="/demo"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="opacity-70 hover:opacity-100 transition-opacity underline underline-offset-2"
+                >
+                  See a real failure case →
+                </a>
+              </p>
+
+              <p className="text-xs text-center lg:text-left" style={{ color: "#6b7280" }}>
+                See what happens when AI sounds correct but executes the wrong decision.
+              </p>
+
+              <p className="text-xs text-center lg:text-left opacity-45 tracking-wide">
+                No signup required · Same system used in production pipelines
+              </p>
+
+              <p className="text-xs text-center lg:text-left opacity-40 italic">
+                This example shows how Zorelan prevents unsafe execution in real systems.
+              </p>
+
+              <p className="text-xs text-center lg:text-left opacity-50 tracking-wide">
+                Used in production pipelines to gate AI-driven actions.
+              </p>
+
+              <p className="text-xs text-center lg:text-left opacity-50 tracking-wide font-mono">
+                User input → AI output → Zorelan → Decision → Execute or Block
+              </p>
+            </div>
+
+            <div className="flex justify-center lg:justify-end">
+              <HeroVideo />
+            </div>
           </div>
         </header>
 
@@ -1530,25 +1554,29 @@ export default function Home() {
         </p>
 
         <section className="rounded-3xl border border-black/10 dark:border-white/10 p-5 md:p-6 space-y-3 bg-black/[0.02] dark:bg-white/[0.02]">
-          <div className="text-xs uppercase tracking-wide opacity-50">Real-world example</div>
-          <p className="text-sm md:text-base font-medium opacity-85 leading-snug">The answer looks reasonable. The action is still risky.</p>
+          <div className="text-xs uppercase tracking-wide opacity-50">Example: What happens without an execution layer</div>
+          <p className="text-sm md:text-base font-medium opacity-85 leading-snug">Looks correct. Still causes financial loss.</p>
           <p className="text-sm opacity-60 leading-relaxed">
-            A customer support AI suggests issuing a refund before delivery is confirmed.<br />
-            The answer sounds reasonable. The action creates financial and fraud risk.<br />
-            Zorelan flags the risk before your system acts.
+            Support AI suggests issuing a refund before delivery is confirmed.<br />
+            The answer is reasonable. The action creates financial and fraud risk.<br />
+            <br />
+            Without an execution layer, your system executes it.<br />
+            Refund sent. Money lost.<br />
+            <br />
+            Zorelan evaluates risk before execution — and blocks unsafe actions.
           </p>
-          <p className="text-xs opacity-40 italic">Agreement is not the same as safe execution.</p>
+          <p className="text-xs opacity-55 font-medium tracking-wide">Correct output ≠ safe to execute.</p>
         </section>
 
         <section className="rounded-3xl border border-black/10 dark:border-white/10 bg-black/[0.02] dark:bg-white/[0.02] p-4 md:p-6 space-y-4 md:space-y-5">
           <div className="md:flex md:items-start md:justify-between md:gap-4">
             <div className="space-y-1">
               <div className="text-xs uppercase tracking-wide opacity-50">
-                <span className="md:hidden">Verify an AI output or decision</span>
-                <span className="hidden md:inline">Verify an AI output or decision</span>
+                <span className="md:hidden">Simulate an execution decision</span>
+                <span className="hidden md:inline">Simulate an execution decision</span>
               </div>
               <p className="hidden md:block text-sm opacity-60 leading-relaxed max-w-2xl">
-                Describe an AI-generated answer or decision you want to verify before acting.
+                See how Zorelan decides whether an action should execute.
               </p>
             </div>
 
@@ -1585,12 +1613,7 @@ export default function Home() {
                   className="absolute top-0 left-0 w-full p-4 text-base md:text-sm pointer-events-none select-none opacity-30 leading-relaxed"
                   aria-hidden="true"
                 >
-                  Describe the decision you want to verify…
-                  <div className="hidden md:block mt-4">
-                    Examples: "Should I trust AI for medical advice?" or "Should
-                    I use REST or GraphQL?" or "What is the safest way to store
-                    passwords?"
-                  </div>
+                  e.g. "AI suggests issuing a refund before delivery is confirmed."
                 </div>
               )}
 
@@ -1626,10 +1649,10 @@ export default function Home() {
             {busy ? (
               <span className="inline-flex items-center gap-2">
                 <Spinner />
-                Structuring for verification…
+                Evaluating execution decision…
               </span>
             ) : (
-              "Evaluate Decision"
+              "Evaluate execution decision"
             )}
           </PrimaryActionButton>
 
@@ -1740,27 +1763,26 @@ export default function Home() {
 
           {!intent && !busy && (
             <p className="text-center text-xs opacity-45 leading-relaxed">
-              <span className="md:hidden">
-                One question. Multiple models. Trust and risk before action.
-              </span>
-              <span className="hidden md:inline">
-                One input. Multiple models. Trust and risk shown before action.
-              </span>
+              Takes ~2 seconds · Returns risk, trust, and execution decision
             </p>
           )}
         </section>
 
         {!hasAnyResult && (
           <section className="rounded-3xl border border-black/10 dark:border-white/10 p-5 md:p-6 space-y-3 bg-black/[0.02] dark:bg-white/[0.02]">
-            <div className="text-xs uppercase tracking-wide opacity-50">Example output</div>
-            <p className="text-sm opacity-70 font-medium">Refund requested before delivery is confirmed</p>
-            <div className="flex flex-wrap gap-3 text-sm">
-              <span className="rounded-lg px-3 py-1 font-mono font-medium" style={{ background: "rgba(220,38,38,0.12)", color: "#dc2626" }}>BLOCK</span>
-              <span className="rounded-lg px-3 py-1 font-mono" style={{ background: "rgba(0,0,0,0.05)" }}>Risk: High</span>
-              <span className="rounded-lg px-3 py-1 font-mono" style={{ background: "rgba(0,0,0,0.05)" }}>Trust: 61/100</span>
+            <div className="text-xs uppercase tracking-wide opacity-50">Example API response · Customer support scenario</div>
+            <p className="text-sm opacity-60 font-medium">Refund requested before delivery is confirmed</p>
+            <div className="space-y-3 py-1">
+              <div className="space-y-1">
+                <p className="text-xs uppercase tracking-widest opacity-40 font-medium">Execution decision</p>
+                <p className="text-3xl font-black tracking-wider font-mono" style={{ color: "#dc2626" }}>BLOCK</p>
+              </div>
+              <p className="text-xs opacity-50 font-mono">Risk: HIGH · Trust: 61/100</p>
             </div>
-            <p className="text-xs opacity-50 leading-relaxed">Why: Financial action without verified context.</p>
-            <p className="text-xs opacity-35 italic">This is the kind of execution risk Zorelan catches.</p>
+            <p className="text-sm opacity-65 leading-relaxed">Reason: Refund would be issued before delivery is confirmed — creating financial loss risk.</p>
+            <p className="text-sm font-medium opacity-80">Action blocked. Execution prevented.</p>
+            <p className="text-xs opacity-40">Zorelan stops unsafe actions before they execute.</p>
+            <p className="text-xs opacity-50 italic">Not all decisions are binary — Zorelan can route uncertain cases to human review.</p>
           </section>
         )}
 
@@ -1790,11 +1812,11 @@ export default function Home() {
             <div className="flex items-start justify-between gap-3 flex-wrap">
               <div className="space-y-1">
                 <div className="text-xs uppercase tracking-wide opacity-50">
-                  Verification is ready
+                  Ready to evaluate
                 </div>
                 <p className="text-sm opacity-55 leading-relaxed max-w-2xl">
-                  Review the verification-ready prompt, add optional context,
-                  then run it across multiple models.
+                  Review the structured input, add optional context, then run
+                  the execution decision.
                 </p>
               </div>
             </div>
@@ -1900,7 +1922,7 @@ export default function Home() {
                   Running verification across multiple AIs…
                 </span>
               ) : (
-                "Evaluate Decision"
+                "Evaluate execution decision"
               )}
             </PrimaryActionButton>
 
@@ -1918,10 +1940,10 @@ export default function Home() {
             <div className="rounded-2xl border border-black/10 dark:border-white/10 p-5 space-y-4">
               <div className="space-y-1 text-center md:text-left">
                 <div className="text-xs uppercase tracking-wide opacity-50">
-                  Verifying now
+                  Evaluating now
                 </div>
                 <p className="text-sm opacity-55">
-                  Checking agreement, disagreement, and risk across multiple models…
+                  Evaluating AI output across models — assessing risk, trust, and execution safety…
                 </p>
               </div>
               <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
@@ -2181,13 +2203,45 @@ export default function Home() {
         <section className="rounded-3xl border border-black/10 dark:border-white/10 p-5 md:p-6 space-y-4 bg-black/[0.02] dark:bg-white/[0.02]">
           <div className="space-y-2">
             <div className="text-xs uppercase tracking-wide opacity-50">
+              Where this breaks without Zorelan
+            </div>
+            <p className="text-sm md:text-base opacity-65 leading-relaxed max-w-3xl">
+              AI output looks correct — but execution carries real-world risk.
+            </p>
+          </div>
+          <div className="grid gap-3 md:grid-cols-2">
+            <div className="rounded-2xl border border-black/10 dark:border-white/10 p-4 space-y-1">
+              <div className="text-sm font-medium opacity-85">Refunds &amp; payments</div>
+              <p className="text-xs opacity-60 leading-relaxed">AI suggests issuing refunds or credits without verifying fulfillment status.</p>
+            </div>
+            <div className="rounded-2xl border border-black/10 dark:border-white/10 p-4 space-y-1">
+              <div className="text-sm font-medium opacity-85">Account actions</div>
+              <p className="text-xs opacity-60 leading-relaxed">AI triggers password resets, deletions, or access changes without full context.</p>
+            </div>
+            <div className="rounded-2xl border border-black/10 dark:border-white/10 p-4 space-y-1">
+              <div className="text-sm font-medium opacity-85">Automation workflows</div>
+              <p className="text-xs opacity-60 leading-relaxed">AI executes downstream actions in pipelines without validating real-world impact.</p>
+            </div>
+            <div className="rounded-2xl border border-black/10 dark:border-white/10 p-4 space-y-1">
+              <div className="text-sm font-medium opacity-85">Compliance &amp; policy</div>
+              <p className="text-xs opacity-60 leading-relaxed">AI applies rules incorrectly when nuance, conditions, or edge cases are missed.</p>
+            </div>
+          </div>
+          <p className="text-sm opacity-65 leading-relaxed max-w-3xl">
+            Zorelan prevents these failures by controlling whether actions execute at all.
+          </p>
+        </section>
+
+        <section className="rounded-3xl border border-black/10 dark:border-white/10 p-5 md:p-6 space-y-4 bg-black/[0.02] dark:bg-white/[0.02]">
+          <div className="space-y-2">
+            <div className="text-xs uppercase tracking-wide opacity-50">
               Where Zorelan fits in your system
             </div>
             <p className="text-sm md:text-base opacity-65 leading-relaxed max-w-3xl">
-              Zorelan sits between AI output and execution, deciding whether your system should act at all.
+              Zorelan sits between AI output and execution — acting as a decision gate for your system.
             </p>
             <div className="text-xs font-mono opacity-50 mt-1">
-              User input → Your app → Zorelan → Decision → Execute or Block
+              User input → AI output → Zorelan → Decision → Execute or Block
             </div>
             <pre className="mt-4 rounded-xl border border-white/10 bg-black text-white text-xs leading-relaxed p-4 overflow-x-auto">{`const result = await zorelan.verify(prompt)
 
@@ -2205,7 +2259,7 @@ if (result.decision === "allow") {
               What happens without Zorelan
             </div>
             <p className="text-sm md:text-base opacity-65 leading-relaxed max-w-3xl">
-              AI responses can be correct — but still unsafe to act on. Without a verification layer, systems execute blindly.
+              AI output can be correct — but still unsafe to act on. Without an execution layer, systems execute blindly.
             </p>
             <ul className="space-y-2">
               <li className="text-sm opacity-65 leading-relaxed">· Refunds triggered without verified context</li>
@@ -2214,7 +2268,7 @@ if (result.decision === "allow") {
               <li className="text-sm opacity-65 leading-relaxed">· Actions executed without understanding real-world risk</li>
             </ul>
             <p className="text-sm opacity-65 leading-relaxed max-w-3xl">
-              Zorelan prevents this by deciding whether an action should happen at all — not just whether an answer looks correct.
+              Zorelan prevents this by controlling whether actions execute at all.
             </p>
           </div>
         </section>
@@ -2241,10 +2295,10 @@ if (result.decision === "allow") {
             <div className="flex items-center justify-between gap-3 flex-wrap">
               <div className="space-y-1">
                 <div className="text-xs uppercase tracking-wide opacity-50">
-                  Verified Output
+                  Execution decision
                 </div>
                 <p className="text-sm opacity-55">
-                  Synthesized from multiple models with agreement weighting.
+                  AI output evaluated across models — risk, trust, and decision returned.
                 </p>
               </div>
 
@@ -2307,13 +2361,13 @@ if (result.decision === "allow") {
                 Use Zorelan in production
               </div>
               <h2 className="text-2xl md:text-3xl font-semibold tracking-tight">
-                Gate AI execution in production
+                Control AI execution in production
               </h2>
               <div className="text-xs opacity-50 mt-1">
                 Add a decision layer between your models and real-world actions.
               </div>
               <p className="text-sm md:text-base opacity-65 leading-relaxed max-w-3xl">
-                Use the API to verify and control AI output with trust scoring, disagreement detection, and execution decisions — before it reaches users or systems.
+                Use Zorelan to verify and gate AI-driven actions with trust scoring, disagreement detection, and execution decisions.
               </p>
               <pre className="mt-4 rounded-xl border border-white/10 bg-black text-white text-xs leading-relaxed p-4 overflow-x-auto">{`const result = await zorelan.verify(prompt)
 
