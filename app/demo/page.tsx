@@ -44,11 +44,11 @@ const RISK_COLORS: Record<Risk, string> = {
 function decisionLabel(decision: Decision): string {
   if (decision === "SEND") return "SAFE TO SEND";
   if (decision === "REVIEW") return "Requires review before sending";
-  return "DO NOT PROCEED — BLOCK";
+  return "Block execution";
 }
 
 function insightLine(): string {
-  return "Zorelan doesn't just verify answers — it verifies whether it's safe to act on them.";
+  return "Zorelan separates 'sounds correct' from 'safe to execute.'";
 }
 
 function decisionExplanation(result: VerifyResult): string | null {
@@ -90,6 +90,7 @@ export default function Home() {
   const [verifyResult, setVerifyResult] = useState<VerifyResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [showDetails, setShowDetails] = useState(false);
 
   const handleRun = async () => {
     if (!message.trim()) return;
@@ -260,7 +261,7 @@ export default function Home() {
                 textAlign: "center",
                 letterSpacing: "0.08em"
               }}>
-                Sent
+                Action executed
               </div>
               <div style={{ marginTop: 14, paddingTop: 12, borderTop: "1px solid #fecaca" }}>
                 <div style={{ fontSize: 12, color: "#6b7280", lineHeight: 1.5 }}>
@@ -271,6 +272,8 @@ export default function Home() {
           </div>
 
           {/* WITH ZORELAN VERIFICATION */}
+          <div>
+          <div style={{ fontSize: 10, fontWeight: 700, color: "#6b7280", textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 6 }}>Execution decision</div>
           <div style={{ border: "2px solid #1d4ed8", borderRadius: 10, overflow: "hidden" }}>
             <div style={{ background: "#1d4ed8", color: "#fff", padding: "10px 16px" }}>
               <div style={{ fontWeight: 700, fontSize: 14 }}>With Zorelan Verification</div>
@@ -278,125 +281,106 @@ export default function Home() {
             </div>
             <div style={{ padding: 20 }}>
 
-              {/* SYSTEM DECISION — primary output */}
-              <div style={{ marginBottom: 24 }}>
-                <div style={{ fontSize: 10, fontWeight: 700, color: "#9ca3af", textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 8 }}>System decision</div>
-                <div style={{
-                  padding: "16px",
-                  background: DECISION_COLORS[verifyResult.decision],
-                  color: "#fff",
-                  borderRadius: 6,
-                  fontWeight: 800,
-                  fontSize: 22,
-                  textAlign: "center",
-                  letterSpacing: "0.08em"
-                }}>
-                  {verifyResult.decision === "SEND" && "ALLOW"}
-                  {verifyResult.decision === "REVIEW" && "REVIEW REQUIRED"}
-                  {verifyResult.decision === "BLOCK" && "BLOCKED"}
+              {/* 1. DOMINANT DECISION BLOCK */}
+              <div style={{
+                textAlign: "center",
+                padding: "28px 16px 20px",
+                background: DECISION_COLORS[verifyResult.decision],
+                borderRadius: 8,
+                marginBottom: 14
+              }}>
+                <div style={{ fontSize: 40, fontWeight: 900, color: "#fff", letterSpacing: "0.08em", lineHeight: 1 }}>
+                  {verifyResult.decision}
                 </div>
-                {verifyResult.decision_reason && (
-                  <p style={{ fontSize: 12, color: "#9ca3af", marginTop: 6, marginBottom: 0, lineHeight: 1.5 }}>
-                    {verifyResult.decision_reason}
-                  </p>
-                )}
+                <div style={{ fontSize: 13, color: "rgba(255,255,255,0.75)", marginTop: 8, fontWeight: 500 }}>
+                  {verifyResult.decision === "BLOCK" ? "Do not proceed — unsafe to execute" : verifyResult.decision === "REVIEW" ? "Human review required" : "Safe to proceed"}
+                </div>
               </div>
 
-              {/* Why Zorelan allowed/stopped this */}
+              {/* 2. RISK + TRUST — compact row */}
+              <div style={{ display: "flex", gap: 12, justifyContent: "center", marginBottom: 6, fontSize: 13, color: "#9ca3af" }}>
+                <span>Risk: <strong style={{ color: RISK_COLORS[verifyResult.risk], textTransform: "uppercase" }}>{verifyResult.risk}</strong></span>
+                <span style={{ color: "#374151" }}>|</span>
+                <span>Trust: <strong style={{ color: "#e5e7eb" }}>{verifyResult.trust} / 100</strong></span>
+              </div>
+              {verifyResult.decision === "BLOCK" && verifyResult.risk !== "high" && (
+                <div style={{ textAlign: "center", fontSize: 11, color: "#6b7280", marginBottom: 14 }}>
+                  Even moderate risk can be unsafe to execute.
+                </div>
+              )}
+
+              {/* 3. SINGLE EXPLANATION BOX */}
               {decisionExplanation(verifyResult) && (
-                <div style={{ marginBottom: 20, padding: "10px 12px", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 6 }}>
-                  <div style={{ fontSize: 10, fontWeight: 700, color: "#9ca3af", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 4 }}>
-                    {verifyResult.decision === "SEND" ? "Why this is safe to send" : "Why this was stopped"}
+                <div style={{ padding: "12px 14px", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 6, marginBottom: 16 }}>
+                  <div style={{ fontSize: 10, fontWeight: 700, color: "#9ca3af", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 6 }}>
+                    {verifyResult.decision === "SEND" ? "Why this is safe" : verifyResult.decision === "REVIEW" ? "Why this needs review" : "Why this is unsafe"}
                   </div>
                   <div style={{ fontSize: 13, color: "#d1d5db", lineHeight: 1.6 }}>
-                    {decisionExplanation(verifyResult)}
+                    {verifyResult.decision === "SEND" && <>This response does not trigger any unsafe actions. {decisionExplanation(verifyResult)}</>}
+                    {verifyResult.decision === "REVIEW" && <>This response may be correct, but requires human review. {decisionExplanation(verifyResult)}</>}
+                    {verifyResult.decision === "BLOCK" && <>This action is unsafe to execute. {decisionExplanation(verifyResult)}</>}
                   </div>
                 </div>
               )}
 
-              {/* Trust score */}
-              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
-                <span style={{ fontSize: 16, fontWeight: 600, color: "#e5e7eb" }}>{verifyResult.trust >= 75 ? "High" : verifyResult.trust >= 55 ? "Moderate" : "Low"} confidence ({verifyResult.trust} / 100)</span>
-              </div>
-              <div style={{ fontSize: 12, color: "#9ca3af", marginBottom: 8 }}>Based on cross-model verification</div>
-
-              {/* Trust bar */}
-              <div style={{ height: 8, background: "#e5e7eb", borderRadius: 4, marginBottom: 20 }}>
-                <div style={{
-                  height: "100%",
-                  width: `${verifyResult.trust}%`,
-                  background: verifyResult.trust >= 75 ? "#16a34a" : verifyResult.trust >= 55 ? "#d97706" : "#dc2626",
-                  borderRadius: 4,
-                  transition: "width 0.4s ease"
-                }} />
-              </div>
-
-              {/* Reasoning fields */}
-              <div style={{ marginBottom: 20, border: "1px solid #e2e8f0", borderRadius: 6, overflow: "hidden" }}>
-                {verifyResult.verified_answer && (
-                  <div style={{ padding: "12px 14px", borderBottom: "1px solid #e2e8f0", background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: "6px 6px 0 0" }}>
-                    <div style={{ fontSize: 10, fontWeight: 600, color: "#9ca3af", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 6 }}>Verified answer (synthesized)</div>
-                    <div style={{ fontSize: 13, fontWeight: 500, color: "#e5e7eb", lineHeight: 1.7 }}>{clampSentences(verifyResult.verified_answer)}</div>
-                  </div>
-                )}
-                {verifyResult.shared_conclusion && (
-                  <div style={{ padding: "12px", marginTop: 8, background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 6 }}>
-                    <div style={{ fontSize: 10, fontWeight: 600, color: "#9ca3af", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 4 }}>Shared conclusion</div>
-                    <div style={{ fontSize: 13, color: "#d1d5db", lineHeight: 1.6 }}>{verifyResult.shared_conclusion}</div>
-                  </div>
-                )}
-                {verifyResult.key_disagreement && (
-                  <div style={{ padding: "12px", marginTop: 8, background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 6 }}>
-                    <div style={{ fontSize: 10, fontWeight: 600, color: "#9ca3af", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 4 }}>Key difference</div>
-                    <div style={{ fontSize: 13, color: "#d1d5db", lineHeight: 1.6 }}>{verifyResult.key_disagreement}</div>
-                  </div>
-                )}
-                {verifyResult.decision_rule && (
-                  <div style={{ padding: "12px", marginTop: 8, background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 6 }}>
-                    <div style={{ fontSize: 10, fontWeight: 600, color: "#9ca3af", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 4 }}>Decision rule</div>
-                    <div style={{ fontSize: 13, color: "#d1d5db", lineHeight: 1.6 }}>{verifyResult.decision_rule}</div>
-                  </div>
-                )}
-              </div>
-
-              {/* Risk + consensus row */}
-              <div style={{ marginBottom: 4 }}>
-                <span style={{ fontSize: 16, fontWeight: 600, color: "#e5e7eb" }}>
-                  Action risk:{" "}
-                  <span style={{ color: RISK_COLORS[verifyResult.risk], textTransform: "uppercase", letterSpacing: "0.05em" }}>
-                    {verifyResult.risk}
-                  </span>
-                </span>
-              </div>
-              <div style={{ fontSize: 13, color: "#9ca3af", marginBottom: 8 }}>This response may be correct — but acting on it has real-world consequences.</div>
-              <div style={{ fontSize: 12, color: "#9ca3af", fontStyle: "italic", marginBottom: 16 }}>Zorelan separates correctness from action safety</div>
-
-              {/* Decision — dominant element */}
+              {/* 4. CTA — system action, not button */}
               <div style={{
-                padding: "16px",
+                width: "100%",
+                padding: "14px",
                 background: DECISION_COLORS[verifyResult.decision],
                 color: "#fff",
                 borderRadius: 6,
-                fontWeight: 800,
-                fontSize: 22,
+                fontWeight: 700,
+                fontSize: 15,
                 textAlign: "center",
-                letterSpacing: "0.08em"
+                letterSpacing: "0.06em",
+                marginBottom: 16,
+                boxSizing: "border-box"
               }}>
                 {decisionLabel(verifyResult.decision)}
               </div>
 
-              {/* Decision logic explanation */}
-              {verifyResult.decision === "REVIEW" ? (
-                <div style={{ marginTop: 10, padding: "8px 12px", background: "#1c1917", borderLeft: "4px solid #d97706", borderRadius: 4, lineHeight: 1.6 }}>
-                  <span style={{ fontSize: 13, color: "#f5f5f4", fontWeight: 500 }}>⚠️ Would have been sent to the customer — no checks, no review.</span>
+              {/* 5. SECONDARY DETAILS — collapsible */}
+              {(verifyResult.verified_answer || verifyResult.shared_conclusion || verifyResult.key_disagreement || verifyResult.decision_rule) && (
+                <div>
+                  <button
+                    onClick={() => setShowDetails(v => !v)}
+                    style={{ fontSize: 12, color: "#6b7280", background: "none", border: "none", cursor: "pointer", padding: 0, marginBottom: showDetails ? 10 : 0 }}
+                  >
+                    {showDetails ? "▲ Hide details" : "▼ See how this was determined"}
+                  </button>
+                  {showDetails && (
+                    <div style={{ opacity: 0.75 }}>
+                      {verifyResult.verified_answer && (
+                        <div style={{ padding: "10px 12px", background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 6, marginBottom: 8 }}>
+                          <div style={{ fontSize: 10, fontWeight: 600, color: "#9ca3af", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 4 }}>Verified answer</div>
+                          <div style={{ fontSize: 12, color: "#d1d5db", lineHeight: 1.6 }}>{clampSentences(verifyResult.verified_answer)}</div>
+                        </div>
+                      )}
+                      {verifyResult.shared_conclusion && (
+                        <div style={{ padding: "10px 12px", background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 6, marginBottom: 8 }}>
+                          <div style={{ fontSize: 10, fontWeight: 600, color: "#9ca3af", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 4 }}>Shared conclusion</div>
+                          <div style={{ fontSize: 12, color: "#d1d5db", lineHeight: 1.6 }}>{verifyResult.shared_conclusion}</div>
+                        </div>
+                      )}
+                      {verifyResult.key_disagreement && (
+                        <div style={{ padding: "10px 12px", background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 6, marginBottom: 8 }}>
+                          <div style={{ fontSize: 10, fontWeight: 600, color: "#9ca3af", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 4 }}>Key difference</div>
+                          <div style={{ fontSize: 12, color: "#d1d5db", lineHeight: 1.6 }}>{verifyResult.key_disagreement}</div>
+                        </div>
+                      )}
+                      {verifyResult.decision_rule && (
+                        <div style={{ padding: "10px 12px", background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 6 }}>
+                          <div style={{ fontSize: 10, fontWeight: 600, color: "#9ca3af", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 4 }}>Decision rule</div>
+                          <div style={{ fontSize: 12, color: "#d1d5db", lineHeight: 1.6 }}>{verifyResult.decision_rule}</div>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
-              ) : (
-                <p style={{ fontSize: 12, color: "#6b7280", marginTop: 10, marginBottom: 0, lineHeight: 1.5 }}>
-                  {verifyResult.decision === "SEND" && "Zorelan verified this response is correct and safe to act on."}
-                  {verifyResult.decision === "BLOCK" && "Zorelan verified that the correct action is to not proceed and secure the account."}
-                </p>
               )}
             </div>
+          </div>
           </div>
 
         </div>

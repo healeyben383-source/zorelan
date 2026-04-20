@@ -30,7 +30,7 @@ function deriveDecision(
     return {
       decision: "BLOCK",
       decision_reason:
-        "This response initiates a financial action without verified context. Acting on it introduces financial and fraud risk."
+        "This would trigger a refund before delivery is confirmed, creating financial loss and fraud risk."
     };
   }
 
@@ -120,9 +120,15 @@ export async function POST(req: Request) {
 
     const { decision, decision_reason } = deriveDecision(trust, risk, raw_prompt ?? "");
 
+    // When financial+unverified BLOCK fires, always surface high risk regardless of model output.
+    const prompt2 = (raw_prompt ?? "").toLowerCase();
+    const hasFinancialAction2 = /refund|refunding|reimburse|payment/.test(prompt2);
+    const hasUnverifiedContext2 = /not confirmed|not verified|no confirmation|not received|haven.t confirmed|haven.t verified/.test(prompt2);
+    const effectiveRisk: Risk = (hasFinancialAction2 && hasUnverifiedContext2) ? "high" : risk;
+
     return Response.json({
       trust,
-      risk,
+      risk: effectiveRisk,
       decision,
       decision_reason,
       verified_answer: data.verified_answer ?? null,

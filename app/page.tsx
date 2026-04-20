@@ -1750,6 +1750,20 @@ export default function Home() {
           )}
         </section>
 
+        {!hasAnyResult && (
+          <section className="rounded-3xl border border-black/10 dark:border-white/10 p-5 md:p-6 space-y-3 bg-black/[0.02] dark:bg-white/[0.02]">
+            <div className="text-xs uppercase tracking-wide opacity-50">Example output</div>
+            <p className="text-sm opacity-70 font-medium">Refund requested before delivery is confirmed</p>
+            <div className="flex flex-wrap gap-3 text-sm">
+              <span className="rounded-lg px-3 py-1 font-mono font-medium" style={{ background: "rgba(220,38,38,0.12)", color: "#dc2626" }}>BLOCK</span>
+              <span className="rounded-lg px-3 py-1 font-mono" style={{ background: "rgba(0,0,0,0.05)" }}>Risk: High</span>
+              <span className="rounded-lg px-3 py-1 font-mono" style={{ background: "rgba(0,0,0,0.05)" }}>Trust: 61/100</span>
+            </div>
+            <p className="text-xs opacity-50 leading-relaxed">Why: Financial action without verified context.</p>
+            <p className="text-xs opacity-35 italic">This is the kind of execution risk Zorelan catches.</p>
+          </section>
+        )}
+
         {error && (
           <section className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-700 dark:border-red-900 dark:bg-red-950 dark:text-red-300">
             Something went wrong: <span className="font-mono">{error}</span>.
