@@ -529,18 +529,36 @@ export default function ApiDocsPage() {
           </h1>
 
           <p className="text-white text-2xl leading-tight tracking-tight mb-3 max-w-3xl">
-            Zorelan sits between AI output and execution — deciding whether your
-            system should execute AI-driven actions.
+            Zorelan is a decision layer that sits in the execution path of your system — determining whether AI-generated outputs should be allowed, reviewed, or blocked before any action runs.
           </p>
 
-          <p className="text-white/65 text-lg leading-relaxed mb-5 max-w-3xl">
-            It acts as a decision layer that evaluates risk, agreement, and
-            context before actions run. Your system gates on{" "}
-            <InlineCode>result.decision</InlineCode> — not on raw model output.
+          <p className="text-white/55 text-sm leading-relaxed mb-2 max-w-3xl">
+            Designed to run in your backend before any AI-triggered action executes.
           </p>
 
-          <p className="text-white/50 text-sm leading-relaxed mb-8 max-w-3xl font-mono">
+          <p className="text-white/50 text-sm leading-relaxed mb-6 max-w-3xl font-mono">
             User input → AI output → Zorelan → Decision → Execute or Block
+          </p>
+
+          <CodeBlock
+            label="node.js · gate execution"
+            code={`const result = await zorelan.verify({ prompt })
+
+// Gate execution using result.decision
+if (result.decision === "allow") {
+  executeAction()
+} else if (result.decision === "review") {
+  routeToHumanReview()
+} else {
+  blockExecution()
+}`}
+          />
+
+          <p className="text-white/40 text-xs leading-relaxed mt-3">
+            Use <code className="font-mono text-white/60">result.decision</code> to gate whether actions execute in your system.
+          </p>
+          <p className="text-white/40 text-xs leading-relaxed mt-1 mb-8">
+            In most integrations, you only need <code className="font-mono text-white/60">result.decision</code> to control whether an action executes.
           </p>
 
           <div className="grid gap-4 md:grid-cols-3">
@@ -571,6 +589,9 @@ export default function ApiDocsPage() {
           </div>
           <p className="text-white/40 text-sm leading-relaxed mt-4">
             Zorelan does not replace your models — it controls whether their outputs are safe to act on.
+          </p>
+          <p className="text-white/55 text-sm leading-relaxed mt-2 font-medium">
+            Zorelan is designed to sit in the execution path of your system — its decision output should gate whether actions run.
           </p>
         </section>
 
@@ -893,7 +914,13 @@ Content-Type: application/json`}
             All responses are JSON. A successful call returns{" "}
             <InlineCode>ok: true</InlineCode> with the full verification payload.
           </p>
+          <p className="text-white/35 text-xs uppercase tracking-widest mb-3">
+            Full response (decision + supporting signals)
+          </p>
           <CodeBlock label="json · full response" code={responseExample} />
+          <p className="text-white/40 text-sm leading-relaxed mt-4">
+            You can use additional fields (<InlineCode>risk_level</InlineCode>, <InlineCode>trust_score</InlineCode>, <InlineCode>consensus</InlineCode>) for logging, monitoring, or advanced routing — but execution should be gated on <InlineCode>decision</InlineCode>.
+          </p>
         </section>
 
         <section className="mb-12">

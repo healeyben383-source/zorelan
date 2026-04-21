@@ -577,10 +577,10 @@ function LoadingProviderCard() {
     <div className="rounded-2xl border border-black/10 dark:border-white/10 p-5 space-y-3">
       <div className="space-y-0.5">
         <div className="text-xs uppercase tracking-wide opacity-50">
-          Verifying across multiple models…
+          Evaluating across models…
         </div>
         <div className="text-[11px] uppercase tracking-wide opacity-35">
-          Zorelan is checking agreement and disagreement
+          Assessing risk, trust, and execution signals
         </div>
       </div>
       <PulsePlaceholder />
@@ -1541,6 +1541,20 @@ export default function Home() {
               <p className="text-xs text-center lg:text-left opacity-50 tracking-wide font-mono">
                 User input → AI output → Zorelan → Decision → Execute or Block
               </p>
+
+              <p className="text-xs text-center lg:text-left opacity-45 tracking-wide">
+                Designed to run in your backend before any AI-triggered action executes.
+              </p>
+
+              <pre className="text-left text-xs font-mono opacity-40 leading-relaxed mt-1 hidden lg:block">{`const result = await zorelan.verify({ prompt })
+
+if (result.decision === "allow") {
+  executeAction()
+} else if (result.decision === "review") {
+  routeToHumanReview()
+} else {
+  blockExecution()
+}`}</pre>
             </div>
 
             <div className="flex justify-center lg:justify-end">
@@ -1555,7 +1569,7 @@ export default function Home() {
 
         <section className="rounded-3xl border border-black/10 dark:border-white/10 p-5 md:p-6 space-y-3 bg-black/[0.02] dark:bg-white/[0.02]">
           <div className="text-xs uppercase tracking-wide opacity-50">Example: What happens without an execution layer</div>
-          <p className="text-sm md:text-base font-medium opacity-85 leading-snug">Looks correct. Still causes financial loss.</p>
+          <p className="text-sm md:text-base font-medium opacity-85 leading-snug">Correct output. Unsafe execution.</p>
           <p className="text-sm opacity-60 leading-relaxed">
             Support AI suggests issuing a refund before delivery is confirmed.<br />
             The answer is reasonable. The action creates financial and fraud risk.<br />
@@ -1571,6 +1585,7 @@ export default function Home() {
         <section className="rounded-3xl border border-black/10 dark:border-white/10 bg-black/[0.02] dark:bg-white/[0.02] p-4 md:p-6 space-y-4 md:space-y-5">
           <div className="md:flex md:items-start md:justify-between md:gap-4">
             <div className="space-y-1">
+              <div className="text-xs opacity-35 tracking-wide mb-1">Interactive example (simulated execution)</div>
               <div className="text-xs uppercase tracking-wide opacity-50">
                 <span className="md:hidden">Simulate an execution decision</span>
                 <span className="hidden md:inline">Simulate an execution decision</span>
@@ -1783,6 +1798,42 @@ export default function Home() {
             <p className="text-sm font-medium opacity-80">Action blocked. Execution prevented.</p>
             <p className="text-xs opacity-40">Zorelan stops unsafe actions before they execute.</p>
             <p className="text-xs opacity-50 italic">Not all decisions are binary — Zorelan can route uncertain cases to human review.</p>
+          </section>
+        )}
+
+        {!hasAnyResult && (
+          <section className="rounded-3xl border border-black/10 dark:border-white/10 p-5 md:p-6 space-y-4 bg-black/[0.02] dark:bg-white/[0.02]">
+            <div className="space-y-2">
+              <div className="text-xs uppercase tracking-wide opacity-50">Why Zorelan decisions can be trusted</div>
+              <p className="text-sm opacity-65 leading-relaxed max-w-3xl">
+                Zorelan decisions are derived from multiple independent models, disagreement analysis, and risk-aware arbitration — not a single model's output.
+              </p>
+            </div>
+            <div className="grid gap-3 md:grid-cols-2">
+              <div className="rounded-2xl border border-black/10 dark:border-white/10 p-4 space-y-1">
+                <div className="text-sm font-medium opacity-85">Independent model validation</div>
+                <p className="text-xs opacity-60 leading-relaxed">Multiple AI models evaluate the same input independently, reducing reliance on any single model's output.</p>
+              </div>
+              <div className="rounded-2xl border border-black/10 dark:border-white/10 p-4 space-y-1">
+                <div className="text-sm font-medium opacity-85">Agreement + disagreement analysis</div>
+                <p className="text-xs opacity-60 leading-relaxed">Zorelan does not just check if outputs match. It classifies how they differ — conflict, nuance, explanation variation.</p>
+              </div>
+              <div className="rounded-2xl border border-black/10 dark:border-white/10 p-4 space-y-1">
+                <div className="text-sm font-medium opacity-85">Arbitration layer</div>
+                <p className="text-xs opacity-60 leading-relaxed">When models disagree, a third model evaluates the outputs and determines the most reliable conclusion.</p>
+              </div>
+              <div className="rounded-2xl border border-black/10 dark:border-white/10 p-4 space-y-1">
+                <div className="text-sm font-medium opacity-85">Risk-aware calibration</div>
+                <p className="text-xs opacity-60 leading-relaxed">High-risk actions — financial, account access, irreversible operations — lower trust ceilings even when models agree.</p>
+              </div>
+              <div className="rounded-2xl border border-black/10 dark:border-white/10 p-4 space-y-1 md:col-span-2">
+                <div className="text-sm font-medium opacity-85">Execution-focused reasoning</div>
+                <p className="text-xs opacity-60 leading-relaxed">Zorelan evaluates whether an output is safe to act on — not just whether it sounds correct.</p>
+              </div>
+            </div>
+            <p className="text-xs opacity-50 leading-relaxed">
+              Agreement alone is not treated as truth — execution safety is evaluated independently.
+            </p>
           </section>
         )}
 
@@ -2228,7 +2279,7 @@ export default function Home() {
             </div>
           </div>
           <p className="text-sm opacity-65 leading-relaxed max-w-3xl">
-            Zorelan prevents these failures by controlling whether actions execute at all.
+            Without an execution layer, systems don't fail loudly — they fail silently.
           </p>
         </section>
 
@@ -2246,30 +2297,10 @@ export default function Home() {
             <pre className="mt-4 rounded-xl border border-white/10 bg-black text-white text-xs leading-relaxed p-4 overflow-x-auto">{`const result = await zorelan.verify(prompt)
 
 if (result.decision === "allow") {
-  execute()
+  executeAction()
 } else {
-  block()
+  blockExecution()
 }`}</pre>
-          </div>
-        </section>
-
-        <section className="rounded-3xl border border-black/10 dark:border-white/10 p-5 md:p-6 space-y-4 bg-black/[0.02] dark:bg-white/[0.02]">
-          <div className="space-y-4">
-            <div className="text-xs uppercase tracking-wide opacity-50">
-              What happens without Zorelan
-            </div>
-            <p className="text-sm md:text-base opacity-65 leading-relaxed max-w-3xl">
-              AI output can be correct — but still unsafe to act on. Without an execution layer, systems execute blindly.
-            </p>
-            <ul className="space-y-2">
-              <li className="text-sm opacity-65 leading-relaxed">· Refunds triggered without verified context</li>
-              <li className="text-sm opacity-65 leading-relaxed">· Policies applied incorrectly due to missing nuance</li>
-              <li className="text-sm opacity-65 leading-relaxed">· Confident but incomplete answers sent to users</li>
-              <li className="text-sm opacity-65 leading-relaxed">· Actions executed without understanding real-world risk</li>
-            </ul>
-            <p className="text-sm opacity-65 leading-relaxed max-w-3xl">
-              Zorelan prevents this by controlling whether actions execute at all.
-            </p>
           </div>
         </section>
 
@@ -2372,9 +2403,11 @@ if (result.decision === "allow") {
               <pre className="mt-4 rounded-xl border border-white/10 bg-black text-white text-xs leading-relaxed p-4 overflow-x-auto">{`const result = await zorelan.verify(prompt)
 
 if (result.decision === "allow") {
-  execute(result.output)
+  executeAction(result.output)
+} else if (result.decision === "review") {
+  routeToHumanReview()
 } else {
-  block()
+  blockExecution()
 }`}</pre>
               <div className="text-xs opacity-40 mt-2">
                 ~300–800ms verification latency • deterministic scoring • production safe
