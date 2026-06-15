@@ -14,9 +14,25 @@ execution.
 
 ## Last updated
 
-2026-06-15 — Trust/ops cleanup pass (see below). Prior: docs/positioning
-cleanup (public copy, metadata, READMEs, API docs lead with the execution-gate
-story). No engine, SDK behaviour, or pricing changes in either pass.
+2026-06-15 — Homepage consolidation + legacy route cleanup (see below). Prior:
+trust/ops cleanup, docs/positioning cleanup. No `/v1/evaluate`, `/v1/decision`,
+`/api/decision`, SDK, or pricing changes.
+
+## Homepage + legacy route cleanup (this pass)
+
+- **Homepage consolidated**: `app/page.tsx` is now a static product page for the
+  execution-gate story (hero → pipeline → refund BLOCK example → `evaluateAction`
+  snippet → deterministic "how it decides" → support). The old prompt-verification
+  widget (Quick Verify / trust-score cards / history) was removed.
+- **Removed dead routes**: `app/api/demo/generate`, `app/api/demo/verify`
+  (old SEND/regex demo), `app/api/preframe` (pre-Zorelan leftover), and the
+  homepage-only prompt helpers `app/api/intent`, `app/api/verify` (unauthenticated
+  proxy to `/api/decision`), and `app/api/synthesize`. All were confirmed
+  unreferenced (no fetch callers, no imports) before deletion.
+- **Legacy `/v1/decision` remains supported** (+ SDK `verify(prompt)`); core
+  `app/api/decision/route.ts` untouched.
+- **`/v1/evaluate` remains the flagship** structured execution gate.
+- **`app/api/run` retained** — still used by `benchmark/run.mjs`.
 
 ## Trust / ops (current capability)
 
@@ -75,10 +91,11 @@ story). No engine, SDK behaviour, or pricing changes in either pass.
 
 ## Map (where things live)
 
-- **Decision endpoints**: `app/v1/decision/route.ts` (public v1),
-  `app/api/decision/route.ts` (core). Also `app/api/verify/route.ts`,
-  `app/api/run/route.ts`, `app/api/synthesize/route.ts`,
-  `app/api/intent/route.ts`.
+- **Execution gate (flagship)**: `app/v1/evaluate/route.ts` (public),
+  `app/api/demo/evaluate/route.ts` (demo), shared logic in `lib/evaluate/*`.
+- **Decision endpoints (legacy/supported)**: `app/v1/decision/route.ts`
+  (public v1) → `app/api/decision/route.ts` (core). `app/api/run/route.ts`
+  remains for `benchmark/run.mjs` only.
 - **Engines** (`lib/`):
   - `lib/routing/*` — adaptive provider selection, classification,
     provider memory/scores/profiles, diagnostics.
