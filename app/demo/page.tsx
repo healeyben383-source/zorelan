@@ -7,7 +7,7 @@ import type {
   Verdict,
   PolicyMatchStatus,
   RiskSeverity,
-} from "@/lib/demo/evaluateAction";
+} from "@/lib/evaluate/types";
 
 // ── Display helpers ─────────────────────────────────────────────────────────────
 

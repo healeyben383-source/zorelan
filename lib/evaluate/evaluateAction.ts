@@ -1,108 +1,32 @@
 /**
- * lib/demo/evaluateAction.ts
+ * lib/evaluate/evaluateAction.ts
  *
- * Pass 1 — demo-only deterministic execution-gate engine.
+ * Deterministic Stage 0 execution-gate engine — the shared product logic behind
+ * both the public /v1/evaluate endpoint and the internal /api/demo/evaluate route.
  *
- * This is the truthful core of the canonical /demo. It evaluates a STRUCTURED
- * proposed action against a VISIBLE policy/context and returns a decision-first
- * result: ALLOW / REVIEW / BLOCK, with reason, policy matches, risk factors,
- * missing context, evidence, and a next step.
- *
- * Scope guarantees for this pass:
- *   - Deterministic checks only. No model calls, no external providers, so the
- *     demo works locally without any secrets and never fabricates a verdict.
+ * Guarantees:
+ *   - Pure function. No I/O, no model calls, no secrets required. It can run
+ *     anywhere and never fabricates a verdict.
  *   - Decisions are driven by STRUCTURED context fields (amount, order_status,
- *     identity_verified, reversible, evidence/source), NOT by regex on free text.
+ *     identity_verified, reversible, source/evidence), NOT by regex on free text.
  *     Policy rule strings are matched to a determination only to *label* which
- *     rule applied — every decision is surfaced as `decision_basis: "deterministic"`
- *     with an explicit evidence note. Nothing here is attributed to a model.
+ *     rule applied — every decision is surfaced as decision_basis "deterministic"
+ *     with an explicit evidence note.
+ *   - Fails safe: unknown action types route to REVIEW, never auto-ALLOW.
  *
- * Stage 1 (single-model judgement on the action) is intentionally NOT wired in
- * this pass — see MODEL_JUDGEMENT_TODO below. When added, it must never override
- * a deterministic BLOCK/REVIEW floor; it may only add reasoning or downgrade an
- * ALLOW toward REVIEW/BLOCK.
+ * MODEL_JUDGEMENT_TODO (next pass): an optional Stage 1 single-model judgement may
+ * run AFTER this function for cases not resolved deterministically. It must never
+ * upgrade a deterministic BLOCK/REVIEW to ALLOW — only add reasoning or tighten,
+ * and on provider failure it must set fell_back=true and fail closed to REVIEW.
  */
 
-// ── Types (shared with the route and demo UI) ──────────────────────────────────
-
-export type Verdict = "ALLOW" | "REVIEW" | "BLOCK";
-export type RiskSeverity = "low" | "moderate" | "high";
-export type DecisionBasis = "deterministic" | "model" | "arbitrated";
-export type NextStepAction = "execute" | "open_review" | "block";
-export type PolicyMatchStatus =
-  | "satisfied"
-  | "violated"
-  | "not_applicable"
-  | "indeterminate";
-
-export interface ProposedAction {
-  type: string;
-  parameters?: Record<string, unknown>;
-  reversible?: boolean;
-  context?: Record<string, unknown>;
-}
-
-export interface Policy {
-  name: string;
-  rules: string[];
-}
-
-export interface EvaluateOptions {
-  risk_tolerance?: "strict" | "default" | "lenient";
-  require_live_data?: boolean;
-  max_latency_ms?: number;
-}
-
-export interface EvaluateRequest {
-  user_request?: string;
-  model_output?: string;
-  proposed_action: ProposedAction;
-  policy: Policy;
-  options?: EvaluateOptions;
-}
-
-export interface PolicyMatch {
-  rule: string;
-  status: PolicyMatchStatus;
-  explanation: string;
-}
-
-export interface RiskFactor {
-  factor: string;
-  severity: RiskSeverity;
-  detail?: string;
-}
-
-export interface MissingContext {
-  field: string;
-  why: string;
-}
-
-export interface Evidence {
-  source: string; // "deterministic" | "model:<provider>"
-  note: string;
-}
-
-export interface NextStep {
-  action: NextStepAction;
-  recommendation: string;
-}
-
-export interface EvaluateResponse {
-  ok: true;
-  verdict: Verdict;
-  reason: string;
-  policy_matches: PolicyMatch[];
-  risk_factors: RiskFactor[];
-  missing_context: MissingContext[];
-  evidence: Evidence[];
-  next_step: NextStep;
-  decision_basis: DecisionBasis;
-  confidence: { score: number; label: "low" | "moderate" | "high" };
-  providers_used: string[];
-  fell_back: boolean;
-  cached: boolean;
-}
+import type {
+  EvaluateRequest,
+  EvaluateResponse,
+  PolicyMatch,
+  RiskFactor,
+  RiskSeverity,
+} from "./types";
 
 // ── Small, explicit helpers (no regex on policy text drives any decision) ───────
 
@@ -550,15 +474,17 @@ function evaluateSubscriptionChange(req: EvaluateRequest): EvaluateResponse {
   }
 
   // Authenticated but irreversible or not self-service — review.
+  const reviewRisk: RiskFactor[] = [];
+  if (!reversible) {
+    reviewRisk.push({ factor: "irreversible_action", severity: "moderate" as RiskSeverity });
+  }
   return {
     ok: true,
     verdict: "REVIEW",
     reason:
       "Plan change is authenticated but is either irreversible or not eligible for self-service. Route to human review.",
     policy_matches: [],
-    risk_factors: [
-      ...(!reversible ? [{ factor: "irreversible_action", severity: "moderate" as RiskSeverity }] : []),
-    ],
+    risk_factors: reviewRisk,
     missing_context: [],
     evidence: [
       {
@@ -702,13 +628,18 @@ function evaluateUnknown(req: EvaluateRequest): EvaluateResponse {
 
 // ── Public entry point ──────────────────────────────────────────────────────────
 
+/** Action types with a dedicated deterministic evaluator. */
+export const SUPPORTED_ACTION_TYPES = [
+  "refund_customer",
+  "delete_account",
+  "downgrade_subscription",
+  "change_subscription",
+  "update_crm_record",
+] as const;
+
 /**
  * Deterministic Stage 0 evaluation. Pure function — no I/O, no model calls.
- *
- * MODEL_JUDGEMENT_TODO (Pass 2): add an optional Stage 1 single-model judgement
- * that receives proposed_action + policy + context + user_request + model_output
- * and returns the same shape. It must run AFTER this function and must never
- * upgrade a deterministic BLOCK/REVIEW to ALLOW — only add reasoning or tighten.
+ * See MODEL_JUDGEMENT_TODO at the top of this file for the planned Stage 1.
  */
 export function evaluateActionDeterministic(
   req: EvaluateRequest

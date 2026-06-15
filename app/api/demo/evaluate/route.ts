@@ -1,51 +1,20 @@
 /**
  * app/api/demo/evaluate/route.ts
  *
- * Pass 1 — demo/internal structured execution-gate route.
+ * Internal, UNAUTHENTICATED demo route for the canonical /demo. It shares the
+ * exact same evaluation engine and request schema as the public /v1/evaluate
+ * endpoint (lib/evaluate/*) — the only difference is that the demo route skips
+ * API-key auth so the public /demo works without exposing a key client-side.
  *
- * Accepts a structured { proposed_action, policy, ... } payload and returns a
- * decision-first verdict (ALLOW / REVIEW / BLOCK) from the deterministic engine
- * in lib/demo/evaluateAction.ts. No external providers are called, so this route
- * works locally without secrets and never fabricates a verdict.
- *
- * This is intentionally separate from /api/decision and /v1/decision — the
- * legacy prompt-agreement engine is untouched.
+ * Deterministic Stage 0 only; no providers, no secrets, never fabricates a verdict.
  */
 
 import { NextResponse } from "next/server";
-import { z } from "zod";
-import {
-  evaluateActionDeterministic,
-  type EvaluateRequest,
-} from "@/lib/demo/evaluateAction";
+import { EvaluateRequestSchema } from "@/lib/evaluate/schema";
+import { evaluateActionDeterministic } from "@/lib/evaluate/evaluateAction";
+import type { EvaluateRequest } from "@/lib/evaluate/types";
 
 export const runtime = "nodejs";
-
-const ProposedActionSchema = z.object({
-  type: z.string().min(1),
-  parameters: z.record(z.string(), z.unknown()).optional(),
-  reversible: z.boolean().optional(),
-  context: z.record(z.string(), z.unknown()).optional(),
-});
-
-const PolicySchema = z.object({
-  name: z.string().min(1),
-  rules: z.array(z.string()).min(1),
-});
-
-const EvaluateRequestSchema = z.object({
-  user_request: z.string().max(10_000).optional(),
-  model_output: z.string().max(10_000).optional(),
-  proposed_action: ProposedActionSchema,
-  policy: PolicySchema,
-  options: z
-    .object({
-      risk_tolerance: z.enum(["strict", "default", "lenient"]).optional(),
-      require_live_data: z.boolean().optional(),
-      max_latency_ms: z.number().optional(),
-    })
-    .optional(),
-});
 
 export async function POST(req: Request) {
   let body: unknown;
@@ -71,9 +40,6 @@ export async function POST(req: Request) {
   }
 
   try {
-    // Stage 0 (deterministic) only in this pass. Stage 1 model judgement is a
-    // documented TODO in lib/demo/evaluateAction.ts and must not override the
-    // deterministic floors when added.
     const result = evaluateActionDeterministic(parsed.data as EvaluateRequest);
     return NextResponse.json(result);
   } catch (err) {

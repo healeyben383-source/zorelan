@@ -11,7 +11,7 @@
  * sent to the engine.
  */
 
-import type { EvaluateRequest } from "./evaluateAction";
+import type { EvaluateRequest } from "@/lib/evaluate/types";
 
 export interface DemoScenario {
   id: string;
