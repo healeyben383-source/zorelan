@@ -14,9 +14,14 @@ execution.
 
 ## Last updated
 
-2026-06-15 — Homepage consolidation + legacy route cleanup (see below). Prior:
-trust/ops cleanup, docs/positioning cleanup. No `/v1/evaluate`, `/v1/decision`,
-`/api/decision`, SDK, or pricing changes.
+2026-06-15 — Final docs polish (this entry). API-docs Quickstart now leads with
+`/v1/evaluate` + `evaluateAction()`; legacy `verify(prompt)` curl/SDK/Python
+examples moved under an explicit "Legacy: prompt verification" block; the trust
+scoring / disagreement / arbitration sections carry a legacy banner clarifying
+they describe `/v1/decision`, not the `/v1/evaluate` gate; unused `nodeExample`
+removed; `sdk/README.md` "Trust score guide" notes it is legacy-only. Docs/copy
+only — no runtime, API, SDK, Stripe, env, admin, or auth changes. Prior:
+homepage consolidation + legacy route cleanup, trust/ops, docs/positioning.
 
 ## Homepage + legacy route cleanup (this pass)
 

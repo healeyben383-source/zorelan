@@ -152,6 +152,9 @@ try {
 
 ## Trust score guide
 
+> This section applies to the legacy `verify(prompt)` API. For new
+> action-gating integrations, use `evaluateAction()`.
+
 | Score | Meaning | Recommended action |
 |-------|---------|-------------------|
 | 90+ | High-confidence factual verification | Safe to use directly |

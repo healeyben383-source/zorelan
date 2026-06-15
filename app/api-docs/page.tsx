@@ -38,19 +38,6 @@ const advancedCurlExample = `curl -X POST https://zorelan.com/v1/decision \\
     "cache_bypass": true
   }'`;
 
-const nodeExample = `import { Zorelan } from "@zorelan/sdk";
-
-const zorelan = new Zorelan(process.env.ZORELAN_API_KEY!);
-
-const result = await zorelan.verify(
-  "Should I use HTTPS for my web application?"
-);
-
-console.log(result.verified_answer);    // synthesized answer
-console.log(result.trust_score.score);  // 0–100
-console.log(result.consensus.level);    // "high" | "medium" | "low"
-console.log(result.cached);             // true if result was cached`;
-
 const pythonExample = `import requests
 import os
 
@@ -494,7 +481,7 @@ const NAV_ITEMS = [
   { label: "Why Zorelan", href: "#why" },
   { label: "Quickstart", href: "#quickstart" },
   { label: "How it works", href: "#how-it-works" },
-  { label: "Trust scoring", href: "#trust" },
+  { label: "Legacy: trust scoring", href: "#trust" },
   { label: "API reference", href: "#api-reference" },
   { label: "Caching", href: "#caching" },
   { label: "Errors", href: "#errors" },
@@ -873,26 +860,46 @@ if (decision.verdict === "ALLOW") {
 
         <Divider />
 
-        {/* ── Change 4: Quickstart — curl first ─────────────────────────────── */}
+        {/* ── Quickstart — execution gate first ─────────────────────────────── */}
         <section id="quickstart" className="mb-12">
           <SectionLabel>Quickstart</SectionLabel>
           <h2 className="text-xl font-semibold mb-4">Make your first call</h2>
           <p className="text-white/60 leading-relaxed mb-6">
-            The fastest path is a single HTTP call. Send AI output or an action
-            description, get back an execution decision — allow, review, or
-            block — with trust score, risk level, and supporting signals.
+            Send a structured <InlineCode>proposed_action</InlineCode> plus the{" "}
+            <InlineCode>policy</InlineCode> it must satisfy to{" "}
+            <InlineCode>POST /v1/evaluate</InlineCode>. You get back a verdict —{" "}
+            <strong>ALLOW</strong>, <strong>REVIEW</strong>, or{" "}
+            <strong>BLOCK</strong> — before the action runs.
           </p>
 
           <div className="space-y-4">
-            {/* curl first */}
-            <CodeBlock label="curl" code={curlExample} />
-            <CodeBlock
-              label="curl · advanced dual-prompt"
-              code={advancedCurlExample}
-            />
             <CodeBlock label="bash · sdk install" code={sdkInstallExample} />
-            <CodeBlock label="node.js / typescript sdk" code={sdkQuickstartExample} />
-            <CodeBlock label="python" code={pythonExample} />
+            <CodeBlock label="node.js / typescript sdk" code={evaluateSdkExample} />
+            <CodeBlock label="curl · refund → BLOCK" code={evaluateRefundCurl} />
+          </div>
+
+          {/* Legacy quickstart — clearly demoted */}
+          <div className="mt-10 rounded-2xl border border-white/10 bg-white/[0.02] p-5">
+            <SectionLabel>Legacy: prompt verification</SectionLabel>
+            <p className="text-white/55 leading-relaxed mb-4 text-sm">
+              <InlineCode>verify(prompt)</InlineCode> and{" "}
+              <InlineCode>POST /v1/decision</InlineCode> are the original
+              prompt-verification path (multi-model comparison + trust score).
+              They remain supported as a convenience, but new action-gating
+              integrations should use <InlineCode>/v1/evaluate</InlineCode> above.
+            </p>
+            <div className="space-y-4">
+              <CodeBlock label="legacy · curl" code={curlExample} />
+              <CodeBlock
+                label="legacy · curl (advanced dual-prompt)"
+                code={advancedCurlExample}
+              />
+              <CodeBlock
+                label="legacy · node.js / typescript sdk"
+                code={sdkQuickstartExample}
+              />
+              <CodeBlock label="legacy · python" code={pythonExample} />
+            </div>
           </div>
         </section>
 
@@ -1153,10 +1160,20 @@ Content-Type: application/json`}
 
         <Divider />
 
-        {/* ── Trust scoring ─────────────────────────────────────────────────── */}
+        {/* ── Trust scoring (LEGACY) ────────────────────────────────────────── */}
         <section id="trust" className="mb-12">
-          <SectionLabel>How trust works</SectionLabel>
+          <SectionLabel>Legacy · prompt verification</SectionLabel>
           <h2 className="text-xl font-semibold mb-4">How trust scoring works</h2>
+
+          <div className="mb-6 rounded-xl border border-yellow-500/20 bg-yellow-500/5 px-5 py-4 text-sm text-white/60 leading-relaxed">
+            The trust scoring, disagreement types, arbitration, and how-it-works
+            material below describe the legacy{" "}
+            <InlineCode>/v1/decision</InlineCode> prompt-verification path —{" "}
+            <span className="text-white/80">not</span> the{" "}
+            <InlineCode>/v1/evaluate</InlineCode> execution gate. The execution
+            gate uses deterministic policy checks and does not rely on multi-model
+            arbitration today.
+          </div>
 
           <p className="text-white/60 leading-relaxed mb-6">
             Zorelan does not just measure whether models agree. It measures
