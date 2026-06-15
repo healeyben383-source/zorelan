@@ -80,6 +80,82 @@ export type ZorelanDecisionResponse = ZorelanDecisionSuccess | ZorelanDecisionEr
 export type VerifyOptions = {
     cacheBypass?: boolean;
 };
+export type EvaluationVerdict = "ALLOW" | "REVIEW" | "BLOCK";
+export type RiskSeverity = "low" | "moderate" | "high";
+export type DecisionBasis = "deterministic" | "model" | "arbitrated";
+export type NextStepAction = "execute" | "open_review" | "block";
+export type PolicyMatchStatus = "satisfied" | "violated" | "not_applicable" | "indeterminate";
+export type ProposedAction = {
+    /** e.g. "refund_customer" | "delete_account" | "downgrade_subscription" | "update_crm_record" */
+    type: string;
+    parameters?: Record<string, unknown>;
+    reversible?: boolean;
+    context?: Record<string, unknown>;
+};
+export type ActionPolicy = {
+    name: string;
+    rules: string[];
+};
+export type EvaluateActionOptions = {
+    risk_tolerance?: "strict" | "default" | "lenient";
+    require_live_data?: boolean;
+    max_latency_ms?: number;
+};
+export type EvaluateActionRequest = {
+    user_request?: string;
+    model_output?: string;
+    proposed_action: ProposedAction;
+    policy: ActionPolicy;
+    options?: EvaluateActionOptions;
+};
+export type PolicyMatch = {
+    rule: string;
+    status: PolicyMatchStatus;
+    explanation: string;
+};
+export type RiskFactor = {
+    factor: string;
+    severity: RiskSeverity;
+    detail?: string;
+};
+export type MissingContext = {
+    field: string;
+    why: string;
+};
+export type EvidenceItem = {
+    source: string;
+    note: string;
+};
+export type NextStep = {
+    action: NextStepAction;
+    recommendation: string;
+};
+export type UsageMeta = {
+    plan: string;
+    callsLimit: number;
+    callsUsed: number;
+    callsRemaining: number;
+    status: "active" | "inactive";
+};
+export type EvaluateActionResponse = {
+    ok: true;
+    verdict: EvaluationVerdict;
+    reason: string;
+    policy_matches: PolicyMatch[];
+    risk_factors: RiskFactor[];
+    missing_context: MissingContext[];
+    evidence: EvidenceItem[];
+    next_step: NextStep;
+    decision_basis: DecisionBasis;
+    confidence: {
+        score: number;
+        label: "low" | "moderate" | "high";
+    };
+    providers_used: string[];
+    fell_back: boolean;
+    cached: boolean;
+    usage?: UsageMeta | null;
+};
 export type ZorelanClientOptions = {
     baseUrl?: string;
     fetch?: typeof globalThis.fetch;
@@ -95,4 +171,10 @@ export declare class Zorelan {
     private readonly fetchImpl;
     constructor(apiKey: string, options?: ZorelanClientOptions);
     verify(prompt: string, options?: VerifyOptions): Promise<ZorelanDecisionSuccess>;
+    /**
+     * Evaluate a structured proposed action against a policy before it executes.
+     * Calls POST /v1/evaluate and returns a decision-first result
+     * (ALLOW / REVIEW / BLOCK). Does not affect verify(prompt).
+     */
+    evaluateAction(payload: EvaluateActionRequest): Promise<EvaluateActionResponse>;
 }

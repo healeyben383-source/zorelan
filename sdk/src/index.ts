@@ -96,6 +96,99 @@ export type VerifyOptions = {
   cacheBypass?: boolean;
 };
 
+// ── Structured execution-gate evaluation (POST /v1/evaluate) ────────────────────
+// Additive contract for evaluateAction(). Mirrors the server shape in
+// lib/evaluate/types.ts. Independent of the legacy verify(prompt) types above.
+
+export type EvaluationVerdict = "ALLOW" | "REVIEW" | "BLOCK";
+export type RiskSeverity = "low" | "moderate" | "high";
+export type DecisionBasis = "deterministic" | "model" | "arbitrated";
+export type NextStepAction = "execute" | "open_review" | "block";
+export type PolicyMatchStatus =
+  | "satisfied"
+  | "violated"
+  | "not_applicable"
+  | "indeterminate";
+
+export type ProposedAction = {
+  /** e.g. "refund_customer" | "delete_account" | "downgrade_subscription" | "update_crm_record" */
+  type: string;
+  parameters?: Record<string, unknown>;
+  reversible?: boolean;
+  context?: Record<string, unknown>;
+};
+
+export type ActionPolicy = {
+  name: string;
+  rules: string[];
+};
+
+export type EvaluateActionOptions = {
+  risk_tolerance?: "strict" | "default" | "lenient";
+  require_live_data?: boolean;
+  max_latency_ms?: number;
+};
+
+export type EvaluateActionRequest = {
+  user_request?: string;
+  model_output?: string;
+  proposed_action: ProposedAction;
+  policy: ActionPolicy;
+  options?: EvaluateActionOptions;
+};
+
+export type PolicyMatch = {
+  rule: string;
+  status: PolicyMatchStatus;
+  explanation: string;
+};
+
+export type RiskFactor = {
+  factor: string;
+  severity: RiskSeverity;
+  detail?: string;
+};
+
+export type MissingContext = {
+  field: string;
+  why: string;
+};
+
+export type EvidenceItem = {
+  source: string; // "deterministic" | "model:<provider>"
+  note: string;
+};
+
+export type NextStep = {
+  action: NextStepAction;
+  recommendation: string;
+};
+
+export type UsageMeta = {
+  plan: string;
+  callsLimit: number;
+  callsUsed: number;
+  callsRemaining: number;
+  status: "active" | "inactive";
+};
+
+export type EvaluateActionResponse = {
+  ok: true;
+  verdict: EvaluationVerdict;
+  reason: string;
+  policy_matches: PolicyMatch[];
+  risk_factors: RiskFactor[];
+  missing_context: MissingContext[];
+  evidence: EvidenceItem[];
+  next_step: NextStep;
+  decision_basis: DecisionBasis;
+  confidence: { score: number; label: "low" | "moderate" | "high" };
+  providers_used: string[];
+  fell_back: boolean;
+  cached: boolean;
+  usage?: UsageMeta | null;
+};
+
 export type ZorelanClientOptions = {
   baseUrl?: string;
   fetch?: typeof globalThis.fetch;
@@ -177,6 +270,80 @@ export class Zorelan {
     }
 
     const success = data as ZorelanDecisionSuccess;
+
+    if (!success.ok) {
+      throw new ZorelanError(
+        "Zorelan returned an unexpected error payload.",
+        response.status,
+        success
+      );
+    }
+
+    return success;
+  }
+
+  /**
+   * Evaluate a structured proposed action against a policy before it executes.
+   * Calls POST /v1/evaluate and returns a decision-first result
+   * (ALLOW / REVIEW / BLOCK). Does not affect verify(prompt).
+   */
+  async evaluateAction(
+    payload: EvaluateActionRequest
+  ): Promise<EvaluateActionResponse> {
+    if (!payload || typeof payload !== "object") {
+      throw new Error("evaluateAction(payload) requires a request object.");
+    }
+    if (
+      !payload.proposed_action ||
+      typeof payload.proposed_action.type !== "string" ||
+      !payload.proposed_action.type
+    ) {
+      throw new Error(
+        "evaluateAction requires proposed_action with a non-empty type."
+      );
+    }
+    if (
+      !payload.policy ||
+      !Array.isArray(payload.policy.rules) ||
+      payload.policy.rules.length === 0
+    ) {
+      throw new Error(
+        "evaluateAction requires policy.rules with at least one rule."
+      );
+    }
+
+    const response = await this.fetchImpl(`${this.baseUrl}/v1/evaluate`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${this.apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(payload),
+    });
+
+    let data: EvaluateActionResponse | ZorelanDecisionError | unknown;
+
+    try {
+      data = await response.json();
+    } catch {
+      throw new ZorelanError(
+        `Zorelan returned a non-JSON response (${response.status}).`,
+        response.status
+      );
+    }
+
+    if (!response.ok) {
+      const err = data as ZorelanDecisionError;
+      throw new ZorelanError(
+        err?.error
+          ? `Zorelan API error: ${err.error}`
+          : `Zorelan request failed with status ${response.status}.`,
+        response.status,
+        err
+      );
+    }
+
+    const success = data as EvaluateActionResponse;
 
     if (!success.ok) {
       throw new ZorelanError(

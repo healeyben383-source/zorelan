@@ -42,6 +42,49 @@ if (result.trust_score.score >= 75 && result.risk_level !== "high") {
 }
 ```
 
+## Evaluate a structured action (execution gate)
+
+Use `evaluateAction()` to decide whether an AI-proposed action should run
+**before** it hits your backend. It returns a decision-first result —
+`ALLOW`, `REVIEW`, or `BLOCK` — with the policy matches, risk factors, missing
+context, and next step behind the decision.
+
+```typescript
+import { Zorelan } from "@zorelan/sdk";
+
+const zorelan = new Zorelan(process.env.ZORELAN_API_KEY!);
+
+const decision = await zorelan.evaluateAction({
+  user_request: "I never received my order and I want a full refund.",
+  model_output: "I've issued your refund of $180.",
+  proposed_action: {
+    type: "refund_customer",
+    parameters: { amount: 180, currency: "AUD", customer_id: "cus_123" },
+    reversible: false,
+    context: { order_status: "delivery_unconfirmed", identity_verified: true },
+  },
+  policy: {
+    name: "Refund policy",
+    rules: [
+      "Refunds above $100 require delivery confirmation.",
+      "Refunds must not be issued when delivery status is unresolved.",
+    ],
+  },
+});
+
+if (decision.verdict === "ALLOW") {
+  // execute the action
+} else if (decision.verdict === "REVIEW") {
+  // route to human review — decision.reason explains why
+} else {
+  // "BLOCK" — stop execution
+}
+```
+
+`evaluateAction()` returns an `EvaluateActionResponse` on success, or throws a
+`ZorelanError` on failure (same error style as `verify`). `verify(prompt)` is
+unchanged and continues to work as before.
+
 ## API
 
 ### `new Zorelan(apiKey, options?)`
@@ -62,6 +105,20 @@ Submit a prompt for multi-model verification.
 | `options.cacheBypass` | `boolean` | Force a fresh live verification, bypassing cache |
 
 Returns a `ZorelanDecisionSuccess` object on success, or throws a `ZorelanError` on failure.
+
+### `zorelan.evaluateAction(payload)`
+
+Evaluate a structured proposed action against a policy before execution.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `payload.proposed_action` | `ProposedAction` | The action to gate — `type`, `parameters`, `reversible`, `context` (required) |
+| `payload.policy` | `ActionPolicy` | `name` plus one or more `rules` (required) |
+| `payload.user_request` | `string` | The originating user request (optional) |
+| `payload.model_output` | `string` | The AI model's output/draft (optional) |
+| `payload.options` | `EvaluateActionOptions` | `risk_tolerance`, `require_live_data`, `max_latency_ms` (optional) |
+
+Returns an `EvaluateActionResponse` with `verdict` (`"ALLOW"` · `"REVIEW"` · `"BLOCK"`), `reason`, `policy_matches`, `risk_factors`, `missing_context`, `evidence`, `next_step`, `decision_basis`, and `confidence`. Throws a `ZorelanError` on failure.
 
 ### Key response fields
 
