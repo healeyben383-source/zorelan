@@ -1546,11 +1546,14 @@ export default function Home() {
                 Designed to run in your backend before any AI-triggered action executes.
               </p>
 
-              <pre className="text-left text-xs font-mono opacity-40 leading-relaxed mt-1 hidden lg:block">{`const result = await zorelan.verify({ prompt })
+              <pre className="text-left text-xs font-mono opacity-40 leading-relaxed mt-1 hidden lg:block">{`const decision = await zorelan.evaluateAction({
+  proposed_action,
+  policy,
+})
 
-if (result.decision === "allow") {
+if (decision.verdict === "ALLOW") {
   executeAction()
-} else if (result.decision === "review") {
+} else if (decision.verdict === "REVIEW") {
   routeToHumanReview()
 } else {
   blockExecution()
@@ -1564,7 +1567,7 @@ if (result.decision === "allow") {
         </header>
 
         <p className="text-xs text-center opacity-60 tracking-wide -mt-2">
-          Multiple models · Disagreement detection · Trust scoring · Execution decision
+          Structured action + policy · ALLOW / REVIEW / BLOCK · Execution decision layer
         </p>
 
         <section className="rounded-3xl border border-black/10 dark:border-white/10 p-5 md:p-6 space-y-3 bg-black/[0.02] dark:bg-white/[0.02]">
@@ -2398,19 +2401,22 @@ if (result.decision === "allow") {
                 Add a decision layer between your models and real-world actions.
               </div>
               <p className="text-sm md:text-base opacity-65 leading-relaxed max-w-3xl">
-                Use Zorelan to verify and gate AI-driven actions with trust scoring, disagreement detection, and execution decisions.
+                Send a proposed action and the policy it must satisfy. Zorelan returns ALLOW, REVIEW, or BLOCK so your system gates execution before the action runs.
               </p>
-              <pre className="mt-4 rounded-xl border border-white/10 bg-black text-white text-xs leading-relaxed p-4 overflow-x-auto">{`const result = await zorelan.verify(prompt)
+              <pre className="mt-4 rounded-xl border border-white/10 bg-black text-white text-xs leading-relaxed p-4 overflow-x-auto">{`const decision = await zorelan.evaluateAction({
+  proposed_action,
+  policy,
+})
 
-if (result.decision === "allow") {
-  executeAction(result.output)
-} else if (result.decision === "review") {
+if (decision.verdict === "ALLOW") {
+  executeAction()
+} else if (decision.verdict === "REVIEW") {
   routeToHumanReview()
 } else {
   blockExecution()
 }`}</pre>
               <div className="text-xs opacity-40 mt-2">
-                ~300–800ms verification latency • deterministic scoring • production safe
+                Deterministic policy checks · unknown actions fail safe to REVIEW
               </div>
             </div>
 

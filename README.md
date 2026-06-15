@@ -1,53 +1,72 @@
 # Zorelan
 
-**Verify AI before you trust it.**
+**Stop AI agents from taking unsafe actions.**
 
-Zorelan compares multiple AI model outputs, detects disagreement, and returns a trust-calibrated answer with a trust score, risk level, consensus signal, and recommended action — in a single API call.
+Zorelan is a runtime execution decision layer for AI-driven actions. It sits between AI model output and real backend actions, evaluates a proposed action against your policy and context, and returns **ALLOW**, **REVIEW**, or **BLOCK** before anything executes.
 
 ## What it does
 
-A single model can generate an answer, but it cannot tell you whether that answer deserves confidence. Zorelan sits between your application and AI providers. It queries multiple models simultaneously, compares their outputs through a semantic agreement engine, and returns a structured verification signal your application can act on.
+AI output can sound correct and still be unsafe to execute — issuing a refund, deleting an account, changing a subscription, writing to a CRM. Zorelan takes a structured proposed action plus the policy it must satisfy and returns a decision-first result your system can gate on.
 
 ```
-Your prompt
+User request
     ↓
-Adaptive provider selection
+AI model output
     ↓
-Parallel model queries (Claude · Perplexity · GPT)
+Proposed action + policy/context
     ↓
-Semantic agreement judge (neutral cross-model)
+Zorelan
     ↓
-Arbitration if disagreement detected
-    ↓
-Trust score + verified answer
+ALLOW / REVIEW / BLOCK  →  execute · review · block
 ```
 
-## API
+> The structured evaluation path (`/v1/evaluate`) currently uses deterministic policy checks for common action types (refunds, account deletion, subscription changes, CRM updates). Unknown action types fail safe to **REVIEW**. Model judgement and arbitration can be layered in later for uncertain or high-risk actions.
+
+## API — `POST /v1/evaluate`
+
+Send the proposed action and the policy it must satisfy. Get back a verdict.
 
 ```bash
-curl -X POST https://zorelan.com/v1/decision \
+curl -X POST https://zorelan.com/v1/evaluate \
   -H "Authorization: Bearer YOUR_API_KEY" \
   -H "Content-Type: application/json" \
-  -d '{"prompt": "Should I use HTTPS for my web application?"}'
+  -d '{
+    "user_request": "I never received my order and I want a full refund.",
+    "model_output": "I'\''ve issued your refund of $180.",
+    "proposed_action": {
+      "type": "refund_customer",
+      "parameters": { "amount": 180, "currency": "AUD", "customer_id": "cus_123" },
+      "reversible": false,
+      "context": { "order_status": "delivery_unconfirmed", "identity_verified": true }
+    },
+    "policy": {
+      "name": "Refund policy",
+      "rules": [
+        "Refunds above $100 require delivery confirmation.",
+        "Refunds must not be issued when delivery status is unresolved."
+      ]
+    }
+  }'
 ```
 
 ```json
 {
   "ok": true,
-  "verified_answer": "Yes — you should use HTTPS for your web application.",
-  "trust_score": {
-    "score": 94,
-    "label": "high",
-    "reason": "The providers strongly agree on a low-risk best-practice conclusion."
+  "verdict": "BLOCK",
+  "reason": "Refund of $180 AUD exceeds the $100 threshold and delivery is unconfirmed.",
+  "missing_context": [
+    { "field": "delivery_confirmed", "why": "Required before a refund over $100." }
+  ],
+  "next_step": {
+    "action": "block",
+    "recommendation": "Do not issue the refund. Request delivery confirmation, then re-evaluate."
   },
-  "risk_level": "low",
-  "consensus": {
-    "level": "high",
-    "models_aligned": 2
-  },
-  "recommended_action": "Use the shared conclusion as the answer."
+  "decision_basis": "deterministic",
+  "confidence": { "score": 94, "label": "high" }
 }
 ```
+
+Gate execution on `verdict`: `ALLOW` → execute, `REVIEW` → human review, `BLOCK` → stop.
 
 ## SDK
 
@@ -60,17 +79,43 @@ import { Zorelan } from "@zorelan/sdk";
 
 const zorelan = new Zorelan(process.env.ZORELAN_API_KEY!);
 
-const result = await zorelan.verify(
-  "Should I use HTTPS for my web application?"
-);
+const decision = await zorelan.evaluateAction({
+  user_request: "I never received my order and I want a full refund.",
+  model_output: "I've issued your refund of $180.",
+  proposed_action: {
+    type: "refund_customer",
+    parameters: { amount: 180, currency: "AUD", customer_id: "cus_123" },
+    reversible: false,
+    context: { order_status: "delivery_unconfirmed", identity_verified: true },
+  },
+  policy: {
+    name: "Refund policy",
+    rules: [
+      "Refunds above $100 require delivery confirmation.",
+      "Refunds must not be issued when delivery status is unresolved.",
+    ],
+  },
+});
 
-// Gate behaviour based on trust
-if (result.trust_score.score >= 75 && result.risk_level !== "high") {
-  showAnswer(result.verified_answer);
+if (decision.verdict === "ALLOW") {
+  // execute the action
+} else if (decision.verdict === "REVIEW") {
+  // route to human review
 } else {
-  showWarning("Low confidence. Review before acting.");
+  // "BLOCK" — stop execution
 }
 ```
+
+## Legacy: prompt verification (`/v1/decision`)
+
+`POST /v1/decision` and the SDK's `verify(prompt)` are the original prompt-verification path: they compare multiple model answers to a prompt and return a trust-calibrated answer with a trust score, risk level, and consensus signal. This remains available as a secondary/convenience capability — new integrations gating real actions should prefer `/v1/evaluate`.
+
+```typescript
+const result = await zorelan.verify("Should I use HTTPS for my web application?");
+console.log(result.verified_answer, result.trust_score.score);
+```
+
+The sections below (trust scoring, disagreement types, response fields, caching) document this legacy verification path.
 
 ## Trust scoring
 

@@ -6,7 +6,7 @@ import CheckoutStatusBanner from "./CheckoutStatusBanner";
 export const metadata: Metadata = {
   title: "API Docs — Zorelan",
   description:
-    "Zorelan sits between AI output and execution — deciding whether your system should execute AI-driven actions. Allow, review, or block with trust scoring, risk signals, and execution decisions.",
+    "Zorelan is a runtime execution decision layer for AI-driven actions. Evaluate a structured proposed action against your policy and get ALLOW, REVIEW, or BLOCK before anything hits your backend.",
 };
 
 const sdkInstallExample = `npm install @zorelan/sdk`;
@@ -70,6 +70,120 @@ print(data["verified_answer"])
 print(data["trust_score"]["score"])
 print(data["consensus"]["level"])
 print(data["cached"])  # True if result was cached`;
+
+const evaluateSdkExample = `import { Zorelan } from "@zorelan/sdk";
+
+const zorelan = new Zorelan(process.env.ZORELAN_API_KEY!);
+
+const decision = await zorelan.evaluateAction({
+  user_request: "I never received my order and I want a full refund.",
+  model_output: "I've issued your refund of $180.",
+  proposed_action: {
+    type: "refund_customer",
+    parameters: { amount: 180, currency: "AUD", customer_id: "cus_123" },
+    reversible: false,
+    context: { order_status: "delivery_unconfirmed", identity_verified: true },
+  },
+  policy: {
+    name: "Refund policy",
+    rules: [
+      "Refunds above $100 require delivery confirmation.",
+      "Refunds must not be issued when delivery status is unresolved.",
+    ],
+  },
+});
+
+if (decision.verdict === "ALLOW") {
+  executeAction();
+} else if (decision.verdict === "REVIEW") {
+  routeToHumanReview(decision.reason);
+} else {
+  blockExecution(decision.reason);
+}`;
+
+const evaluateRefundCurl = `curl -X POST https://zorelan.com/v1/evaluate \\
+  -H "Authorization: Bearer YOUR_API_KEY" \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "user_request": "I never received my order and I want a full refund.",
+    "model_output": "I have issued your refund of $180.",
+    "proposed_action": {
+      "type": "refund_customer",
+      "parameters": { "amount": 180, "currency": "AUD", "customer_id": "cus_123" },
+      "reversible": false,
+      "context": { "order_status": "delivery_unconfirmed", "identity_verified": true }
+    },
+    "policy": {
+      "name": "Refund policy",
+      "rules": [
+        "Refunds above $100 require delivery confirmation.",
+        "Refunds must not be issued when delivery status is unresolved."
+      ]
+    }
+  }'`;
+
+const evaluateRefundResponse = `{
+  "ok": true,
+  "verdict": "BLOCK",
+  "reason": "Refund of $180 AUD exceeds the $100 threshold and delivery is unconfirmed.",
+  "policy_matches": [
+    {
+      "rule": "Refunds above $100 require delivery confirmation.",
+      "status": "violated",
+      "explanation": "Refund amount $180 AUD is above the $100 threshold and delivery confirmation is missing."
+    }
+  ],
+  "risk_factors": [
+    { "factor": "irreversible_action", "severity": "high" },
+    { "factor": "financial_exposure", "severity": "high", "detail": "$180 AUD" }
+  ],
+  "missing_context": [
+    { "field": "delivery_confirmed", "why": "Required by policy before a refund over $100 can be issued." }
+  ],
+  "next_step": {
+    "action": "block",
+    "recommendation": "Do not issue the refund. Request delivery confirmation, then re-evaluate."
+  },
+  "decision_basis": "deterministic",
+  "confidence": { "score": 94, "label": "high" }
+}`;
+
+const evaluateDowngradeCurl = `curl -X POST https://zorelan.com/v1/evaluate \\
+  -H "Authorization: Bearer YOUR_API_KEY" \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "proposed_action": {
+      "type": "downgrade_subscription",
+      "parameters": { "customer_id": "cus_789", "from_plan": "pro", "to_plan": "starter" },
+      "reversible": true,
+      "context": { "identity_verified": true, "self_service_allowed": true }
+    },
+    "policy": {
+      "name": "Subscription change policy",
+      "rules": ["Authenticated users may self-serve reversible plan downgrades."]
+    }
+  }'`;
+
+const evaluateDowngradeResponse = `{
+  "ok": true,
+  "verdict": "ALLOW",
+  "reason": "Authenticated user requesting a reversible, self-service plan downgrade. Policy permits this without human review.",
+  "policy_matches": [
+    {
+      "rule": "Authenticated users may self-serve reversible plan downgrades.",
+      "status": "satisfied",
+      "explanation": "identity_verified is true, the change is reversible, and self-service downgrades are allowed."
+    }
+  ],
+  "risk_factors": [ { "factor": "reversible_action", "severity": "low" } ],
+  "missing_context": [],
+  "next_step": {
+    "action": "execute",
+    "recommendation": "Safe to apply the downgrade at the next billing cycle."
+  },
+  "decision_basis": "deterministic",
+  "confidence": { "score": 90, "label": "high" }
+}`;
 
 const advancedJsonExample = `{
   "prompt": "Determine whether HTTPS should be used for a production web application. Include security, SEO, and compliance considerations.",
@@ -376,6 +490,7 @@ const disagreementTypes = [
 
 // Navigation anchor sections
 const NAV_ITEMS = [
+  { label: "Execution gate", href: "#evaluate" },
   { label: "Why Zorelan", href: "#why" },
   { label: "Quickstart", href: "#quickstart" },
   { label: "How it works", href: "#how-it-works" },
@@ -542,12 +657,15 @@ export default function ApiDocsPage() {
 
           <CodeBlock
             label="node.js · gate execution"
-            code={`const result = await zorelan.verify({ prompt })
+            code={`const decision = await zorelan.evaluateAction({
+  proposed_action,
+  policy,
+})
 
-// Gate execution using result.decision
-if (result.decision === "allow") {
+// Gate execution using decision.verdict
+if (decision.verdict === "ALLOW") {
   executeAction()
-} else if (result.decision === "review") {
+} else if (decision.verdict === "REVIEW") {
   routeToHumanReview()
 } else {
   blockExecution()
@@ -575,6 +693,59 @@ if (result.decision === "allow") {
             </FeatureCard>
           </div>
         </div>
+
+        {/* ── Flagship: structured execution gate (/v1/evaluate) ─────────────── */}
+        <section id="evaluate" className="mb-12">
+          <SectionLabel>Execution gate · recommended</SectionLabel>
+          <h2 className="text-2xl font-semibold mb-4">
+            POST /v1/evaluate — gate a proposed action
+          </h2>
+          <p className="text-white/60 leading-relaxed mb-4 max-w-2xl">
+            Send the user request, the AI model output, the structured{" "}
+            <InlineCode>proposed_action</InlineCode>, and the{" "}
+            <InlineCode>policy</InlineCode> it must satisfy. Zorelan returns a
+            decision-first verdict — <strong>ALLOW</strong>,{" "}
+            <strong>REVIEW</strong>, or <strong>BLOCK</strong> — with the reason,
+            policy matches, risk factors, missing context, and a next step.
+          </p>
+          <div className="rounded-xl border border-white/10 bg-white/[0.02] px-5 py-4 font-mono text-sm text-white/60 tracking-tight mb-4">
+            User request → AI output → proposed_action + policy → Zorelan → ALLOW
+            / REVIEW / BLOCK
+          </div>
+
+          <InfoBox>
+            The structured evaluation path currently uses deterministic policy
+            checks for common action types (refunds, account deletion,
+            subscription changes, CRM updates). Unknown action types fail safe to{" "}
+            <InlineCode>REVIEW</InlineCode>. Model judgement and arbitration can be
+            layered in later for uncertain or high-risk actions.
+          </InfoBox>
+
+          <div className="mt-6 space-y-4">
+            <CodeBlock label="node.js / typescript sdk" code={evaluateSdkExample} />
+            <CodeBlock label="curl · refund → BLOCK" code={evaluateRefundCurl} />
+            <CodeBlock
+              label="json · refund → BLOCK (response)"
+              code={evaluateRefundResponse}
+            />
+            <CodeBlock
+              label="curl · subscription downgrade → ALLOW"
+              code={evaluateDowngradeCurl}
+            />
+            <CodeBlock
+              label="json · downgrade → ALLOW (response)"
+              code={evaluateDowngradeResponse}
+            />
+          </div>
+
+          <p className="text-white/40 text-sm leading-relaxed mt-4">
+            Branch on <InlineCode>verdict</InlineCode> and use{" "}
+            <InlineCode>next_step.action</InlineCode> (<InlineCode>execute</InlineCode>{" "}
+            · <InlineCode>open_review</InlineCode> · <InlineCode>block</InlineCode>)
+            to drive your system. Authenticate with the same Bearer API key as the
+            rest of the API.
+          </p>
+        </section>
 
         {/* ── Where Zorelan sits ────────────────────────────────────────────── */}
         <section className="mb-12">
@@ -814,7 +985,7 @@ Content-Type: application/json`}
 
         {/* ── API Reference ─────────────────────────────────────────────────── */}
         <section id="api-reference" className="mb-12">
-          <SectionLabel>API Reference</SectionLabel>
+          <SectionLabel>Legacy API · prompt verification</SectionLabel>
           <h2 className="text-xl font-semibold mb-4">POST /v1/decision</h2>
           <div className="rounded-2xl border border-white/10 p-5 mb-6">
             <div className="flex items-center gap-3">
@@ -827,9 +998,17 @@ Content-Type: application/json`}
             </div>
           </div>
           <p className="text-white/60 leading-relaxed">
-            Submit a prompt for multi-model verification. Zorelan queries
-            multiple AI providers, compares their responses, and returns a
-            trust-calibrated result your application can act on.
+            <span className="text-white/80 font-medium">
+              Legacy / convenience path.
+            </span>{" "}
+            <InlineCode>/v1/decision</InlineCode> and the SDK&apos;s{" "}
+            <InlineCode>verify(prompt)</InlineCode> submit a prompt for
+            multi-model verification: Zorelan queries multiple AI providers,
+            compares their responses, and returns a trust-calibrated result. This
+            remains supported, but new integrations gating real actions should use{" "}
+            <InlineCode>/v1/evaluate</InlineCode> above. The trust-scoring,
+            disagreement, caching, and field sections that follow document this
+            verification path.
           </p>
         </section>
 

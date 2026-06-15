@@ -14,22 +14,22 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Zorelan — Verify AI before you trust it",
+  title: "Zorelan — Execution decision layer for AI actions",
   description:
-    "Zorelan compares multiple AI models, detects disagreement, and returns a trust-calibrated answer with a trust score, risk level, and recommended action.",
+    "Zorelan is a runtime execution decision layer for AI-driven actions. It evaluates a proposed action against your policy and returns ALLOW, REVIEW, or BLOCK before anything hits your backend.",
   openGraph: {
-    title: "Zorelan — Verify AI before you trust it",
+    title: "Zorelan — Execution decision layer for AI actions",
     description:
-      "Zorelan compares multiple AI models, detects disagreement, and returns a trust-calibrated answer with a trust score, risk level, and recommended action.",
+      "Zorelan is a runtime execution decision layer for AI-driven actions. It evaluates a proposed action against your policy and returns ALLOW, REVIEW, or BLOCK before anything hits your backend.",
     url: "https://zorelan.com",
     siteName: "Zorelan",
     type: "website",
   },
   twitter: {
     card: "summary",
-    title: "Zorelan — Verify AI before you trust it",
+    title: "Zorelan — Execution decision layer for AI actions",
     description:
-      "Zorelan compares multiple AI models, detects disagreement, and returns a trust-calibrated answer with a trust score, risk level, and recommended action.",
+      "Zorelan is a runtime execution decision layer for AI-driven actions. It evaluates a proposed action against your policy and returns ALLOW, REVIEW, or BLOCK before anything hits your backend.",
   },
   metadataBase: new URL("https://zorelan.com"),
 };

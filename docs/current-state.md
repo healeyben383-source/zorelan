@@ -14,8 +14,30 @@ execution.
 
 ## Last updated
 
-2026-06-15 — Claude setup/guardrail pass (operating files added; no app,
-UI, API, model, pricing, Stripe, demo, SDK, or landing changes).
+2026-06-15 — Docs/positioning cleanup pass. Public copy, metadata, READMEs,
+and API docs now lead with the structured execution-gate story (ALLOW /
+REVIEW / BLOCK). No engine, SDK behaviour, Stripe, or pricing changes.
+
+## Structured execution gate (current capability)
+
+- **Canonical demo**: `app/demo/page.tsx` is a structured execution-gate demo
+  (proposed action + visible policy → ALLOW / REVIEW / BLOCK), backed by the
+  unauthenticated internal route `app/api/demo/evaluate/route.ts`.
+- **Public endpoint**: `POST /v1/evaluate` (`app/v1/evaluate/route.ts`) —
+  authenticated (Bearer API key, same key model as `/api/decision`), validates a
+  structured `proposed_action` + `policy` payload and returns the decision-first
+  shape (`verdict`, `reason`, `policy_matches`, `risk_factors`,
+  `missing_context`, `evidence`, `next_step`, `decision_basis`, `confidence`,
+  `usage`).
+- **Shared engine**: `lib/evaluate/*` (`types.ts`, `schema.ts`,
+  `evaluateAction.ts`, `apiKeyAuth.ts`). Deterministic Stage 0 only —
+  `refund_customer`, `delete_account`, `downgrade_subscription` /
+  `change_subscription`, `update_crm_record`; unknown types fail safe to REVIEW.
+  Model judgement (Stage 1) is documented backlog, not built.
+- **SDK**: `@zorelan/sdk` exposes `evaluateAction(payload)` (→ `/v1/evaluate`)
+  alongside the unchanged legacy `verify(prompt)` (→ `/v1/decision`).
+- **Legacy/convenience**: `/v1/decision` + `verify(prompt)` (prompt
+  verification / trust score) remain fully working as the secondary path.
 
 ## Stack
 

@@ -1,8 +1,8 @@
 # @zorelan/sdk
 
-The official JavaScript/TypeScript SDK for [Zorelan](https://zorelan.com) — verify AI before it reaches your users.
+The official JavaScript/TypeScript SDK for [Zorelan](https://zorelan.com) — the runtime execution decision layer for AI-driven actions.
 
-Zorelan compares multiple model outputs and returns a trust-calibrated answer with a trust score, risk level, consensus signal, and recommended action.
+Zorelan evaluates a proposed action against your policy and returns **ALLOW**, **REVIEW**, or **BLOCK** before it reaches your backend. Use `evaluateAction()` to gate real actions. `verify(prompt)` remains available as the legacy prompt-verification path.
 
 ## Installation
 
