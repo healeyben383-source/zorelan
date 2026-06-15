@@ -173,6 +173,62 @@ async function sendApiKeyEmail({
   }
 }
 
+function apiKeyPrefix(apiKey: string): string {
+  return `${apiKey.slice(0, 12)}…`;
+}
+
+/**
+ * Notify the owner of a new paid signup. Best-effort: never throws, never
+ * blocks the webhook, and never includes the full API key (prefix only).
+ */
+async function sendOwnerNotification({
+  customerEmail,
+  plan,
+  customerId,
+  subscriptionId,
+  apiKey,
+  livemode,
+}: {
+  customerEmail: string | null;
+  plan: string;
+  customerId: string;
+  subscriptionId: string | null;
+  apiKey: string;
+  livemode: boolean;
+}) {
+  const ownerEmail = process.env.OWNER_NOTIFICATION_EMAIL;
+  if (!ownerEmail) return; // opt-in only
+  if (!resend) {
+    console.log("[WEBHOOK] RESEND_API_KEY not set, skipping owner notification");
+    return;
+  }
+
+  const when = new Date().toISOString();
+
+  try {
+    await resend.emails.send({
+      from: "Zorelan <onboarding@zorelan.com>",
+      to: ownerEmail,
+      subject: `New Zorelan signup — ${plan} (${livemode ? "live" : "test"})`,
+      html: `
+        <div style="font-family: Arial, sans-serif; line-height: 1.5;">
+          <h2>New paid signup</h2>
+          <p><strong>Customer email:</strong> ${customerEmail ?? "(none provided)"}</p>
+          <p><strong>Plan:</strong> ${plan}</p>
+          <p><strong>Stripe customer:</strong> ${customerId}</p>
+          <p><strong>Subscription:</strong> ${subscriptionId ?? "(none)"}</p>
+          <p><strong>API key:</strong> ${apiKeyPrefix(apiKey)} (prefix only)</p>
+          <p><strong>Environment:</strong> ${livemode ? "live" : "test"}</p>
+          <p><strong>Time:</strong> ${when}</p>
+        </div>
+      `,
+    });
+    console.log(`[WEBHOOK] owner notification sent for ${plan} signup`);
+  } catch (error) {
+    console.error("[WEBHOOK] failed to send owner notification:", error);
+  }
+}
+
 export async function POST(req: NextRequest) {
   const body = await req.text();
   const sig = req.headers.get("stripe-signature");
@@ -213,7 +269,7 @@ export async function POST(req: NextRequest) {
 
       if (existingApiKey) {
         await redis.set(`checkout_session:${sessionId}:apikey`, existingApiKey, {
-          ex: 60 * 60 * 24,
+          ex: 60 * 10, // 10 min: success page reveal window (key also emailed); was 24h
         });
 
         await updateApiKeyByCustomerOrSubscription({
@@ -250,7 +306,7 @@ export async function POST(req: NextRequest) {
       await redis.set(`customer:${customerId}:apikey`, apiKey);
       await redis.set(`subscription:${subscriptionId}:apikey`, apiKey);
       await redis.set(`checkout_session:${sessionId}:apikey`, apiKey, {
-        ex: 60 * 60 * 24,
+        ex: 60 * 10, // 10 min: success page reveal window (key also emailed); was 24h
       });
 
       console.log(`[WEBHOOK] API key created for ${email} on ${plan} plan`);
@@ -263,6 +319,16 @@ export async function POST(req: NextRequest) {
           callsLimit,
         });
       }
+
+      // Best-effort owner notification — must never block or fail the webhook.
+      await sendOwnerNotification({
+        customerEmail: email,
+        plan,
+        customerId,
+        subscriptionId,
+        apiKey,
+        livemode: event.livemode,
+      });
     }
 
     if (event.type === "invoice.payment_failed") {

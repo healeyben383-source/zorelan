@@ -606,6 +606,7 @@ function FeatureCard({
 }
 
 export default function ApiDocsPage() {
+  const supportEmail = process.env.SUPPORT_EMAIL || "support@zorelan.com";
   return (
     <div className="min-h-screen bg-black text-white">
       {/* ── Sticky top nav ──────────────────────────────────────────────────── */}
@@ -977,7 +978,11 @@ Content-Type: application/json`}
           />
           <div className="mt-4 rounded-xl border border-yellow-500/20 bg-yellow-500/5 px-5 py-4 text-sm text-white/60 leading-relaxed">
             ⚠ Keep your API key secret. Do not expose it in client-side code or
-            public repositories. If compromised, contact us to rotate your key.
+            public repositories. If compromised, email{" "}
+            <a href={`mailto:${supportEmail}`} className="underline">
+              {supportEmail}
+            </a>{" "}
+            to rotate your key.
           </div>
         </section>
 
@@ -1669,6 +1674,13 @@ Better answers, honest trust scoring`}
           <div className="rounded-2xl border border-white/10 p-6">
             <PricingButtons />
           </div>
+          <p className="text-white/50 text-sm leading-relaxed mt-4">
+            Questions or need help testing Zorelan in your workflow? Email{" "}
+            <a href={`mailto:${supportEmail}`} className="underline underline-offset-2 text-white/70">
+              {supportEmail}
+            </a>
+            .
+          </p>
         </section>
       </main>
     </div>

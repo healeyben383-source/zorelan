@@ -14,9 +14,33 @@ execution.
 
 ## Last updated
 
-2026-06-15 — Docs/positioning cleanup pass. Public copy, metadata, READMEs,
-and API docs now lead with the structured execution-gate story (ALLOW /
-REVIEW / BLOCK). No engine, SDK behaviour, Stripe, or pricing changes.
+2026-06-15 — Trust/ops cleanup pass (see below). Prior: docs/positioning
+cleanup (public copy, metadata, READMEs, API docs lead with the execution-gate
+story). No engine, SDK behaviour, or pricing changes in either pass.
+
+## Trust / ops (current capability)
+
+- **Owner payment notification**: on `checkout.session.completed` (new key),
+  `app/api/webhook/stripe/route.ts` emails `OWNER_NOTIFICATION_EMAIL` (if set)
+  with customer email, plan, Stripe customer/subscription IDs, API-key prefix
+  (never full key), timestamp, and live/test. Best-effort — never blocks/fails
+  checkout.
+- **Admin customer visibility**: `GET /api/admin/customers` (master-key /
+  `DECISION_API_KEY`) lists sanitized `apikey:*` records (email, plan, status,
+  calls used/limit, created, Stripe IDs, key **prefix only**). Surfaced in
+  `/admin`. Capped at 1000 keys (reports `truncated`).
+- **Support/contact path**: `SUPPORT_EMAIL` (fallback `support@zorelan.com`)
+  shown on landing CTA, API docs (access + key-rotation note), privacy page,
+  and checkout success banner; README has a Support section.
+- **Checkout key reveal hardening**: `checkout_session:<id>:apikey` TTL cut from
+  24h → 10min (`app/api/webhook/stripe/route.ts`). Reveal is still re-fetchable
+  within that window (not strictly one-time) — see risks.
+- **Legacy routes marked**: `app/api/demo/generate`, `app/api/demo/verify`
+  (old SEND/regex demo), `app/api/preframe`, and `app/api/run` (benchmark-only)
+  carry DEPRECATED/LEGACY header comments; none are referenced by app UI.
+- **Error handling**: `/api/admin/customers` builds Redis lazily and returns
+  JSON (`redis_unavailable` 503 / `unauthorized` 401) instead of throwing at
+  import; `/admin` shows the returned error text.
 
 ## Structured execution gate (current capability)
 

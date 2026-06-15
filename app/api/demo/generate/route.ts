@@ -1,3 +1,11 @@
+/**
+ * DEPRECATED / LEGACY — old scripted support-reply demo ("generate" step).
+ *
+ * Superseded by the canonical structured execution-gate demo
+ * (app/demo/page.tsx → /api/demo/evaluate). No app UI references this route.
+ * Kept temporarily in case the separate zorelan-support-verification-demo app
+ * still calls it; safe to remove once that app is retired. Do not build on it.
+ */
 import OpenAI from "openai";
 
 export const runtime = "nodejs";

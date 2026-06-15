@@ -2434,6 +2434,17 @@ if (decision.verdict === "ALLOW") {
                 Gate Your AI Pipeline
               </a>
             </div>
+
+            <p className="text-xs opacity-50 leading-relaxed">
+              Questions or need help testing Zorelan in your workflow? Email{" "}
+              <a
+                href="mailto:support@zorelan.com"
+                className="underline underline-offset-2 hover:opacity-100"
+              >
+                support@zorelan.com
+              </a>
+              .
+            </p>
           </section>
         )}
       </div>

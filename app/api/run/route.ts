@@ -1,3 +1,9 @@
+/**
+ * LEGACY — benchmark-only decision endpoint. Referenced only by
+ * benchmark/run.mjs, not by the app UI or SDK. The production decision path is
+ * /api/decision (+ /v1/decision); the structured gate is /v1/evaluate. Kept for
+ * benchmarking; do not extend for product use.
+ */
 import { NextRequest, NextResponse } from "next/server";
 import OpenAI from "openai";
 import Anthropic from "@anthropic-ai/sdk";

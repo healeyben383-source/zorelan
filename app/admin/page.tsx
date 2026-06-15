@@ -21,6 +21,19 @@ type Analytics = {
   confirmed: number;
 };
 
+type CustomerRecord = {
+  api_key_prefix: string;
+  email: string | null;
+  plan: string | null;
+  status: string;
+  calls_used: number | null;
+  calls_limit: number | null;
+  calls_remaining: number | null;
+  created_at: number | null;
+  customer_id: string | null;
+  subscription_id: string | null;
+};
+
 const ISSUE_LABELS: Record<string, string> = {
   incorrect_verdict: "Incorrect verdict",
   wrong_agreement_level: "Wrong agreement level",
@@ -90,6 +103,9 @@ export default function AdminPage() {
   const [error, setError] = useState<string | null>(null);
   const [authenticated, setAuthenticated] = useState(false);
   const [expanded, setExpanded] = useState<string | null>(null);
+  const [customers, setCustomers] = useState<CustomerRecord[] | null>(null);
+  const [customersTruncated, setCustomersTruncated] = useState(false);
+  const [customersError, setCustomersError] = useState<string | null>(null);
 
   async function loadFeedback() {
     setLoading(true);
@@ -137,6 +153,27 @@ export default function AdminPage() {
         }
       } catch {
         // Analytics load failure is non-fatal
+      }
+
+      // Load customers / issued API keys (sanitized — prefix only)
+      setCustomersError(null);
+      try {
+        const customersRes = await fetch("/api/admin/customers", {
+          headers: { Authorization: `Bearer ${apiKey}` },
+        });
+        const customersData = await customersRes.json();
+        if (customersData.ok) {
+          setCustomers(customersData.customers);
+          setCustomersTruncated(!!customersData.truncated);
+        } else {
+          setCustomersError(
+            customersData.error === "redis_unavailable"
+              ? "Customer store unavailable (Redis not configured)."
+              : "Failed to load customers."
+          );
+        }
+      } catch {
+        setCustomersError("Failed to load customers.");
       }
 
       setAuthenticated(true);
@@ -213,6 +250,9 @@ export default function AdminPage() {
             setFeedback([]);
             setAnalytics(null);
             setProviderAnalytics(null);
+            setCustomers(null);
+            setCustomersTruncated(false);
+            setCustomersError(null);
             setApiKey("");
           }}
           className="text-sm text-white/30 hover:text-white/60 transition-colors"
@@ -346,6 +386,77 @@ export default function AdminPage() {
           </div>
         </div>
       )}
+
+      {/* Customers / API keys */}
+      <div className="rounded-2xl border border-white/10 p-5 mb-8 space-y-4">
+        <div className="flex items-center justify-between">
+          <div className="text-xs uppercase tracking-widest text-white/30">
+            Customers / API keys
+          </div>
+          {customers && (
+            <div className="text-xs text-white/30">
+              {customers.length} {customers.length === 1 ? "key" : "keys"}
+              {customersTruncated ? " (truncated)" : ""}
+            </div>
+          )}
+        </div>
+
+        {customersError ? (
+          <p className="text-sm text-yellow-400/80">{customersError}</p>
+        ) : !customers || customers.length === 0 ? (
+          <p className="text-white/30 text-sm">No API keys issued yet.</p>
+        ) : (
+          <div className="overflow-x-auto rounded-xl border border-white/10">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="border-b border-white/10 bg-white/[0.03]">
+                  <th className="text-left px-4 py-2 text-white/30 uppercase tracking-widest">Email</th>
+                  <th className="text-left px-4 py-2 text-white/30 uppercase tracking-widest">Plan</th>
+                  <th className="text-left px-4 py-2 text-white/30 uppercase tracking-widest">Status</th>
+                  <th className="text-left px-4 py-2 text-white/30 uppercase tracking-widest">Used</th>
+                  <th className="text-left px-4 py-2 text-white/30 uppercase tracking-widest">Limit</th>
+                  <th className="text-left px-4 py-2 text-white/30 uppercase tracking-widest">Created</th>
+                  <th className="text-left px-4 py-2 text-white/30 uppercase tracking-widest">Customer</th>
+                  <th className="text-left px-4 py-2 text-white/30 uppercase tracking-widest">Key</th>
+                </tr>
+              </thead>
+              <tbody>
+                {customers.map((c, i) => (
+                  <tr
+                    key={`${c.api_key_prefix}-${c.customer_id ?? i}`}
+                    className="border-b border-white/10 last:border-0"
+                  >
+                    <td className="px-4 py-3 text-white/70">{c.email ?? "—"}</td>
+                    <td className="px-4 py-3 text-white/60 capitalize">{c.plan ?? "—"}</td>
+                    <td className="px-4 py-3">
+                      <span
+                        className={
+                          c.status === "active"
+                            ? "text-green-400"
+                            : "text-yellow-400"
+                        }
+                      >
+                        {c.status}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-white/60">{c.calls_used ?? "—"}</td>
+                    <td className="px-4 py-3 text-white/60">{c.calls_limit ?? "—"}</td>
+                    <td className="px-4 py-3 text-white/50">
+                      {c.created_at ? formatDate(c.created_at) : "—"}
+                    </td>
+                    <td className="px-4 py-3 text-white/40 font-mono">
+                      {c.customer_id ?? "—"}
+                    </td>
+                    <td className="px-4 py-3 text-white/40 font-mono">
+                      {c.api_key_prefix}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
 
       {/* Feedback */}
       <div className="flex items-center justify-between mb-6">

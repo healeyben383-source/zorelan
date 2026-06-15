@@ -178,6 +178,11 @@ Verified results are cached for 6 hours. A cached response is not an unverified 
 First request (live verification): ~12–20s
 Repeat request within 6 hours: ~1–2s
 
+## Support
+
+Questions or need help testing Zorelan in your workflow? Email
+[support@zorelan.com](mailto:support@zorelan.com).
+
 ## Links
 
 - [Live product](https://zorelan.com)

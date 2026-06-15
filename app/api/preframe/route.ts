@@ -1,4 +1,8 @@
 // /app/api/preframe/route.ts
+//
+// DEPRECATED / LEGACY — leftover from the pre-Zorelan "preframe" product. Not
+// referenced by any current app UI or SDK. Retained only to avoid breaking any
+// external caller; safe to remove during a dedicated cleanup. Do not build on it.
 import { NextResponse } from "next/server";
 import OpenAI from "openai";
 

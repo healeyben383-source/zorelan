@@ -179,6 +179,14 @@ export default function CheckoutStatusBanner() {
               </pre>
             </div>
           )}
+
+          <p className="text-xs text-white/50 leading-relaxed">
+            Questions or need help getting started? Email{" "}
+            <a href="mailto:support@zorelan.com" className="underline">
+              support@zorelan.com
+            </a>
+            .
+          </p>
         </div>
       )}
 

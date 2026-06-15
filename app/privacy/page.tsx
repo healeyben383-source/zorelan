@@ -1,4 +1,5 @@
 export default function PrivacyPolicy() {
+  const supportEmail = process.env.SUPPORT_EMAIL || "support@zorelan.com";
   return (
     <main className="min-h-screen px-4 py-16">
       <div className="mx-auto w-full max-w-2xl space-y-8">
@@ -72,7 +73,11 @@ export default function PrivacyPolicy() {
         <section className="space-y-3">
           <h2 className="text-base font-semibold">Contact</h2>
           <p className="text-sm leading-relaxed opacity-80">
-            If you have any questions about this privacy policy you can reach us via the Zorelan website.
+            Questions about this privacy policy, or need help testing Zorelan in your workflow? Email{" "}
+            <a href={`mailto:${supportEmail}`} className="underline underline-offset-2">
+              {supportEmail}
+            </a>
+            .
           </p>
         </section>
 

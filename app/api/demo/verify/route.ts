@@ -1,3 +1,12 @@
+/**
+ * DEPRECATED / LEGACY — old scripted support-reply demo ("verify" step).
+ *
+ * This is the regex/keyword-driven SEND/REVIEW/BLOCK path the audit flagged.
+ * Superseded by the deterministic structured engine (lib/evaluate/* →
+ * /api/demo/evaluate and /v1/evaluate). No app UI references this route. Kept
+ * temporarily in case the separate zorelan-support-verification-demo app still
+ * calls it; safe to remove once that app is retired. Do not build on it.
+ */
 export const runtime = "nodejs";
 
 type Risk = "low" | "moderate" | "high";
