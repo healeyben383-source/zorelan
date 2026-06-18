@@ -14,7 +14,20 @@ execution.
 
 ## Last updated
 
-2026-06-15 — Final docs polish (this entry). API-docs Quickstart now leads with
+2026-06-15 — Security/cost-abuse fix pass (this entry). Closed unauthenticated
+paid-call endpoints and a fail-open cron guard:
+- **`/api/sdk-test` removed** — leftover smoke test that ran a live `verify()`
+  (paid AI calls) on every unauthenticated GET via the master key. Deleted.
+- **`/api/run` protected** — now requires `Authorization: Bearer DECISION_API_KEY`;
+  missing/wrong header → 401, missing key server-side → 500 (generic, never
+  reveals whether the key is configured). Behaviour unchanged after auth.
+  `benchmark/run.mjs` updated to send the header (reads `DECISION_API_KEY`/`API_KEY`
+  from env).
+- **`/api/cron/reset-usage` fails closed** — if `CRON_SECRET` is unset it now
+  returns 500 and does NOT reset usage (was fail-open). Wrong/missing Bearer → 401.
+No product, positioning, Stripe, admin-UI, or dependency changes in this pass.
+
+2026-06-15 — Final docs polish. API-docs Quickstart now leads with
 `/v1/evaluate` + `evaluateAction()`; legacy `verify(prompt)` curl/SDK/Python
 examples moved under an explicit "Legacy: prompt verification" block; the trust
 scoring / disagreement / arbitration sections carry a legacy banner clarifying

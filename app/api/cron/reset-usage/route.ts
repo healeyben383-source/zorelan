@@ -49,10 +49,14 @@ function parseApiKeyRecord(input: unknown): ApiKeyRecord | null {
 
 export async function GET(req: NextRequest) {
   try {
-    const authHeader = req.headers.get("authorization");
-    const expected = cronSecret ? `Bearer ${cronSecret}` : null;
+    // Fail closed: if the secret is not configured server-side, do not reset.
+    if (!cronSecret) {
+      console.error("[RESET_USAGE_CRON] CRON_SECRET not configured");
+      return NextResponse.json({ ok: false, error: "internal_error" }, { status: 500 });
+    }
 
-    if (expected && authHeader !== expected) {
+    const authHeader = req.headers.get("authorization");
+    if (authHeader !== `Bearer ${cronSecret}`) {
       return NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401 });
     }
 

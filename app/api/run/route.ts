@@ -770,6 +770,23 @@ async function buildDecisionVerification(input: {
 
 export async function POST(req: NextRequest) {
   try {
+    // Auth: benchmark-only endpoint. Require the master key as a Bearer token.
+    // Generic responses so we never reveal whether the key is configured.
+    const masterKey = process.env.DECISION_API_KEY;
+    if (!masterKey) {
+      console.error("[/api/run] DECISION_API_KEY not configured");
+      return NextResponse.json(
+        { ok: false, error: "internal_error" },
+        { status: 500 }
+      );
+    }
+    if (req.headers.get("authorization") !== `Bearer ${masterKey}`) {
+      return NextResponse.json(
+        { ok: false, error: "unauthorized" },
+        { status: 401 }
+      );
+    }
+
     const body: RunRequest = await req.json();
 
     if (!body.prompt || typeof body.prompt !== "string") {

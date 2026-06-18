@@ -8,6 +8,16 @@ const BASE_URL = "https://zorelan.com";
 const DELAY_MS = 4000;
 const OUTPUT_FILE = path.join(__dirname, "results.json");
 
+// /api/run now requires the master key as a Bearer token. Provide it via env:
+//   DECISION_API_KEY=... node benchmark/run.mjs
+const API_KEY = process.env.DECISION_API_KEY || process.env.API_KEY || "";
+if (!API_KEY) {
+  console.error(
+    "Missing DECISION_API_KEY (or API_KEY) env var — /api/run requires it."
+  );
+  process.exit(1);
+}
+
 const QUESTIONS = [
   // Factual — expect HIGH agreement, trust score 75+
   { id: 1, prompt: "What is the capital of Australia?", category: "factual", expectedAgreement: "high" },
@@ -138,7 +148,10 @@ async function runQuestion(question, index, total) {
   try {
     const response = await fetch(`${BASE_URL}/api/run`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${API_KEY}`,
+      },
       body: JSON.stringify({ prompt: question.prompt }),
     });
 
