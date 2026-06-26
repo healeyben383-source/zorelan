@@ -137,6 +137,35 @@ export type UsageMeta = {
     callsRemaining: number;
     status: "active" | "inactive";
 };
+/**
+ * Decision Record V1 (schema `dr-v1`) — a structured, identified projection of a
+ * single decision, returned by /v1/evaluate for inspection/audit/replay.
+ * Additive: the flat fields on EvaluateActionResponse remain the source of truth.
+ */
+export type DecisionRecord = {
+    schema_version: "dr-v1";
+    decision_id: string;
+    evaluated_at: string;
+    latency_ms: number;
+    final_verdict: EvaluationVerdict;
+    action_type: string;
+    normalized_proposed_action: ProposedAction;
+    policy_snapshot: ActionPolicy;
+    reason: string;
+    policy_matches: PolicyMatch[];
+    matched_rules: string[];
+    violated_rules: string[];
+    missing_context: MissingContext[];
+    risk_factors: RiskFactor[];
+    decision_basis: DecisionBasis;
+    confidence: {
+        score: number;
+        label: "low" | "moderate" | "high";
+    };
+    next_step: NextStep;
+    recommended_next_step: string;
+    failure_mode: string | null;
+};
 export type EvaluateActionResponse = {
     ok: true;
     verdict: EvaluationVerdict;
@@ -155,6 +184,9 @@ export type EvaluateActionResponse = {
     fell_back: boolean;
     cached: boolean;
     usage?: UsageMeta | null;
+    /** Decision Record V1 (additive). Present on /v1/evaluate responses. */
+    decision_id?: string;
+    decision_record?: DecisionRecord;
 };
 export type ZorelanClientOptions = {
     baseUrl?: string;

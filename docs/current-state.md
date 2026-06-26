@@ -14,7 +14,22 @@ execution.
 
 ## Last updated
 
-2026-06-15 — Security/cost-abuse fix pass (this entry). Closed unauthenticated
+2026-06-15 — Decision Record V1 (Phase 1). `/v1/evaluate` now returns an additive
+`decision_id` and a structured `decision_record` (schema `dr-v1`) alongside the
+unchanged flat fields. The record = provenance (`decision_id`, `evaluated_at`,
+`latency_ms`, `failure_mode`) + `action_type` + `normalized_proposed_action` +
+`policy_snapshot` + matched/violated rules + missing context + risk factors +
+verdict + recommended next step. Built at the route layer (`lib/evaluate/
+decisionRecord.ts`) so the pure engine stays deterministic/replayable and the demo
+route is unaffected. **Return-only — nothing is stored or logged** (privacy
+safeguard for this phase). SDK types extended (`DecisionRecord`, optional
+`decision_id`/`decision_record`); API-docs refund example + note updated; offline
+test at `scripts/tests/test-decision-record.ts`. No storage, DB, admin UI, or
+breaking changes. Files: `lib/evaluate/types.ts`, `lib/evaluate/decisionRecord.ts`,
+`app/v1/evaluate/route.ts`, `sdk/src/index.ts` (+ rebuilt `dist`),
+`app/api-docs/page.tsx`. Brief: `docs/decision-record-v1-brief.md`.
+
+2026-06-15 — Security/cost-abuse fix pass. Closed unauthenticated
 paid-call endpoints and a fail-open cron guard:
 - **`/api/sdk-test` removed** — leftover smoke test that ran a live `verify()`
   (paid AI calls) on every unauthenticated GET via the master key. Deleted.

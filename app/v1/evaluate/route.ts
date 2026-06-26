@@ -23,6 +23,10 @@ import { NextResponse } from "next/server";
 import { authorizeRequest, accountUsage } from "@/lib/evaluate/apiKeyAuth";
 import { EvaluateRequestSchema } from "@/lib/evaluate/schema";
 import { evaluateActionDeterministic } from "@/lib/evaluate/evaluateAction";
+import {
+  buildDecisionRecord,
+  generateDecisionId,
+} from "@/lib/evaluate/decisionRecord";
 import type { EvaluateRequest } from "@/lib/evaluate/types";
 
 export const runtime = "nodejs";
@@ -76,14 +80,32 @@ export async function POST(req: Request) {
   }
 
   // ── Evaluate (deterministic Stage 0) ────────────────────────────────────────
+  // Decision Record V1 (additive, return-only): identify, timestamp, and project
+  // the decision. The flat fields stay the source of truth; the record is built
+  // here (not in the pure engine) so the engine remains deterministic/replayable.
+  const decisionId = generateDecisionId();
+  const startedAt = Date.now();
   try {
     const result = evaluateActionDeterministic(parsed.data as EvaluateRequest);
-    return NextResponse.json({ ...result, usage });
+    const decisionRecord = buildDecisionRecord({
+      request: parsed.data as EvaluateRequest,
+      response: result,
+      decisionId,
+      evaluatedAt: new Date().toISOString(),
+      latencyMs: Date.now() - startedAt,
+    });
+    return NextResponse.json({
+      ...result,
+      usage,
+      decision_id: decisionId,
+      decision_record: decisionRecord,
+    });
   } catch (err) {
     console.error("[/v1/evaluate] error:", err);
-    // Fail closed with a clear error — never fabricate a verdict.
+    // Fail closed with a clear error — never fabricate a verdict. Surface the
+    // decision_id + failure_mode for traceability (no verdict / record on error).
     return NextResponse.json(
-      { ok: false, error: "internal_error" },
+      { ok: false, error: "internal_error", decision_id: decisionId, failure_mode: "internal_error" },
       { status: 500 }
     );
   }

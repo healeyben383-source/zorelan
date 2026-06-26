@@ -132,7 +132,34 @@ const evaluateRefundResponse = `{
     "recommendation": "Do not issue the refund. Request delivery confirmation, then re-evaluate."
   },
   "decision_basis": "deterministic",
-  "confidence": { "score": 94, "label": "high" }
+  "confidence": { "score": 94, "label": "high" },
+  "decision_id": "dec_4f9c…",
+  "decision_record": {
+    "schema_version": "dr-v1",
+    "decision_id": "dec_4f9c…",
+    "evaluated_at": "2026-06-15T00:00:00.000Z",
+    "latency_ms": 3,
+    "final_verdict": "BLOCK",
+    "action_type": "refund_customer",
+    "normalized_proposed_action": {
+      "type": "refund_customer",
+      "parameters": { "amount": 180, "currency": "AUD", "customer_id": "cus_123" },
+      "reversible": false,
+      "context": { "order_status": "delivery_unconfirmed", "identity_verified": true }
+    },
+    "policy_snapshot": {
+      "name": "Refund policy",
+      "rules": [
+        "Refunds above $100 require delivery confirmation.",
+        "Refunds must not be issued when delivery status is unresolved."
+      ]
+    },
+    "matched_rules": [],
+    "violated_rules": ["Refunds above $100 require delivery confirmation."],
+    "decision_basis": "deterministic",
+    "recommended_next_step": "Do not issue the refund. Request delivery confirmation, then re-evaluate.",
+    "failure_mode": null
+  }
 }`;
 
 const evaluateDowngradeCurl = `curl -X POST https://zorelan.com/v1/evaluate \\
@@ -733,6 +760,20 @@ if (decision.verdict === "ALLOW") {
             to drive your system. Authenticate with the same Bearer API key as the
             rest of the API.
           </p>
+
+          <div className="mt-4">
+            <InfoBox>
+              Every response includes a <InlineCode>decision_id</InlineCode> and a
+              structured <InlineCode>decision_record</InlineCode> (schema{" "}
+              <InlineCode>dr-v1</InlineCode>) — a self-describing, identified
+              artifact of the decision (action evaluated, policy snapshot, matched
+              vs violated rules, missing context, verdict, timing). It is{" "}
+              <span className="text-white/70">return-only</span> today: Zorelan
+              does not store it, so persist it on your side if you need an audit
+              trail. The flat top-level fields remain unchanged for backward
+              compatibility.
+            </InfoBox>
+          </div>
         </section>
 
         {/* ── Where Zorelan sits ────────────────────────────────────────────── */}

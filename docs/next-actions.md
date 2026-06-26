@@ -21,9 +21,6 @@ bounded action.
 
 Worth doing, but not the immediate next step.
 
-- Decision Record V1 (validated next feature, per Michael/m24927605): build Phase 1
-  only — return a structured `decision_record` + `decision_id` from `/v1/evaluate`,
-  additive, no storage. Design brief: `docs/decision-record-v1-brief.md`.
 - Harden checkout key reveal to one-time (currently re-fetchable by `session_id`
   for ~10 min).
 - Convert Vercel "Needs Attention" env vars from viewable to Sensitive secrets.
@@ -39,12 +36,18 @@ is waiting on.
 
 - Stage 1 model judgement (model-based evaluation beyond deterministic checks):
   intentionally deferred until validation shows real demand. Do not build yet.
+- Decision Record Phase 2 (opt-in storage + lookup-by-id) and Phase 3 (admin
+  lookup / replay fixtures): deferred until a customer asks Zorelan to store
+  records. Keep Phase 1 return-only. Brief: `docs/decision-record-v1-brief.md`.
 
 ## Done recently
 
 Newest first. Trim to the last five. Pair with `current-state.md` for the live
 snapshot.
 
+- Decision Record V1 (Phase 1): `/v1/evaluate` now returns `decision_id` +
+  structured `decision_record` (schema `dr-v1`), additive/return-only; SDK types,
+  API-docs example, and an offline test added.
 - Security/cost-abuse fix pass: removed `/api/sdk-test`, added Bearer auth to
   `/api/run`, made `/api/cron/reset-usage` fail closed.
 - Final docs polish: API docs lead with `/v1/evaluate` + `evaluateAction`; legacy
