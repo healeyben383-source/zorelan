@@ -21,6 +21,9 @@ bounded action.
 
 Worth doing, but not the immediate next step.
 
+- Decision Record V1 (validated next feature, per Michael/m24927605): build Phase 1
+  only — return a structured `decision_record` + `decision_id` from `/v1/evaluate`,
+  additive, no storage. Design brief: `docs/decision-record-v1-brief.md`.
 - Harden checkout key reveal to one-time (currently re-fetchable by `session_id`
   for ~10 min).
 - Convert Vercel "Needs Attention" env vars from viewable to Sensitive secrets.
