@@ -723,9 +723,11 @@ if (decision.verdict === "ALLOW") {
             <strong>REVIEW</strong>, or <strong>BLOCK</strong> — with the reason,
             policy matches, risk factors, missing context, and a next step.
           </p>
-          <div className="rounded-xl border border-white/10 bg-white/[0.02] px-5 py-4 font-mono text-sm text-white/60 tracking-tight mb-4">
-            User request → AI output → proposed_action + policy → Zorelan → ALLOW
-            / REVIEW / BLOCK
+          <div className="rounded-xl border border-white/10 bg-white/[0.02] px-5 py-4 font-mono text-sm text-white/60 tracking-tight mb-4 overflow-x-auto">
+            <span className="whitespace-nowrap">
+              User request → AI output → proposed_action + policy → Zorelan →
+              ALLOW / REVIEW / BLOCK
+            </span>
           </div>
 
           <InfoBox>
@@ -736,18 +738,43 @@ if (decision.verdict === "ALLOW") {
             layered in later for uncertain or high-risk actions.
           </InfoBox>
 
-          <div className="mt-4 rounded-xl border border-yellow-500/20 bg-yellow-500/5 px-5 py-4 text-sm text-white/60 leading-relaxed">
-            <span className="text-white/80">Request shape.</span> Send{" "}
-            <InlineCode>policy</InlineCode> as{" "}
-            <InlineCode>{`{ name, rules: string[] }`}</InlineCode> (not{" "}
-            <InlineCode>policy_context</InlineCode>). Put action details under{" "}
-            <InlineCode>proposed_action.parameters</InlineCode> and{" "}
-            <InlineCode>proposed_action.context</InlineCode> —
-            e.g. <InlineCode>{`{ type: "refund_customer", parameters: { amount, currency, reason } }`}</InlineCode>,
-            not flat <InlineCode>{`{ type: "refund_customer", amount, ... }`}</InlineCode>.
-            Unknown top-level keys on <InlineCode>proposed_action</InlineCode> are
-            rejected with a <InlineCode>validation_failed</InlineCode> error rather
-            than silently dropped.
+          <div className="mt-4 rounded-xl border border-yellow-500/20 bg-yellow-500/5 px-5 py-4 text-sm text-white/60 leading-relaxed space-y-3">
+            <p className="text-white/80 font-medium">Request shape</p>
+            <ul className="space-y-1.5 list-disc pl-5">
+              <li>
+                Send <InlineCode>policy</InlineCode> as{" "}
+                <InlineCode>{`{ name, rules: string[] }`}</InlineCode> — not{" "}
+                <InlineCode>policy_context</InlineCode>.
+              </li>
+              <li>
+                Put action details under{" "}
+                <InlineCode>proposed_action.parameters</InlineCode> and{" "}
+                <InlineCode>proposed_action.context</InlineCode>.
+              </li>
+              <li>
+                Unknown top-level keys on{" "}
+                <InlineCode>proposed_action</InlineCode> are rejected with a{" "}
+                <InlineCode>validation_failed</InlineCode> error — not silently
+                dropped.
+              </li>
+            </ul>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <CodeBlock
+                label="good"
+                code={`{
+  "type": "refund_customer",
+  "parameters": { "amount": …, "currency": …, "reason": … }
+}`}
+              />
+              <CodeBlock
+                label="bad · rejected"
+                code={`{
+  "type": "refund_customer",
+  "amount": …,
+  ...
+}`}
+              />
+            </div>
           </div>
 
           <div className="mt-6 space-y-4">
