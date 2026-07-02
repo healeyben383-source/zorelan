@@ -14,6 +14,19 @@ execution.
 
 ## Last updated
 
+2026-06-15 — Decision Record V1.1 hardening. Made `proposed_action` schema
+`.strict()` (`lib/evaluate/schema.ts`): unknown top-level keys are now rejected
+with `validation_failed` instead of being silently stripped — so a flat payload
+like `{ type, amount, ... }` fails clearly rather than producing an empty
+`normalized_proposed_action`. Canonical shape reaffirmed: `policy` = `{ name,
+rules: string[] }` (not `policy_context`); action details go under
+`proposed_action.parameters` / `.context`. Added an API-docs "Request shape" note;
+extended the offline test (strict-rejection + parameter-preservation +
+canonical-accept) and a documented non-secret live-smoke snippet. Decision Record
+remains additive, backward-compatible, and **return-only** (no storage/DB/logging).
+Files: `lib/evaluate/schema.ts`, `app/api-docs/page.tsx`,
+`scripts/tests/test-decision-record.ts`.
+
 2026-06-15 — Decision Record V1 (Phase 1). `/v1/evaluate` now returns an additive
 `decision_id` and a structured `decision_record` (schema `dr-v1`) alongside the
 unchanged flat fields. The record = provenance (`decision_id`, `evaluated_at`,

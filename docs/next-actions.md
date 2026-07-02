@@ -45,6 +45,9 @@ is waiting on.
 Newest first. Trim to the last five. Pair with `current-state.md` for the live
 snapshot.
 
+- Decision Record V1.1 hardening: `proposed_action` schema now `.strict()`
+  (unknown flat keys rejected, not silently dropped); API-docs "Request shape"
+  note; test extended (strict-reject + parameter-preservation) + live-smoke snippet.
 - Decision Record V1 (Phase 1): `/v1/evaluate` now returns `decision_id` +
   structured `decision_record` (schema `dr-v1`), additive/return-only; SDK types,
   API-docs example, and an offline test added.

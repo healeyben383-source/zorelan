@@ -736,6 +736,20 @@ if (decision.verdict === "ALLOW") {
             layered in later for uncertain or high-risk actions.
           </InfoBox>
 
+          <div className="mt-4 rounded-xl border border-yellow-500/20 bg-yellow-500/5 px-5 py-4 text-sm text-white/60 leading-relaxed">
+            <span className="text-white/80">Request shape.</span> Send{" "}
+            <InlineCode>policy</InlineCode> as{" "}
+            <InlineCode>{`{ name, rules: string[] }`}</InlineCode> (not{" "}
+            <InlineCode>policy_context</InlineCode>). Put action details under{" "}
+            <InlineCode>proposed_action.parameters</InlineCode> and{" "}
+            <InlineCode>proposed_action.context</InlineCode> —
+            e.g. <InlineCode>{`{ type: "refund_customer", parameters: { amount, currency, reason } }`}</InlineCode>,
+            not flat <InlineCode>{`{ type: "refund_customer", amount, ... }`}</InlineCode>.
+            Unknown top-level keys on <InlineCode>proposed_action</InlineCode> are
+            rejected with a <InlineCode>validation_failed</InlineCode> error rather
+            than silently dropped.
+          </div>
+
           <div className="mt-6 space-y-4">
             <CodeBlock label="node.js / typescript sdk" code={evaluateSdkExample} />
             <CodeBlock label="curl · refund → BLOCK" code={evaluateRefundCurl} />

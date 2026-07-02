@@ -10,12 +10,19 @@ import { z } from "zod";
 
 const MAX_TEXT = 10_000;
 
-export const ProposedActionSchema = z.object({
-  type: z.string().min(1).max(200),
-  parameters: z.record(z.string(), z.unknown()).optional(),
-  reversible: z.boolean().optional(),
-  context: z.record(z.string(), z.unknown()).optional(),
-});
+// `.strict()` so unknown top-level keys on proposed_action are REJECTED with a
+// clear validation error instead of being silently stripped. Action details must
+// go under `parameters` / `context` — e.g. `{ type, parameters: { amount, ... } }`,
+// not flat `{ type, amount, ... }`. This makes the canonical shape hard to misuse
+// (a flat payload previously produced an empty `normalized_proposed_action`).
+export const ProposedActionSchema = z
+  .object({
+    type: z.string().min(1).max(200),
+    parameters: z.record(z.string(), z.unknown()).optional(),
+    reversible: z.boolean().optional(),
+    context: z.record(z.string(), z.unknown()).optional(),
+  })
+  .strict();
 
 export const PolicySchema = z.object({
   name: z.string().min(1).max(500),
