@@ -723,11 +723,23 @@ if (decision.verdict === "ALLOW") {
             <strong>REVIEW</strong>, or <strong>BLOCK</strong> — with the reason,
             policy matches, risk factors, missing context, and a next step.
           </p>
-          <div className="rounded-xl border border-white/10 bg-white/[0.02] px-5 py-4 font-mono text-sm text-white/60 tracking-tight mb-4 overflow-x-auto">
-            <span className="whitespace-nowrap">
-              User request → AI output → proposed_action + policy → Zorelan →
-              ALLOW / REVIEW / BLOCK
-            </span>
+          <div className="rounded-xl border border-white/10 bg-white/[0.02] px-5 py-4 mb-4">
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-2 font-mono text-sm text-white/60">
+              {[
+                "User request",
+                "AI output",
+                "proposed_action + policy",
+                "Zorelan",
+                "ALLOW / REVIEW / BLOCK",
+              ].map((step, i) => (
+                <span key={step} className="flex items-center gap-x-2">
+                  {i > 0 && <span className="text-white/30">→</span>}
+                  <span className="whitespace-nowrap rounded-md border border-white/10 bg-white/[0.03] px-2 py-1">
+                    {step}
+                  </span>
+                </span>
+              ))}
+            </div>
           </div>
 
           <InfoBox>
