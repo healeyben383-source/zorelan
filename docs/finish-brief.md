@@ -45,11 +45,15 @@ Field list mirrors `D:\dev\prompt-library\finish-profiles\README.md`.
 - **Facts that must not be invented** — claims, numbers, names that must stay
   truthful:
   - The engine is **deterministic Stage 0** today; model judgement is NOT built.
-  - Supported action types: `refund_customer`, `delete_account`,
+  - Recognised action types: `refund_customer`, `delete_account`,
     `downgrade_subscription`/`change_subscription`, `update_crm_record`;
     unknown types → REVIEW.
-  - Example truths: refund $180 with `delivery_unconfirmed` → **BLOCK**;
-    self-serve plan downgrade → **ALLOW**.
+  - **Only `refund_customer` performs deterministic enforcement** (typed
+    `policy.controls.refund`). `delete_account` → BLOCK/REVIEW (never ALLOW);
+    subscription changes and `update_crm_record` → REVIEW; unknown → REVIEW.
+  - Example truths: refund $180 with `delivery_unconfirmed` and
+    `auto_allow_limit` 100 → **BLOCK**; a subscription change → **REVIEW**;
+    account deletion is never auto-ALLOWed.
   - `/v1/evaluate` (+ SDK `evaluateAction`) is the flagship; `/v1/decision`
     (+ SDK `verify`) is legacy/convenience.
   - Auth and pricing were not changed in recent work.

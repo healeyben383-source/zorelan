@@ -70,19 +70,10 @@ function scoreToConfidence(score: number): {
   return { score, label: confidenceLabel(score) };
 }
 
-/**
- * Find the policy rule that best matches a set of keywords, so a determination
- * can be *labelled* with the customer's own rule text. This only affects which
- * string is displayed — never the verdict, which is computed from structured
- * fields above.
- */
-function ruleMatching(rules: string[], keywords: string[]): string | undefined {
-  const lowerKeywords = keywords.map((k) => k.toLowerCase());
-  return rules.find((rule) => {
-    const r = rule.toLowerCase();
-    return lowerKeywords.some((k) => r.includes(k));
-  });
-}
+// Note: free-text policy.rules are NEVER matched to a verdict. Only the refund
+// evaluator enforces (via typed policy.controls.refund). Every other evaluator
+// leaves policy_matches empty and routes to REVIEW/BLOCK — the supplied rules
+// survive only in the Decision Record's policy_snapshot as human context.
 
 // ── Per-action evaluators ───────────────────────────────────────────────────────
 
@@ -354,31 +345,25 @@ function evaluateRefund(req: EvaluateRequest): EvaluateResponse {
   });
 }
 
+/**
+ * Account deletion — destructive, never auto-ALLOW. The caller-supplied
+ * `reversible` field is deliberately IGNORED (it cannot be trusted to unlock a
+ * destructive action). Only two outcomes:
+ *   identity_verified !== true → BLOCK
+ *   identity_verified === true → REVIEW (human confirmation still required)
+ * policy_matches stays empty — free-text rules are never presented as enforced.
+ */
 function evaluateAccountDeletion(req: EvaluateRequest): EvaluateResponse {
   const ctx = req.proposed_action.context ?? {};
-  const rules = req.policy.rules ?? [];
-
   const identityVerified = asBool(ctx.identity_verified) === true;
-  const reversible = req.proposed_action.reversible ?? false;
-  const identityRule =
-    ruleMatching(rules, ["identity", "verified", "owner"]) ?? rules[0];
 
-  // Deterministic BLOCK floor: irreversible action without verified identity.
-  if (!reversible && !identityVerified) {
+  if (!identityVerified) {
     return {
       ok: true,
       verdict: "BLOCK",
       reason:
-        "Account deletion is irreversible and the requester's identity is not verified. Executing it could destroy data on an unverified request.",
-      policy_matches: identityRule
-        ? [
-            {
-              rule: identityRule,
-              status: "violated",
-              explanation: "identity_verified is false for an irreversible action.",
-            },
-          ]
-        : [],
+        "Account deletion is destructive and the requester's identity is not verified. It cannot be executed without a verified account owner.",
+      policy_matches: [],
       risk_factors: [
         { factor: "irreversible_action", severity: "high" },
         { factor: "identity_unverified", severity: "high" },
@@ -387,143 +372,19 @@ function evaluateAccountDeletion(req: EvaluateRequest): EvaluateResponse {
       missing_context: [
         {
           field: "identity_verified",
-          why: "Irreversible actions require a verified account owner before they can run.",
+          why: "Account deletion requires a verified account owner before it can be considered.",
         },
       ],
       evidence: [
         {
           source: "deterministic",
-          note: "Matched on reversible=false and identity_verified=false.",
+          note: "identity_verified is not true; account deletion is destructive and is blocked.",
         },
       ],
       next_step: {
         action: "block",
         recommendation:
-          "Do not delete the account. Verify the account owner's identity, then re-evaluate.",
-      },
-      decision_basis: "deterministic",
-      confidence: scoreToConfidence(95),
-      providers_used: [],
-      fell_back: false,
-      cached: false,
-    };
-  }
-
-  // Identity verified but still irreversible — require human confirmation.
-  if (!reversible && identityVerified) {
-    return {
-      ok: true,
-      verdict: "REVIEW",
-      reason:
-        "Identity is verified, but account deletion is irreversible. A human should confirm intent before the data is destroyed.",
-      policy_matches: identityRule
-        ? [
-            {
-              rule: identityRule,
-              status: "satisfied",
-              explanation: "identity_verified is true.",
-            },
-          ]
-        : [],
-      risk_factors: [
-        { factor: "irreversible_action", severity: "high" },
-        { factor: "data_loss", severity: "high" },
-      ],
-      missing_context: [],
-      evidence: [
-        {
-          source: "deterministic",
-          note: "Matched on reversible=false with identity_verified=true.",
-        },
-      ],
-      next_step: {
-        action: "open_review",
-        recommendation:
-          "Route to human review to confirm the owner intends permanent deletion.",
-      },
-      decision_basis: "deterministic",
-      confidence: scoreToConfidence(82),
-      providers_used: [],
-      fell_back: false,
-      cached: false,
-    };
-  }
-
-  // Reversible deletion (e.g. soft-delete) with verified identity — allow.
-  return {
-    ok: true,
-    verdict: "ALLOW",
-    reason:
-      "Deletion is reversible and identity is verified, so it can proceed safely.",
-    policy_matches: identityRule
-      ? [
-          {
-            rule: identityRule,
-            status: "satisfied",
-            explanation: "identity_verified is true and the action is reversible.",
-          },
-        ]
-      : [],
-    risk_factors: [{ factor: "reversible_action", severity: "low" }],
-    missing_context: [],
-    evidence: [
-      {
-        source: "deterministic",
-        note: "Matched on reversible=true with identity_verified=true.",
-      },
-    ],
-    next_step: {
-      action: "execute",
-      recommendation: "Reversible and verified. Safe to proceed.",
-    },
-    decision_basis: "deterministic",
-    confidence: scoreToConfidence(84),
-    providers_used: [],
-    fell_back: false,
-    cached: false,
-  };
-}
-
-function evaluateSubscriptionChange(req: EvaluateRequest): EvaluateResponse {
-  const ctx = req.proposed_action.context ?? {};
-  const rules = req.policy.rules ?? [];
-
-  const identityVerified = asBool(ctx.identity_verified) === true;
-  const reversible = req.proposed_action.reversible ?? false;
-  const selfServiceAllowed = asBool(ctx.self_service_allowed) !== false; // default permitted
-  const selfServiceRule =
-    ruleMatching(rules, ["self-serve", "self service", "downgrade", "authenticated"]) ??
-    rules[0];
-
-  // Authenticated, reversible, self-service-permitted downgrade — allow.
-  if (identityVerified && reversible && selfServiceAllowed) {
-    return {
-      ok: true,
-      verdict: "ALLOW",
-      reason:
-        "Authenticated user requesting a reversible, self-service plan downgrade. Policy permits this without human review.",
-      policy_matches: selfServiceRule
-        ? [
-            {
-              rule: selfServiceRule,
-              status: "satisfied",
-              explanation:
-                "identity_verified is true, the change is reversible, and self-service downgrades are allowed.",
-            },
-          ]
-        : [],
-      risk_factors: [{ factor: "reversible_action", severity: "low" }],
-      missing_context: [],
-      evidence: [
-        {
-          source: "deterministic",
-          note: "Matched on identity_verified=true, reversible=true, self_service_allowed=true.",
-        },
-      ],
-      next_step: {
-        action: "execute",
-        recommendation:
-          "Safe to apply the downgrade at the next billing cycle.",
+          "Do not delete the account. Verify the account owner's identity, then route to human review.",
       },
       decision_basis: "deterministic",
       confidence: scoreToConfidence(90),
@@ -533,160 +394,108 @@ function evaluateSubscriptionChange(req: EvaluateRequest): EvaluateResponse {
     };
   }
 
-  // Not authenticated — review before changing billing.
-  if (!identityVerified) {
-    return {
-      ok: true,
-      verdict: "REVIEW",
-      reason:
-        "A plan change was requested but the user's identity is not verified. Confirm the account owner before changing billing.",
-      policy_matches: selfServiceRule
-        ? [
-            {
-              rule: selfServiceRule,
-              status: "violated",
-              explanation: "Self-service changes require an authenticated user; identity_verified is false.",
-            },
-          ]
-        : [],
-      risk_factors: [{ factor: "identity_unverified", severity: "moderate" }],
-      missing_context: [
-        {
-          field: "identity_verified",
-          why: "Billing changes require an authenticated account owner.",
-        },
-      ],
-      evidence: [
-        { source: "deterministic", note: "Matched on identity_verified=false." },
-      ],
-      next_step: {
-        action: "open_review",
-        recommendation: "Verify the account owner, then re-evaluate.",
-      },
-      decision_basis: "deterministic",
-      confidence: scoreToConfidence(80),
-      providers_used: [],
-      fell_back: false,
-      cached: false,
-    };
-  }
-
-  // Authenticated but irreversible or not self-service — review.
-  const reviewRisk: RiskFactor[] = [];
-  if (!reversible) {
-    reviewRisk.push({ factor: "irreversible_action", severity: "moderate" as RiskSeverity });
-  }
   return {
     ok: true,
     verdict: "REVIEW",
     reason:
-      "Plan change is authenticated but is either irreversible or not eligible for self-service. Route to human review.",
+      "Identity is verified, but account deletion is destructive and irreversible. A human must confirm intent before the data is destroyed — Zorelan does not auto-approve account deletions.",
     policy_matches: [],
-    risk_factors: reviewRisk,
+    risk_factors: [
+      { factor: "irreversible_action", severity: "high" },
+      { factor: "data_loss", severity: "high" },
+    ],
     missing_context: [],
     evidence: [
       {
         source: "deterministic",
-        note: `Matched on reversible=${reversible}, self_service_allowed=${selfServiceAllowed}.`,
+        note: "identity_verified is true; deletion is destructive, so human confirmation is required.",
       },
     ],
     next_step: {
       action: "open_review",
-      recommendation: "Confirm eligibility before applying the change.",
+      recommendation:
+        "Route to a human approver to confirm the owner intends permanent deletion.",
     },
     decision_basis: "deterministic",
-    confidence: scoreToConfidence(78),
+    confidence: scoreToConfidence(85),
     providers_used: [],
     fell_back: false,
     cached: false,
   };
 }
 
-function evaluateCrmUpdate(req: EvaluateRequest): EvaluateResponse {
-  const ctx = req.proposed_action.context ?? {};
-  const params = req.proposed_action.parameters ?? {};
-  const rules = req.policy.rules ?? [];
+/**
+ * Subscription changes (downgrade_subscription and change_subscription) — always
+ * REVIEW. Zorelan does not yet validate plan consequences (price, feature/data
+ * loss, cancellation, upgrade, ownership) and `change_subscription` is too broad
+ * to distinguish them, so no caller boolean unlocks ALLOW. No policy_matches.
+ */
+function evaluateSubscriptionChange(req: EvaluateRequest): EvaluateResponse {
+  const isBroadChange = req.proposed_action.type === "change_subscription";
+  const reason = isBroadChange
+    ? "The change_subscription action is too broad for deterministic approval: it does not distinguish downgrades, upgrades, cancellations, price increases, data deletion or ownership changes. It is routed to human review because its consequences are not deterministically validated."
+    : "Subscription changes are routed to human review: Zorelan does not yet validate plan consequences (price, feature loss, or data impact) for subscription actions, so it does not auto-approve them.";
 
-  const sourceVerified = asBool(ctx.source_verified);
-  const evidenceStrength = asString(ctx.evidence_strength);
-  const weakEvidence = sourceVerified === false || evidenceStrength === "weak";
-  const field = asString(params.field) ?? "record";
-  const sourceRule =
-    ruleMatching(rules, ["source", "verified", "reviewed"]) ?? rules[0];
-
-  // Weak / unverified evidence — review before writing.
-  if (weakEvidence) {
-    return {
-      ok: true,
-      verdict: "REVIEW",
-      reason: `The proposed update to "${field}" is backed by weak or unverified evidence. It should be reviewed before being written to the customer record.`,
-      policy_matches: sourceRule
-        ? [
-            {
-              rule: sourceRule,
-              status: "violated",
-              explanation: `source_verified=${String(
-                sourceVerified
-              )}, evidence_strength="${evidenceStrength ?? "unknown"}".`,
-            },
-          ]
-        : [],
-      risk_factors: [
-        { factor: "data_integrity", severity: "moderate", detail: field },
-        { factor: "unverified_source", severity: "moderate" },
-      ],
-      missing_context: [
-        {
-          field: "source_verified",
-          why: "Customer-record changes require a verified source before they are written.",
-        },
-      ],
-      evidence: [
-        {
-          source: "deterministic",
-          note: `Matched on source_verified=${String(
-            sourceVerified
-          )} / evidence_strength="${evidenceStrength ?? "unknown"}".`,
-        },
-      ],
-      next_step: {
-        action: "open_review",
-        recommendation:
-          "Hold the write. Verify the source of the data, then re-evaluate.",
-      },
-      decision_basis: "deterministic",
-      confidence: scoreToConfidence(83),
-      providers_used: [],
-      fell_back: false,
-      cached: false,
-    };
-  }
-
-  // Verified source — allow.
   return {
     ok: true,
-    verdict: "ALLOW",
-    reason: `The update to "${field}" is backed by a verified source and can be written.`,
-    policy_matches: sourceRule
-      ? [
-          {
-            rule: sourceRule,
-            status: "satisfied",
-            explanation: "source_verified is true.",
-          },
-        ]
-      : [],
-    risk_factors: [{ factor: "data_integrity", severity: "low", detail: field }],
+    verdict: "REVIEW",
+    reason,
+    policy_matches: [],
+    risk_factors: [{ factor: "unvalidated_consequences", severity: "moderate" }],
     missing_context: [],
     evidence: [
-      { source: "deterministic", note: "Matched on source_verified=true." },
+      {
+        source: "deterministic",
+        note: `Subscription action "${req.proposed_action.type}" routed to REVIEW; plan consequences are not deterministically validated.`,
+      },
     ],
     next_step: {
-      action: "execute",
-      recommendation: "Verified source. Safe to write the record.",
+      action: "open_review",
+      recommendation:
+        "Route to human review to confirm the subscription change and its consequences.",
     },
     decision_basis: "deterministic",
-    confidence: scoreToConfidence(86),
+    confidence: scoreToConfidence(70),
+    providers_used: [],
+    fell_back: false,
+    cached: false,
+  };
+}
+
+/**
+ * CRM record updates — always REVIEW. There is no typed field allowlist yet, so
+ * Zorelan cannot distinguish harmless notes from identity, permission, role,
+ * financial, deletion or bulk changes. A caller-supplied `source_verified` does
+ * NOT unlock ALLOW. No policy_matches — free-text rules are never enforced here.
+ */
+function evaluateCrmUpdate(req: EvaluateRequest): EvaluateResponse {
+  const params = req.proposed_action.parameters ?? {};
+  const field = asString(params.field);
+  const dataRisk: RiskFactor = field
+    ? { factor: "unvalidated_field_scope", severity: "moderate", detail: field }
+    : { factor: "unvalidated_field_scope", severity: "moderate" };
+
+  return {
+    ok: true,
+    verdict: "REVIEW",
+    reason:
+      "Customer-record writes are routed to human review. Zorelan does not yet have a typed allowlist of permitted fields or operations, so it cannot distinguish harmless notes from identity, permission, financial, deletion or bulk changes, and it does not auto-approve CRM updates.",
+    policy_matches: [],
+    risk_factors: [dataRisk],
+    missing_context: [],
+    evidence: [
+      {
+        source: "deterministic",
+        note: "CRM update routed to REVIEW; permitted fields and operation scope are not deterministically defined.",
+      },
+    ],
+    next_step: {
+      action: "open_review",
+      recommendation:
+        "Review the customer-record change manually until permitted fields and operations are deterministically defined.",
+    },
+    decision_basis: "deterministic",
+    confidence: scoreToConfidence(72),
     providers_used: [],
     fell_back: false,
     cached: false,

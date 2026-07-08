@@ -248,14 +248,16 @@ export default function Home() {
             How decisions are made
           </div>
           <div className="grid md:grid-cols-2 gap-4">
-            <Card title="Deterministic policy checks">
-              For common high-risk action types — refunds, account deletion,
-              subscription changes, CRM updates — Zorelan applies explicit,
-              repeatable policy checks rather than a model guess.
+            <Card title="Typed refund enforcement">
+              For refunds, Zorelan enforces your typed{" "}
+              <code className="font-mono text-xs">policy.controls.refund</code>{" "}
+              (limits and confirmation) and returns ALLOW, REVIEW, or BLOCK — a
+              repeatable check, not a model guess.
             </Card>
-            <Card title="Explicit policy matches">
-              Every decision shows which rules were satisfied or violated, and
-              why — not an opaque score.
+            <Card title="Honest policy matches">
+              A refund decision cites the typed controls it actually applied.
+              Free-text rules are explanatory context only and are never
+              presented as enforced.
             </Card>
             <Card title="Missing-context detection">
               When a decision depends on information you did not send (such as
@@ -263,7 +265,9 @@ export default function Home() {
               instead of guessing.
             </Card>
             <Card title="Fail-safe by default">
-              Unknown action types return REVIEW, never an automatic ALLOW.
+              Account deletion returns BLOCK or REVIEW; subscription and CRM
+              changes, and unknown actions, route to human REVIEW. No action is
+              auto-approved on a caller-supplied boolean alone.
             </Card>
           </div>
           <p className="text-xs opacity-50 max-w-2xl leading-relaxed">

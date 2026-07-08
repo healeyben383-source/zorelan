@@ -20,7 +20,7 @@ Zorelan
 ALLOW / REVIEW / BLOCK  →  execute · review · block
 ```
 
-> The structured evaluation path (`/v1/evaluate`) currently uses deterministic policy checks for common action types (refunds, account deletion, subscription changes, CRM updates). Unknown action types fail safe to **REVIEW**. Model judgement and arbitration can be layered in later for uncertain or high-risk actions.
+> Today, **`refund_customer` is the only action with deterministic enforcement** — driven by typed `policy.controls.refund`, it returns ALLOW / REVIEW / BLOCK. `delete_account` returns BLOCK or REVIEW (never auto-approved); `downgrade_subscription`, `change_subscription`, and `update_crm_record` currently route to **REVIEW** because their consequences are not yet deterministically validated; unknown action types also return **REVIEW**. Free-text `rules` are explanatory context only — Zorelan enforces via typed controls.
 
 ## API — `POST /v1/evaluate`
 

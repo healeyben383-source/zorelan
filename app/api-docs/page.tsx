@@ -228,23 +228,18 @@ const evaluateDowngradeCurl = `curl -X POST https://zorelan.com/v1/evaluate \\
 
 const evaluateDowngradeResponse = `{
   "ok": true,
-  "verdict": "ALLOW",
-  "reason": "Authenticated user requesting a reversible, self-service plan downgrade. Policy permits this without human review.",
-  "policy_matches": [
-    {
-      "rule": "Authenticated users may self-serve reversible plan downgrades.",
-      "status": "satisfied",
-      "explanation": "identity_verified is true, the change is reversible, and self-service downgrades are allowed."
-    }
-  ],
-  "risk_factors": [ { "factor": "reversible_action", "severity": "low" } ],
+  "verdict": "REVIEW",
+  "reason": "Subscription changes are routed to human review: Zorelan does not yet validate plan consequences (price, feature loss, or data impact) for subscription actions, so it does not auto-approve them.",
+  "policy_matches": [],
+  "risk_factors": [ { "factor": "unvalidated_consequences", "severity": "moderate" } ],
   "missing_context": [],
   "next_step": {
-    "action": "execute",
-    "recommendation": "Safe to apply the downgrade at the next billing cycle."
+    "action": "open_review",
+    "recommendation": "Route to human review to confirm the subscription change and its consequences."
   },
   "decision_basis": "deterministic",
-  "confidence": { "score": 90, "label": "high" }
+  "confidence": { "score": 70, "label": "moderate" },
+  "policy_controls_applied": null
 }`;
 
 const advancedJsonExample = `{
@@ -791,11 +786,24 @@ if (decision.verdict === "ALLOW") {
           </div>
 
           <InfoBox>
-            The structured evaluation path currently uses deterministic policy
-            checks for common action types (refunds, account deletion,
-            subscription changes, CRM updates). Unknown action types fail safe to{" "}
-            <InlineCode>REVIEW</InlineCode>. Model judgement and arbitration can be
-            layered in later for uncertain or high-risk actions.
+            <span className="text-white/80">
+              Today, <InlineCode>refund_customer</InlineCode> is the only action
+              with deterministic enforcement
+            </span>{" "}
+            — driven by typed <InlineCode>policy.controls.refund</InlineCode>, it
+            can return <InlineCode>ALLOW</InlineCode>,{" "}
+            <InlineCode>REVIEW</InlineCode>, or <InlineCode>BLOCK</InlineCode>.{" "}
+            <InlineCode>delete_account</InlineCode> returns{" "}
+            <InlineCode>BLOCK</InlineCode> or <InlineCode>REVIEW</InlineCode>
+            (never auto-approved); <InlineCode>downgrade_subscription</InlineCode>,{" "}
+            <InlineCode>change_subscription</InlineCode>, and{" "}
+            <InlineCode>update_crm_record</InlineCode> currently route to{" "}
+            <InlineCode>REVIEW</InlineCode> because their consequences are not yet
+            deterministically validated. Unknown action types also fail safe to{" "}
+            <InlineCode>REVIEW</InlineCode>. Free-text{" "}
+            <InlineCode>rules</InlineCode> are explanatory context only — Zorelan
+            enforces via typed controls, so non-refund actions return empty{" "}
+            <InlineCode>policy_matches</InlineCode>.
           </InfoBox>
 
           <div className="mt-4 rounded-xl border border-yellow-500/20 bg-yellow-500/5 px-5 py-4 text-sm text-white/60 leading-relaxed space-y-3">
@@ -860,11 +868,11 @@ if (decision.verdict === "ALLOW") {
               code={evaluateRefundResponse}
             />
             <CodeBlock
-              label="curl · subscription downgrade → ALLOW"
+              label="curl · subscription change → REVIEW"
               code={evaluateDowngradeCurl}
             />
             <CodeBlock
-              label="json · downgrade → ALLOW (response)"
+              label="json · subscription change → REVIEW (response)"
               code={evaluateDowngradeResponse}
             />
           </div>

@@ -14,6 +14,24 @@ execution.
 
 ## Last updated
 
+2026-07-08 — Non-refund fail-safe hardening (confirmed audit findings). The
+`delete_account`, `downgrade_subscription`, `change_subscription`, and
+`update_crm_record` evaluators previously returned deterministic ALLOW based on
+caller-supplied booleans (`reversible`, `identity_verified`, `self_service_allowed`,
+`source_verified`) with no validation of the action's meaning, producing
+reproduced dangerous false-ALLOWs (e.g. `delete_account reversible:true` → ALLOW;
+CRM `role=admin` → ALLOW; `change_subscription` cancellation → ALLOW). They also
+used `ruleMatching` to label free-text rules as satisfied/violated. Now:
+`delete_account` → BLOCK (identity not verified) or REVIEW (verified); the three
+subscription/CRM evaluators → **REVIEW-only**; `ruleMatching` removed; all four
+return empty `policy_matches` (and empty `matched_rules`/`violated_rules` +
+`policy_controls_applied: null` in the Decision Record); the supplied policy
+survives only in `policy_snapshot`. **`refund_customer` is unchanged** and remains
+the only deterministic ALLOW/BLOCK/REVIEW enforcer (typed `policy.controls.refund`).
+Public copy (README, landing, API docs, finish-brief) updated to reflect this. New
+suite: `scripts/tests/test-nonrefund-safety.ts`. No typed controls, field
+allowlists, storage, auth, or rate-limit changes.
+
 2026-07-08 — Refund policy-enforcement fix (confirmed audit finding). The refund
 evaluator used a hardcoded `amount > 100` and ignored the caller's policy; the
 "over-threshold + delivery_confirmed" branch had no ceiling (unbounded ALLOW).
@@ -138,9 +156,11 @@ homepage consolidation + legacy route cleanup, trust/ops, docs/positioning.
   `missing_context`, `evidence`, `next_step`, `decision_basis`, `confidence`,
   `usage`).
 - **Shared engine**: `lib/evaluate/*` (`types.ts`, `schema.ts`,
-  `evaluateAction.ts`, `apiKeyAuth.ts`). Deterministic Stage 0 only —
-  `refund_customer`, `delete_account`, `downgrade_subscription` /
-  `change_subscription`, `update_crm_record`; unknown types fail safe to REVIEW.
+  `evaluateAction.ts`, `apiKeyAuth.ts`). Deterministic Stage 0 only.
+  **`refund_customer` is the only enforcer** (typed `policy.controls.refund` →
+  ALLOW/REVIEW/BLOCK). `delete_account` → BLOCK/REVIEW (never ALLOW);
+  `downgrade_subscription`, `change_subscription`, `update_crm_record` → REVIEW-only;
+  unknown types → REVIEW. Non-refund evaluators return empty `policy_matches`.
   Model judgement (Stage 1) is documented backlog, not built.
 - **SDK**: `@zorelan/sdk` exposes `evaluateAction(payload)` (→ `/v1/evaluate`)
   alongside the unchanged legacy `verify(prompt)` (→ `/v1/decision`).
