@@ -62,7 +62,9 @@ export function buildDecisionRecord(input: {
     policy_snapshot: {
       name: request.policy.name,
       rules: [...request.policy.rules],
+      ...(request.policy.controls ? { controls: request.policy.controls } : {}),
     },
+    policy_controls_applied: response.policy_controls_applied ?? null,
     reason: response.reason,
     policy_matches: response.policy_matches,
     matched_rules,

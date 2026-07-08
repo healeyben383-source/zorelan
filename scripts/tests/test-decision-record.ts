@@ -59,6 +59,14 @@ const refundReq: EvaluateRequest = {
       "Refunds above $100 require delivery confirmation.",
       "Refunds must not be issued when delivery status is unresolved.",
     ],
+    controls: {
+      refund: {
+        currency: "AUD",
+        auto_allow_limit: 100,
+        absolute_review_limit: 1000,
+        require_delivery_confirmation_above_auto_allow_limit: true,
+      },
+    },
   },
 };
 
@@ -137,6 +145,20 @@ const canonicalPayload = {
 check(
   "canonical parameters shape is accepted",
   EvaluateRequestSchema.safeParse(canonicalPayload).success === true
+);
+
+// Decision Record captures the ACTUAL applied controls (not free-text rules).
+check(
+  "policy_controls_applied recorded on record",
+  record.policy_controls_applied?.refund?.auto_allow_limit === 100
+);
+check(
+  "policy_snapshot carries typed controls",
+  record.policy_snapshot.controls?.refund?.absolute_review_limit === 1000
+);
+check(
+  "policy_matches cite typed controls (not free-text rules)",
+  record.policy_matches.every((m) => m.rule.startsWith("refund."))
 );
 
 console.log(failures === 0 ? "\nALL PASS" : `\n${failures} FAILED`);

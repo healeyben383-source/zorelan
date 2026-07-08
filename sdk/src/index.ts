@@ -118,9 +118,29 @@ export type ProposedAction = {
   context?: Record<string, unknown>;
 };
 
+/**
+ * Typed, enforceable refund controls. These drive the numeric refund verdict —
+ * the free-text `rules` never do. Optional/backward-compatible; when absent, a
+ * refund fails safe to REVIEW rather than having an undocumented threshold applied.
+ */
+export type RefundControls = {
+  currency: string;
+  /** Refunds with amount <= auto_allow_limit auto-ALLOW. */
+  auto_allow_limit: number;
+  /** Ceiling: amount >= absolute_review_limit always REVIEWs (at-or-above). */
+  absolute_review_limit: number;
+  /** Require delivery_confirmed only for refunds above auto_allow_limit. */
+  require_delivery_confirmation_above_auto_allow_limit: boolean;
+};
+
+export type PolicyControls = {
+  refund?: RefundControls;
+};
+
 export type ActionPolicy = {
   name: string;
   rules: string[];
+  controls?: PolicyControls;
 };
 
 export type EvaluateActionOptions = {
@@ -196,6 +216,8 @@ export type DecisionRecord = {
   confidence: { score: number; label: "low" | "moderate" | "high" };
   next_step: NextStep;
   recommended_next_step: string;
+  /** The typed controls actually enforced for this verdict, or null. */
+  policy_controls_applied: PolicyControls | null;
   failure_mode: string | null;
 };
 
@@ -214,6 +236,8 @@ export type EvaluateActionResponse = {
   fell_back: boolean;
   cached: boolean;
   usage?: UsageMeta | null;
+  /** The typed policy controls the engine actually enforced, or null. */
+  policy_controls_applied?: PolicyControls | null;
   /** Decision Record V1 (additive). Present on /v1/evaluate responses. */
   decision_id?: string;
   decision_record?: DecisionRecord;

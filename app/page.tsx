@@ -169,13 +169,11 @@ export default function Home() {
                 </pre>
               </div>
               <div className="space-y-2">
-                <Label>policy</Label>
+                <Label>policy.controls.refund</Label>
                 <ul className="text-xs opacity-70 leading-relaxed list-disc ml-4 space-y-1">
-                  <li>Refunds above $100 require delivery confirmation.</li>
-                  <li>
-                    Refunds must not be issued when delivery status is
-                    unresolved.
-                  </li>
+                  <li>auto_allow_limit: $100 AUD</li>
+                  <li>absolute_review_limit: $1,000 AUD</li>
+                  <li>require_delivery_confirmation_above_auto_allow_limit: true</li>
                 </ul>
               </div>
             </div>
@@ -190,15 +188,15 @@ export default function Home() {
                 <div className="space-y-1">
                   <Label>Reason</Label>
                   <p className="text-sm opacity-80 leading-relaxed">
-                    Refund of $180 exceeds the $100 threshold and delivery is
-                    unconfirmed.
+                    Refund of $180 is above the policy&apos;s auto-allow limit
+                    ($100) and delivery is not confirmed.
                   </p>
                 </div>
                 <div className="space-y-1">
                   <Label>Missing context</Label>
                   <p className="text-sm opacity-80 leading-relaxed">
                     <code className="font-mono text-xs">delivery_confirmed</code>{" "}
-                    — required before a refund over $100.
+                    — required for refunds above the auto-allow limit.
                   </p>
                 </div>
                 <div className="space-y-1">

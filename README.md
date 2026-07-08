@@ -42,27 +42,47 @@ curl -X POST https://zorelan.com/v1/evaluate \
     "policy": {
       "name": "Refund policy",
       "rules": [
-        "Refunds above $100 require delivery confirmation.",
-        "Refunds must not be issued when delivery status is unresolved."
-      ]
+        "Refunds above the auto-allow limit require delivery confirmation."
+      ],
+      "controls": {
+        "refund": {
+          "currency": "AUD",
+          "auto_allow_limit": 100,
+          "absolute_review_limit": 1000,
+          "require_delivery_confirmation_above_auto_allow_limit": true
+        }
+      }
     }
   }'
 ```
+
+Numeric refund limits come from the typed `policy.controls.refund` (the free-text
+`rules` are human context and never drive the verdict). Refunds at or below
+`auto_allow_limit` ALLOW; at or above `absolute_review_limit` always REVIEW;
+without typed controls a refund fails safe to REVIEW.
 
 ```json
 {
   "ok": true,
   "verdict": "BLOCK",
-  "reason": "Refund of $180 AUD exceeds the $100 threshold and delivery is unconfirmed.",
+  "reason": "Refund of $180 AUD is above the auto-allow limit ($100 AUD) and delivery is not confirmed, which the policy requires. Do not issue.",
   "missing_context": [
-    { "field": "delivery_confirmed", "why": "Required before a refund over $100." }
+    { "field": "delivery_confirmed", "why": "Required by policy for refunds above the auto-allow limit ($100 AUD)." }
   ],
   "next_step": {
     "action": "block",
-    "recommendation": "Do not issue the refund. Request delivery confirmation, then re-evaluate."
+    "recommendation": "Do not issue the refund. Obtain delivery confirmation, then re-evaluate."
   },
   "decision_basis": "deterministic",
-  "confidence": { "score": 94, "label": "high" }
+  "confidence": { "score": 94, "label": "high" },
+  "policy_controls_applied": {
+    "refund": {
+      "currency": "AUD",
+      "auto_allow_limit": 100,
+      "absolute_review_limit": 1000,
+      "require_delivery_confirmation_above_auto_allow_limit": true
+    }
+  }
 }
 ```
 
@@ -90,10 +110,15 @@ const decision = await zorelan.evaluateAction({
   },
   policy: {
     name: "Refund policy",
-    rules: [
-      "Refunds above $100 require delivery confirmation.",
-      "Refunds must not be issued when delivery status is unresolved.",
-    ],
+    rules: ["Refunds above the auto-allow limit require delivery confirmation."],
+    controls: {
+      refund: {
+        currency: "AUD",
+        auto_allow_limit: 100,
+        absolute_review_limit: 1000,
+        require_delivery_confirmation_above_auto_allow_limit: true,
+      },
+    },
   },
 });
 

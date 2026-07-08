@@ -23,9 +23,41 @@ export interface ProposedAction {
   context?: Record<string, unknown>;
 }
 
+/**
+ * Typed, deterministically-enforceable refund controls. These — NOT the
+ * free-text `rules` — drive the numeric refund verdict. All amounts are in
+ * `currency`. Backward-compatible: optional. Requests without typed controls
+ * fail safe (REVIEW) rather than having an undocumented threshold applied.
+ */
+export interface RefundControls {
+  currency: string;
+  /** Refunds with amount <= auto_allow_limit auto-ALLOW (no confirmation needed). */
+  auto_allow_limit: number;
+  /**
+   * Ceiling. Refunds with amount >= absolute_review_limit ALWAYS REVIEW
+   * (at-or-above the limit), regardless of delivery_confirmed or any other
+   * caller-supplied boolean.
+   */
+  absolute_review_limit: number;
+  /**
+   * When true, refunds in the band auto_allow_limit < amount < absolute_review_limit
+   * require delivery_confirmed to ALLOW (otherwise BLOCK). When false, that band
+   * ALLOWs without confirmation. The name is explicit because confirmation is only
+   * enforced ABOVE the auto-allow limit — small refunds are never gated on it.
+   */
+  require_delivery_confirmation_above_auto_allow_limit: boolean;
+}
+
+/** Per-action typed policy controls. Additive; only `refund` is enforced today. */
+export interface PolicyControls {
+  refund?: RefundControls;
+}
+
 export interface Policy {
   name: string;
   rules: string[];
+  /** Typed, enforceable controls. When absent, refund evaluation fails safe. */
+  controls?: PolicyControls;
 }
 
 export interface EvaluateOptions {
@@ -94,6 +126,13 @@ export interface EvaluateResponse {
   /** Present for authenticated customer keys; null for master key / unmetered. */
   usage?: UsageMeta | null;
   /**
+   * The typed policy controls the engine ACTUALLY enforced for this verdict, or
+   * null when none applied (e.g. REVIEW because no typed controls were supplied,
+   * or an invalid/mismatched control set). This is the source of truth for what
+   * was enforced — it is never inferred from the human-readable `rules`.
+   */
+  policy_controls_applied?: PolicyControls | null;
+  /**
    * Decision Record V1 (additive). Present on /v1/evaluate responses; the pure
    * engine and the demo route leave these undefined. The flat fields above stay
    * the source of truth — the record is a self-describing, identified projection
@@ -136,6 +175,12 @@ export interface DecisionRecord {
   confidence: { score: number; label: "low" | "moderate" | "high" };
   next_step: NextStep;
   recommended_next_step: string;
+  /**
+   * The typed controls actually enforced (or null). Recorded so a caller can
+   * prove which numeric limits produced the verdict — never inferred from the
+   * human-readable rules in policy_snapshot.
+   */
+  policy_controls_applied: PolicyControls | null;
   /** null on a clean decision; a short code (e.g. "provider_unavailable") otherwise. */
   failure_mode: string | null;
 }

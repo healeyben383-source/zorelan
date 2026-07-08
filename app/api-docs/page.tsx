@@ -77,6 +77,16 @@ const decision = await zorelan.evaluateAction({
       "Refunds above $100 require delivery confirmation.",
       "Refunds must not be issued when delivery status is unresolved.",
     ],
+    // Typed controls drive the numeric verdict (the free-text rules above are
+    // human context only). Amounts are in \`currency\`.
+    controls: {
+      refund: {
+        currency: "AUD",
+        auto_allow_limit: 100,
+        absolute_review_limit: 1000,
+        require_delivery_confirmation_above_auto_allow_limit: true,
+      },
+    },
   },
 });
 
@@ -105,34 +115,56 @@ const evaluateRefundCurl = `curl -X POST https://zorelan.com/v1/evaluate \\
       "rules": [
         "Refunds above $100 require delivery confirmation.",
         "Refunds must not be issued when delivery status is unresolved."
-      ]
+      ],
+      "controls": {
+        "refund": {
+          "currency": "AUD",
+          "auto_allow_limit": 100,
+          "absolute_review_limit": 1000,
+          "require_delivery_confirmation_above_auto_allow_limit": true
+        }
+      }
     }
   }'`;
 
 const evaluateRefundResponse = `{
   "ok": true,
   "verdict": "BLOCK",
-  "reason": "Refund of $180 AUD exceeds the $100 threshold and delivery is unconfirmed.",
+  "reason": "Refund of $180 AUD is above the auto-allow limit ($100 AUD) and delivery is not confirmed, which the policy requires. Do not issue.",
   "policy_matches": [
     {
-      "rule": "Refunds above $100 require delivery confirmation.",
+      "rule": "refund.auto_allow_limit",
       "status": "violated",
-      "explanation": "Refund amount $180 AUD is above the $100 threshold and delivery confirmation is missing."
+      "explanation": "Amount $180 AUD exceeds auto_allow_limit $100 AUD."
+    },
+    {
+      "rule": "refund.require_delivery_confirmation_above_auto_allow_limit",
+      "status": "violated",
+      "explanation": "require_delivery_confirmation_above_auto_allow_limit is true and delivery is not confirmed (order_status=\\"delivery_unconfirmed\\")."
     }
   ],
   "risk_factors": [
     { "factor": "irreversible_action", "severity": "high" },
-    { "factor": "financial_exposure", "severity": "high", "detail": "$180 AUD" }
+    { "factor": "financial_exposure", "severity": "high", "detail": "$180 AUD" },
+    { "factor": "unverified_precondition", "severity": "high", "detail": "delivery status" }
   ],
   "missing_context": [
-    { "field": "delivery_confirmed", "why": "Required by policy before a refund over $100 can be issued." }
+    { "field": "delivery_confirmed", "why": "Required by policy for refunds above the auto-allow limit ($100 AUD)." }
   ],
   "next_step": {
     "action": "block",
-    "recommendation": "Do not issue the refund. Request delivery confirmation, then re-evaluate."
+    "recommendation": "Do not issue the refund. Obtain delivery confirmation, then re-evaluate."
   },
   "decision_basis": "deterministic",
   "confidence": { "score": 94, "label": "high" },
+  "policy_controls_applied": {
+    "refund": {
+      "currency": "AUD",
+      "auto_allow_limit": 100,
+      "absolute_review_limit": 1000,
+      "require_delivery_confirmation_above_auto_allow_limit": true
+    }
+  },
   "decision_id": "dec_4f9c…",
   "decision_record": {
     "schema_version": "dr-v1",
@@ -152,12 +184,28 @@ const evaluateRefundResponse = `{
       "rules": [
         "Refunds above $100 require delivery confirmation.",
         "Refunds must not be issued when delivery status is unresolved."
-      ]
+      ],
+      "controls": {
+        "refund": {
+          "currency": "AUD",
+          "auto_allow_limit": 100,
+          "absolute_review_limit": 1000,
+          "require_delivery_confirmation_above_auto_allow_limit": true
+        }
+      }
+    },
+    "policy_controls_applied": {
+      "refund": {
+        "currency": "AUD",
+        "auto_allow_limit": 100,
+        "absolute_review_limit": 1000,
+        "require_delivery_confirmation_above_auto_allow_limit": true
+      }
     },
     "matched_rules": [],
-    "violated_rules": ["Refunds above $100 require delivery confirmation."],
+    "violated_rules": ["refund.auto_allow_limit", "refund.require_delivery_confirmation_above_auto_allow_limit"],
     "decision_basis": "deterministic",
-    "recommended_next_step": "Do not issue the refund. Request delivery confirmation, then re-evaluate.",
+    "recommended_next_step": "Do not issue the refund. Obtain delivery confirmation, then re-evaluate.",
     "failure_mode": null
   }
 }`;
@@ -768,6 +816,21 @@ if (decision.verdict === "ALLOW") {
                 <InlineCode>proposed_action</InlineCode> are rejected with a{" "}
                 <InlineCode>validation_failed</InlineCode> error — not silently
                 dropped.
+              </li>
+              <li>
+                Numeric refund limits come from typed{" "}
+                <InlineCode>policy.controls.refund</InlineCode> (
+                <InlineCode>currency</InlineCode>,{" "}
+                <InlineCode>auto_allow_limit</InlineCode>,{" "}
+                <InlineCode>absolute_review_limit</InlineCode>,{" "}
+                <InlineCode>require_delivery_confirmation_above_auto_allow_limit</InlineCode>) — the
+                free-text <InlineCode>rules</InlineCode> are human context only
+                and never drive the verdict. Without typed controls a refund
+                fails safe to <InlineCode>REVIEW</InlineCode>; any refund above{" "}
+                <InlineCode>absolute_review_limit</InlineCode> always{" "}
+                <InlineCode>REVIEW</InlineCode>s. The applied controls are echoed
+                back in <InlineCode>policy_controls_applied</InlineCode> and the
+                Decision Record.
               </li>
             </ul>
             <div className="grid gap-3 sm:grid-cols-2">

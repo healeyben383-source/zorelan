@@ -24,9 +24,33 @@ export const ProposedActionSchema = z
   })
   .strict();
 
+// Typed, enforceable refund controls. These drive the numeric refund verdict —
+// the free-text `rules` never do. Negative limits and a conflicting ordering
+// (auto_allow_limit above absolute_review_limit) are rejected here with a clear
+// validation error, so an invalid control set can never quietly enforce.
+export const RefundControlsSchema = z
+  .object({
+    currency: z.string().min(1).max(10),
+    auto_allow_limit: z.number().nonnegative(),
+    absolute_review_limit: z.number().nonnegative(),
+    require_delivery_confirmation_above_auto_allow_limit: z.boolean(),
+  })
+  .strict()
+  .refine((c) => c.auto_allow_limit <= c.absolute_review_limit, {
+    message: "auto_allow_limit must be less than or equal to absolute_review_limit",
+    path: ["auto_allow_limit"],
+  });
+
+export const PolicyControlsSchema = z
+  .object({
+    refund: RefundControlsSchema.optional(),
+  })
+  .strict();
+
 export const PolicySchema = z.object({
   name: z.string().min(1).max(500),
   rules: z.array(z.string().max(2_000)).min(1).max(50),
+  controls: PolicyControlsSchema.optional(),
 });
 
 export const EvaluateRequestSchema = z.object({

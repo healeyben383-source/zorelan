@@ -23,9 +23,13 @@
 import type {
   EvaluateRequest,
   EvaluateResponse,
+  MissingContext,
+  NextStep,
+  PolicyControls,
   PolicyMatch,
   RiskFactor,
   RiskSeverity,
+  Verdict,
 } from "./types";
 
 // ── Small, explicit helpers (no regex on policy text drives any decision) ───────
@@ -82,178 +86,272 @@ function ruleMatching(rules: string[], keywords: string[]): string | undefined {
 
 // ── Per-action evaluators ───────────────────────────────────────────────────────
 
+/**
+ * Refund evaluator — enforces the caller's TYPED controls (policy.controls.refund),
+ * never a hardcoded threshold. Verdict comes from the caller's numeric limits.
+ * A refund at or above `absolute_review_limit` always REVIEWs regardless of any
+ * caller-supplied boolean (high-value safeguard). Absent/invalid/mismatched controls
+ * fail safe to REVIEW — Zorelan never applies an undocumented threshold, and never
+ * lets the free-text `rules` drive the numeric decision.
+ */
 function evaluateRefund(req: EvaluateRequest): EvaluateResponse {
   const params = req.proposed_action.parameters ?? {};
   const ctx = req.proposed_action.context ?? {};
-  const rules = req.policy.rules ?? [];
+  const controls = req.policy.controls?.refund;
 
   const amount = asNumber(params.amount) ?? 0;
-  const currency = asString(params.currency) ?? "USD";
+  const paramCurrency = asString(params.currency);
   const orderStatus = asString(ctx.order_status);
   const deliveryConfirmed =
     asBool(ctx.delivery_confirmed) === true ||
     orderStatus === "delivery_confirmed";
   const reversible = req.proposed_action.reversible ?? false;
 
-  const overThreshold = amount > 100;
-  const thresholdRule =
-    ruleMatching(rules, ["confirmation", "$100", "100", "above"]) ?? rules[0];
-  const unresolvedRule =
-    ruleMatching(rules, ["unresolved", "delivery status", "must not"]) ?? rules[1];
-
-  // Deterministic BLOCK floor: large refund without confirmed delivery.
-  if (overThreshold && !deliveryConfirmed) {
-    const policy_matches: PolicyMatch[] = [];
-    if (thresholdRule) {
-      policy_matches.push({
-        rule: thresholdRule,
-        status: "violated",
-        explanation: `Refund amount ${formatMoney(
-          amount,
-          currency
-        )} is above the $100 threshold and delivery confirmation is missing.`,
-      });
-    }
-    if (unresolvedRule) {
-      policy_matches.push({
-        rule: unresolvedRule,
-        status: "violated",
-        explanation: `order_status is "${
-          orderStatus ?? "unknown"
-        }", which is an unresolved delivery state.`,
-      });
-    }
-
-    const risk_factors: RiskFactor[] = [
-      { factor: "financial_exposure", severity: "high", detail: formatMoney(amount, currency) },
-      { factor: "unverified_precondition", severity: "high", detail: "delivery status" },
-    ];
-    if (!reversible) {
-      risk_factors.unshift({ factor: "irreversible_action", severity: "high" });
-    }
-
-    return {
-      ok: true,
-      verdict: "BLOCK",
-      reason: `Refund of ${formatMoney(
-        amount,
-        currency
-      )} exceeds the $100 threshold and delivery is unconfirmed (order_status="${
-        orderStatus ?? "unknown"
-      }"). Issuing it would violate the refund policy.`,
-      policy_matches,
-      risk_factors,
-      missing_context: [
-        {
-          field: "delivery_confirmed",
-          why: "Required by policy before a refund over $100 can be issued.",
-        },
-      ],
-      evidence: [
-        {
-          source: "deterministic",
-          note: `Matched on amount=${amount} (> 100) and order_status="${
-            orderStatus ?? "unknown"
-          }".`,
-        },
-      ],
-      next_step: {
-        action: "block",
-        recommendation:
-          "Do not issue the refund. Request delivery confirmation, then re-evaluate.",
-      },
-      decision_basis: "deterministic",
-      confidence: scoreToConfidence(94),
-      providers_used: [],
-      fell_back: false,
-      cached: false,
-    };
-  }
-
-  // Large refund WITH confirmed delivery — policy satisfied.
-  if (overThreshold && deliveryConfirmed) {
-    const policy_matches: PolicyMatch[] = [];
-    if (thresholdRule) {
-      policy_matches.push({
-        rule: thresholdRule,
-        status: "satisfied",
-        explanation: `Delivery is confirmed, so a refund of ${formatMoney(
-          amount,
-          currency
-        )} is permitted.`,
-      });
-    }
-    if (unresolvedRule) {
-      policy_matches.push({
-        rule: unresolvedRule,
-        status: "satisfied",
-        explanation: `order_status is "${orderStatus ?? "delivery_confirmed"}" — delivery is resolved.`,
-      });
-    }
-    return {
-      ok: true,
-      verdict: "ALLOW",
-      reason: `Refund of ${formatMoney(
-        amount,
-        currency
-      )} is permitted: delivery is confirmed and policy conditions are satisfied.`,
-      policy_matches,
-      risk_factors: [
-        { factor: "financial_exposure", severity: "moderate", detail: formatMoney(amount, currency) },
-      ],
-      missing_context: [],
-      evidence: [
-        {
-          source: "deterministic",
-          note: `Matched on amount=${amount} with confirmed delivery.`,
-        },
-      ],
-      next_step: {
-        action: "execute",
-        recommendation: "Conditions met. Safe to issue the refund.",
-      },
-      decision_basis: "deterministic",
-      confidence: scoreToConfidence(88),
-      providers_used: [],
-      fell_back: false,
-      cached: false,
-    };
-  }
-
-  // Small refund (<= $100) — under the policy threshold.
-  return {
+  // Shared builder so every refund verdict is consistent and records what applied.
+  const mk = (input: {
+    verdict: Verdict;
+    reason: string;
+    policy_matches: PolicyMatch[];
+    risk_factors: RiskFactor[];
+    missing_context?: MissingContext[];
+    evidenceNote: string;
+    next_step: NextStep;
+    confidence: number;
+    applied: PolicyControls | null;
+  }): EvaluateResponse => ({
     ok: true,
-    verdict: "ALLOW",
-    reason: `Refund of ${formatMoney(
-      amount,
-      currency
-    )} is at or below the $100 threshold and does not require delivery confirmation.`,
-    policy_matches: thresholdRule
-      ? [
-          {
-            rule: thresholdRule,
-            status: "not_applicable",
-            explanation: `Amount ${formatMoney(amount, currency)} does not exceed $100.`,
-          },
-        ]
-      : [],
-    risk_factors: [
-      { factor: "financial_exposure", severity: "low", detail: formatMoney(amount, currency) },
-    ],
-    missing_context: [],
-    evidence: [
-      { source: "deterministic", note: `Matched on amount=${amount} (<= 100).` },
-    ],
-    next_step: {
-      action: "execute",
-      recommendation: "Low-value refund within policy. Safe to issue.",
-    },
+    verdict: input.verdict,
+    reason: input.reason,
+    policy_matches: input.policy_matches,
+    risk_factors: input.risk_factors,
+    missing_context: input.missing_context ?? [],
+    evidence: [{ source: "deterministic", note: input.evidenceNote }],
+    next_step: input.next_step,
     decision_basis: "deterministic",
-    confidence: scoreToConfidence(85),
+    confidence: scoreToConfidence(input.confidence),
     providers_used: [],
     fell_back: false,
     cached: false,
+    policy_controls_applied: input.applied,
+  });
+
+  // (1) Fail-safe: no typed refund controls → REVIEW. Free-text rules are not
+  //     enforced, and no hidden threshold is applied.
+  if (!controls) {
+    return mk({
+      verdict: "REVIEW",
+      reason:
+        "No typed refund controls were supplied (policy.controls.refund). Zorelan does not enforce free-text policy rules, so this refund is routed to human review.",
+      policy_matches: [],
+      risk_factors: [
+        { factor: "missing_policy_controls", severity: "moderate" },
+        {
+          factor: "financial_exposure",
+          severity: amount > 0 ? "moderate" : "low",
+          detail: formatMoney(amount, paramCurrency ?? ""),
+        },
+      ],
+      missing_context: [
+        {
+          field: "policy.controls.refund",
+          why: "Typed refund controls (currency, auto_allow_limit, absolute_review_limit, require_delivery_confirmation_above_auto_allow_limit) are required to deterministically approve a refund.",
+        },
+      ],
+      evidenceNote:
+        "No policy.controls.refund present; free-text rules are not enforced. Routed to REVIEW.",
+      next_step: {
+        action: "open_review",
+        recommendation:
+          "Supply typed refund controls under policy.controls.refund, or review this refund manually.",
+      },
+      confidence: 55,
+      applied: null,
+    });
+  }
+
+  // (2) Defensive control validation (the request schema also enforces this; this
+  //     guards direct engine use / tests that bypass zod).
+  if (
+    controls.auto_allow_limit < 0 ||
+    controls.absolute_review_limit < 0 ||
+    controls.auto_allow_limit > controls.absolute_review_limit
+  ) {
+    return mk({
+      verdict: "REVIEW",
+      reason:
+        "Refund controls are invalid (negative or conflicting limits). Cannot enforce deterministically; routing to human review.",
+      policy_matches: [
+        {
+          rule: "refund.controls",
+          status: "indeterminate",
+          explanation: `Invalid controls: auto_allow_limit=${controls.auto_allow_limit}, absolute_review_limit=${controls.absolute_review_limit}.`,
+        },
+      ],
+      risk_factors: [{ factor: "invalid_policy_controls", severity: "high" }],
+      evidenceNote: `Invalid refund controls: auto_allow_limit=${controls.auto_allow_limit}, absolute_review_limit=${controls.absolute_review_limit}.`,
+      next_step: {
+        action: "open_review",
+        recommendation: "Fix policy.controls.refund limits, then re-evaluate.",
+      },
+      confidence: 55,
+      applied: null,
+    });
+  }
+
+  // (3) Currency mismatch → cannot compare the amount to the limits → REVIEW.
+  if (paramCurrency && paramCurrency !== controls.currency) {
+    return mk({
+      verdict: "REVIEW",
+      reason: `Refund currency (${paramCurrency}) does not match the policy control currency (${controls.currency}). Cannot compare against the configured limits; routing to human review.`,
+      policy_matches: [
+        {
+          rule: "refund.currency",
+          status: "violated",
+          explanation: `Action currency "${paramCurrency}" does not match control currency "${controls.currency}".`,
+        },
+      ],
+      risk_factors: [
+        { factor: "currency_mismatch", severity: "high", detail: `${paramCurrency} vs ${controls.currency}` },
+      ],
+      missing_context: [
+        {
+          field: "parameters.currency",
+          why: `Must match the policy control currency "${controls.currency}".`,
+        },
+      ],
+      evidenceNote: `Currency mismatch: parameters.currency="${paramCurrency}", controls.currency="${controls.currency}".`,
+      next_step: {
+        action: "open_review",
+        recommendation:
+          "Align the refund currency with the policy control currency, then re-evaluate.",
+      },
+      confidence: 55,
+      applied: null,
+    });
+  }
+
+  const applied: PolicyControls = { refund: controls };
+  const money = (a: number) => formatMoney(a, controls.currency);
+  const controlsNote = `Applied refund controls: currency=${controls.currency}, auto_allow_limit=${controls.auto_allow_limit}, absolute_review_limit=${controls.absolute_review_limit}, require_delivery_confirmation_above_auto_allow_limit=${controls.require_delivery_confirmation_above_auto_allow_limit}. amount=${amount}, delivery_confirmed=${deliveryConfirmed}, reversible=${reversible}.`;
+
+  const baseRisk = (sev: RiskSeverity): RiskFactor[] => {
+    const r: RiskFactor[] = [
+      { factor: "financial_exposure", severity: sev, detail: money(amount) },
+    ];
+    if (!reversible) r.unshift({ factor: "irreversible_action", severity: sev });
+    return r;
   };
+
+  // (4) HIGH-VALUE SAFEGUARD: at or above the absolute review ceiling → REVIEW,
+  //     regardless of delivery_confirmed or any other caller-supplied boolean.
+  //     Checked before the auto-allow band so the ceiling wins any tie.
+  if (amount >= controls.absolute_review_limit) {
+    return mk({
+      verdict: "REVIEW",
+      reason: `Refund of ${money(amount)} is at or above the absolute review limit (${money(controls.absolute_review_limit)}). It requires human review regardless of delivery confirmation.`,
+      policy_matches: [
+        {
+          rule: "refund.absolute_review_limit",
+          status: "violated",
+          explanation: `Amount ${money(amount)} is at or above absolute_review_limit ${money(controls.absolute_review_limit)}.`,
+        },
+      ],
+      risk_factors: baseRisk("high"),
+      evidenceNote: controlsNote,
+      next_step: {
+        action: "open_review",
+        recommendation:
+          "High-value refund. Route to a human approver before issuing.",
+      },
+      confidence: 90,
+      applied,
+    });
+  }
+
+  // (5) Auto-allow band: at or below auto_allow_limit → ALLOW.
+  if (amount <= controls.auto_allow_limit) {
+    return mk({
+      verdict: "ALLOW",
+      reason: `Refund of ${money(amount)} is at or below the auto-allow limit (${money(controls.auto_allow_limit)}). Safe to issue.`,
+      policy_matches: [
+        {
+          rule: "refund.auto_allow_limit",
+          status: "satisfied",
+          explanation: `Amount ${money(amount)} is within auto_allow_limit ${money(controls.auto_allow_limit)}.`,
+        },
+      ],
+      risk_factors: baseRisk("low"),
+      evidenceNote: controlsNote,
+      next_step: {
+        action: "execute",
+        recommendation: "Within the auto-allow limit. Safe to issue the refund.",
+      },
+      confidence: 92,
+      applied,
+    });
+  }
+
+  // (6) Above auto_allow_limit and within the ceiling: confirmation gate.
+  if (controls.require_delivery_confirmation_above_auto_allow_limit && !deliveryConfirmed) {
+    return mk({
+      verdict: "BLOCK",
+      reason: `Refund of ${money(amount)} is above the auto-allow limit (${money(controls.auto_allow_limit)}) and delivery is not confirmed, which the policy requires. Do not issue.`,
+      policy_matches: [
+        {
+          rule: "refund.auto_allow_limit",
+          status: "violated",
+          explanation: `Amount ${money(amount)} exceeds auto_allow_limit ${money(controls.auto_allow_limit)}.`,
+        },
+        {
+          rule: "refund.require_delivery_confirmation_above_auto_allow_limit",
+          status: "violated",
+          explanation: `require_delivery_confirmation_above_auto_allow_limit is true and delivery is not confirmed (order_status="${orderStatus ?? "unknown"}").`,
+        },
+      ],
+      risk_factors: baseRisk("high").concat({
+        factor: "unverified_precondition",
+        severity: "high",
+        detail: "delivery status",
+      }),
+      missing_context: [
+        {
+          field: "delivery_confirmed",
+          why: `Required by policy for refunds above the auto-allow limit (${money(controls.auto_allow_limit)}).`,
+        },
+      ],
+      evidenceNote: controlsNote,
+      next_step: {
+        action: "block",
+        recommendation:
+          "Do not issue the refund. Obtain delivery confirmation, then re-evaluate.",
+      },
+      confidence: 94,
+      applied,
+    });
+  }
+
+  // Above auto_allow_limit but confirmation satisfied (or not required).
+  return mk({
+    verdict: "ALLOW",
+    reason: `Refund of ${money(amount)} is above the auto-allow limit (${money(controls.auto_allow_limit)}) but within the absolute review limit, and the delivery-confirmation requirement is satisfied. Safe to issue.`,
+    policy_matches: [
+      {
+        rule: "refund.require_delivery_confirmation_above_auto_allow_limit",
+        status: "satisfied",
+        explanation: controls.require_delivery_confirmation_above_auto_allow_limit
+          ? "Delivery is confirmed for a refund above the auto-allow limit."
+          : "Delivery confirmation is not required by policy in this band.",
+      },
+    ],
+    risk_factors: baseRisk("moderate"),
+    evidenceNote: controlsNote,
+    next_step: {
+      action: "execute",
+      recommendation: "Conditions met. Safe to issue the refund.",
+    },
+    confidence: 88,
+    applied,
+  });
 }
 
 function evaluateAccountDeletion(req: EvaluateRequest): EvaluateResponse {

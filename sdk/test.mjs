@@ -20,10 +20,15 @@ const decision = await zorelan.evaluateAction({
   },
   policy: {
     name: "Refund policy",
-    rules: [
-      "Refunds above $100 require delivery confirmation.",
-      "Refunds must not be issued when delivery status is unresolved.",
-    ],
+    rules: ["Refunds above the auto-allow limit require delivery confirmation."],
+    controls: {
+      refund: {
+        currency: "AUD",
+        auto_allow_limit: 100,
+        absolute_review_limit: 1000,
+        require_delivery_confirmation_above_auto_allow_limit: true,
+      },
+    },
   },
 });
 

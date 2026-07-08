@@ -14,6 +14,28 @@ execution.
 
 ## Last updated
 
+2026-07-08 — Refund policy-enforcement fix (confirmed audit finding). The refund
+evaluator used a hardcoded `amount > 100` and ignored the caller's policy; the
+"over-threshold + delivery_confirmed" branch had no ceiling (unbounded ALLOW).
+Now: refunds are gated by TYPED controls under `policy.controls.refund`
+(`currency`, `auto_allow_limit`, `absolute_review_limit`,
+`require_delivery_confirmation_above_auto_allow_limit`). Free-text `rules` never
+drive the numeric verdict. Boundary semantics: amount `<=` auto_allow_limit →
+ALLOW; amount `>=` absolute_review_limit → REVIEW (at-or-above the ceiling)
+regardless of any caller boolean; the confirmation gate applies only in the band
+between them. Requests without typed refund controls **fail safe to
+REVIEW** (no hidden threshold). Negative/conflicting limits are rejected by the
+schema and fail safe in the evaluator; currency mismatch → REVIEW. The applied
+controls are echoed in `policy_controls_applied` on the response and Decision
+Record, and `policy_matches` now cite the typed control (e.g.
+`refund.auto_allow_limit`) rather than a free-text rule. Additive/backward-
+compatible; other evaluators unchanged (see adjacent-risk note in the fix report).
+Files: `lib/evaluate/{types,schema,evaluateAction,decisionRecord}.ts`,
+`lib/demo/scenarios.ts`, `sdk/src/index.ts` (+ dist), `app/api-docs/page.tsx`,
+`app/page.tsx`, tests `scripts/tests/test-refund-policy.ts` (new) +
+`test-decision-record.ts`.
+
+
 2026-06-15 — Decision Record V1.1 hardening. Made `proposed_action` schema
 `.strict()` (`lib/evaluate/schema.ts`): unknown top-level keys are now rejected
 with `validation_failed` instead of being silently stripped — so a flat payload

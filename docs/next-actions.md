@@ -45,6 +45,11 @@ is waiting on.
 Newest first. Trim to the last five. Pair with `current-state.md` for the live
 snapshot.
 
+- Refund policy-enforcement fix: replaced the hardcoded $100 threshold with typed
+  `policy.controls.refund`; added the absolute-review ceiling (unbounded-ALLOW
+  safeguard); fail-safe REVIEW when controls absent/invalid; `policy_controls_applied`
+  recorded on response + Decision Record; 21-case regression suite added.
+
 - Decision Record V1.1 hardening: `proposed_action` schema now `.strict()`
   (unknown flat keys rejected, not silently dropped); API-docs "Request shape"
   note; test extended (strict-reject + parameter-preservation) + live-smoke snippet.
