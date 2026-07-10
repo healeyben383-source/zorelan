@@ -34,6 +34,37 @@ try {
         }
     }
 
+    # Secret / env file read protection.
+    # Block reading or searching likely secret files (.env*, private keys,
+    # .npmrc, secrets.json, service-role keys) through common shell read/search
+    # commands. This is gated on a known reader verb, so normal source reads
+    # (cat package.json), plain docs searches (rg "..." docs), and build/lint
+    # commands are unaffected. Non-secret template files
+    # (.env.example/.sample/.template/.dist) are intentionally allowed.
+    $readerVerb = '(?:^|[\s|;&(])(?:cat|type|gc|more|less|head|tail|grep|rg|findstr|Get-Content|Select-String)\b'
+
+    $secretTargets = @(
+        # .env and any .env.<variant>, including odd path forms like ./.env or
+        # ..env.local, but NOT .env.example/.sample/.template/.dist, and NOT
+        # unrelated names like .environment or notes-.env-format.md.
+        '\.env(?!\.(?:example|sample|template|dist)\b)(?:\.[A-Za-z0-9_]+)*(?![A-Za-z0-9_-])',
+        '\.npmrc\b',
+        '\bid_rsa\b',
+        '\bid_ed25519\b',
+        '\bsecrets\.json\b',
+        'service[-_]role[-_]?key'
+    )
+
+    if ($cmd -imatch $readerVerb) {
+        foreach ($target in $secretTargets) {
+            if ($cmd -imatch $target) {
+                [Console]::Error.WriteLine("Blocked by Dev Centre safety hook: reading secret/env files is banned; reference the variable name instead.")
+                [Console]::Error.WriteLine("Command: $cmd")
+                exit 2
+            }
+        }
+    }
+
     exit 0
 }
 catch {
